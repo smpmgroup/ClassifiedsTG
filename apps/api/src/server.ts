@@ -571,8 +571,9 @@ app.post(
         body: JSON.stringify({
           title: "Публикация объявления",
           description: `Публикация «${listing.title}» после модерации`,
-          payload,
-          currency: "XTR",
+        payload,
+        provider_token: "",
+        currency: "XTR",
           prices: [
             { label: "Публикация", amount: community.publicationPriceStars },
           ],
@@ -1044,7 +1045,7 @@ app.patch(
     });
     const role = req.body?.role;
     const status = req.body?.status;
-    if (role === "owner" && req.identity.role !== "owner")
+    if (["admin", "owner"].includes(role) && req.identity.role !== "owner")
       throw new DomainError(
         "OWNER_REQUIRED",
         "Только владелец назначает владельцев",
