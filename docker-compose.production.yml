@@ -1,7 +1,17 @@
 services:
   nginx:
-    ports: ["127.0.0.1:8080:8080"]
+    ports: []
+  caddy:
+    image: caddy:2.10-alpine
+    environment: { PUBLIC_DOMAIN: "${PUBLIC_DOMAIN}" }
+    ports: ["80:80", "443:443", "443:443/udp"]
+    volumes: [./deployment/Caddyfile:/etc/caddy/Caddyfile:ro, caddy_data:/data, caddy_config:/config]
+    depends_on: { nginx: { condition: service_healthy } }
+    restart: unless-stopped
   postgres:
     ports: []
   redis:
     ports: []
+volumes:
+  caddy_data: {}
+  caddy_config: {}
