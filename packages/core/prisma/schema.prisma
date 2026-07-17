@@ -1,0 +1,295 @@
+generator client {
+  provider = "prisma-client-js"
+}
+datasource db {
+  provider = "postgresql"
+  url = env("DATABASE_URL")
+}
+
+enum UserStatus {
+  active
+  restricted
+  banned
+  deleted
+}
+enum MemberRole {
+  member
+  moderator
+  admin
+  owner
+}
+enum MembershipStatus {
+  creator
+  administrator
+  member
+  restricted
+  left
+  kicked
+  unknown
+}
+enum ListingStatus {
+  draft
+  pending
+  changes_requested
+  published
+  rejected
+  sold
+  archived
+  expired
+  hidden
+  deleted
+}
+enum PriceType {
+  fixed
+  negotiable
+  free
+  exchange
+  contact
+}
+enum ItemCondition {
+  new
+  like_new
+  good
+  fair
+  for_parts
+  not_applicable
+}
+enum ReportStatus {
+  open
+  reviewing
+  resolved
+  dismissed
+}
+enum NotificationStatus {
+  pending
+  processing
+  sent
+  failed
+}
+
+model Community {
+  id String @id @default(cuid())
+  telegramChatId BigInt @unique
+  name String
+  slug String @unique
+  description String @default("")
+  inviteUrl String
+  isActive Boolean @default(true)
+  moderationEnabled Boolean @default(true)
+  remoderatePublishedEdits Boolean @default(true)
+  autoPublishEnabled Boolean @default(false)
+  publicationMode String @default("none")
+  publicationChatId BigInt?
+  publicationThreadId Int?
+  defaultCurrency String @default("EUR")
+  defaultLocale String @default("ru")
+  maxActiveListingsPerUser Int @default(10)
+  maxImagesPerListing Int @default(10)
+  listingLifetimeDays Int @default(45)
+  autoHideReportThreshold Int @default(3)
+  rules String @default("")
+  prohibitedWords String[] @default([])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  members CommunityMember[]
+  categories Category[]
+  listings Listing[]
+  reports Report[]
+  actions ModerationAction[]
+  notifications Notification[]
+}
+
+model User {
+  id String @id @default(cuid())
+  telegramUserId BigInt @unique
+  username String?
+  firstName String
+  lastName String?
+  languageCode String?
+  photoUrl String?
+  status UserStatus @default(active)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  lastSeenAt DateTime @default(now())
+  members CommunityMember[]
+  listings Listing[] @relation("ListingAuthor")
+  moderatedListings Listing[] @relation("ListingModerator")
+  favorites Favorite[]
+  reports Report[] @relation("Reporter")
+  reviewedReports Report[] @relation("ReportReviewer")
+  actions ModerationAction[] @relation("Moderator")
+  targetedActions ModerationAction[] @relation("TargetUser")
+  notifications Notification[]
+  views ListingView[]
+}
+
+model CommunityMember {
+  id String @id @default(cuid())
+  communityId String
+  userId String
+  role MemberRole @default(member)
+  telegramMembershipStatus MembershipStatus @default(unknown)
+  membershipCheckedAt DateTime?
+  isMuted Boolean @default(false)
+  mutedUntil DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  community Community @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([communityId, userId])
+  @@index([communityId, role])
+}
+
+model Category {
+  id String @id @default(cuid())
+  communityId String
+  parentId String?
+  name String
+  slug String
+  icon String?
+  sortOrder Int @default(0)
+  isActive Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  community Community @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  parent Category? @relation("CategoryTree", fields: [parentId], references: [id])
+  children Category[] @relation("CategoryTree")
+  listings Listing[]
+  @@unique([communityId, slug])
+}
+
+model Listing {
+  id String @id @default(cuid())
+  legacyId String? @unique
+  communityId String
+  authorId String
+  categoryId String
+  title String
+  description String
+  price Decimal? @db.Decimal(14, 2)
+  currency String @default("EUR")
+  priceType PriceType @default(fixed)
+  condition ItemCondition @default(good)
+  locationText String?
+  latitude Decimal? @db.Decimal(9, 6)
+  longitude Decimal? @db.Decimal(9, 6)
+  contactMode String @default("telegram")
+  status ListingStatus @default(draft)
+  moderationComment String?
+  moderatedById String?
+  moderatedAt DateTime?
+  publishedAt DateTime?
+  expiresAt DateTime?
+  soldAt DateTime?
+  viewCount Int @default(0)
+  favoritesCount Int @default(0)
+  duplicateSuspected Boolean @default(false)
+  publicationMessageId Int?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+  community Community @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  author User @relation("ListingAuthor", fields: [authorId], references: [id])
+  category Category @relation(fields: [categoryId], references: [id])
+  moderatedBy User? @relation("ListingModerator", fields: [moderatedById], references: [id])
+  images ListingImage[]
+  favorites Favorite[]
+  reports Report[]
+  actions ModerationAction[]
+  views ListingView[]
+  @@index([communityId, status, publishedAt])
+  @@index([authorId, status])
+}
+
+model ListingImage {
+  id String @id @default(cuid())
+  listingId String
+  storageProvider String
+  storageKey String?
+  telegramFileId String?
+  telegramFileUniqueId String?
+  url String?
+  width Int?
+  height Int?
+  sizeBytes Int?
+  sortOrder Int @default(0)
+  createdAt DateTime @default(now())
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  @@index([listingId, sortOrder])
+}
+
+model Favorite {
+  id String @id @default(cuid())
+  userId String
+  listingId String
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  @@unique([userId, listingId])
+}
+
+model ListingView {
+  id String @id @default(cuid())
+  userId String
+  listingId String
+  viewedAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  @@unique([userId, listingId])
+}
+
+model Report {
+  id String @id @default(cuid())
+  communityId String
+  listingId String
+  reporterId String
+  reason String
+  comment String?
+  status ReportStatus @default(open)
+  reviewedById String?
+  reviewedAt DateTime?
+  resolution String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  community Community @relation(fields: [communityId], references: [id])
+  listing Listing @relation(fields: [listingId], references: [id])
+  reporter User @relation("Reporter", fields: [reporterId], references: [id])
+  reviewedBy User? @relation("ReportReviewer", fields: [reviewedById], references: [id])
+  actions ModerationAction[]
+  @@unique([listingId, reporterId, reason, status])
+}
+
+model ModerationAction {
+  id String @id @default(cuid())
+  communityId String
+  moderatorId String
+  targetUserId String?
+  listingId String?
+  reportId String?
+  action String
+  reason String?
+  metadata Json?
+  createdAt DateTime @default(now())
+  community Community @relation(fields: [communityId], references: [id])
+  moderator User @relation("Moderator", fields: [moderatorId], references: [id])
+  targetUser User? @relation("TargetUser", fields: [targetUserId], references: [id])
+  listing Listing? @relation(fields: [listingId], references: [id])
+  report Report? @relation(fields: [reportId], references: [id])
+  @@index([communityId, createdAt])
+}
+
+model Notification {
+  id String @id @default(cuid())
+  userId String?
+  communityId String
+  type String
+  payload Json
+  status NotificationStatus @default(pending)
+  attempts Int @default(0)
+  lastError String?
+  createdAt DateTime @default(now())
+  sentAt DateTime?
+  user User? @relation(fields: [userId], references: [id])
+  community Community @relation(fields: [communityId], references: [id])
+  @@index([status, createdAt])
+}

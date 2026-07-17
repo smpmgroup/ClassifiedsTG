@@ -1,0 +1,42 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment: { POSTGRES_USER: "${POSTGRES_USER:-board}", POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-board_dev_password}", POSTGRES_DB: "${POSTGRES_DB:-board}" }
+    volumes: [postgres_data:/var/lib/postgresql/data]
+    healthcheck: { test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"], interval: 5s, timeout: 3s, retries: 20 }
+    restart: unless-stopped
+  redis:
+    image: redis:7.4-alpine
+    command: redis-server --appendonly yes
+    volumes: [redis_data:/data]
+    healthcheck: { test: ["CMD", "redis-cli", "ping"], interval: 5s, timeout: 3s, retries: 20 }
+    restart: unless-stopped
+  migrate:
+    build: { context: ., dockerfile: apps/api/Dockerfile }
+    env_file: .env
+    command: ["./node_modules/.bin/prisma", "migrate", "deploy", "--schema", "packages/core/prisma/schema.prisma"]
+    depends_on: { postgres: { condition: service_healthy } }
+    restart: "no"
+  backend:
+    build: { context: ., dockerfile: apps/api/Dockerfile }
+    env_file: .env
+    volumes: [uploads:/app/uploads]
+    depends_on: { postgres: { condition: service_healthy }, redis: { condition: service_healthy }, migrate: { condition: service_completed_successfully } }
+    healthcheck: { test: ["CMD", "curl", "-fsS", "http://127.0.0.1:3001/health"], interval: 10s, timeout: 5s, retries: 10 }
+    restart: unless-stopped
+  bot:
+    build: { context: ., dockerfile: apps/bot/Dockerfile }
+    env_file: .env
+    depends_on: { postgres: { condition: service_healthy }, redis: { condition: service_healthy }, migrate: { condition: service_completed_successfully } }
+    restart: unless-stopped
+  frontend:
+    build: { context: ., dockerfile: apps/web/Dockerfile }
+    restart: unless-stopped
+  nginx:
+    image: nginx:1.27-alpine
+    ports: ["${HTTP_PORT:-8080}:8080"]
+    volumes: [./deployment/nginx.conf:/etc/nginx/nginx.conf:ro]
+    depends_on: { backend: { condition: service_healthy }, frontend: { condition: service_started } }
+    healthcheck: { test: ["CMD", "wget", "-q", "-O-", "http://127.0.0.1:8080/health"], interval: 10s, timeout: 5s, retries: 10 }
+    restart: unless-stopped
+volumes: { postgres_data: {}, redis_data: {}, uploads: {} }

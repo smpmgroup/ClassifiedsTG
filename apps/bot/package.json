@@ -1,0 +1,1 @@
+{ "name":"@board/bot","version":"2.0.0","type":"module","scripts":{"dev":"tsx watch src/bot.ts","build":"tsc -p tsconfig.json","start":"node dist/bot.js","typecheck":"tsc --noEmit","test":"vitest run --passWithNoTests"},"dependencies":{"@board/core":"2.0.0","telegraf":"^4.16.3","ioredis":"^5.6.1"},"devDependencies":{"@types/node":"^22.15.34","tsx":"^4.20.3","vitest":"^3.2.4"} }

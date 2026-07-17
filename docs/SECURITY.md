@@ -1,0 +1,3 @@
+# Security and data processing
+
+Identity derives only from timing-safe Telegram HMAC verification. `auth_date` and replay keys expire; access tokens are short-lived. Sensitive operations refresh cached group membership. Fastify applies secure headers, body/file/rate limits and backend RBAC. Raster uploads are identified by content, decoded, rotated and re-encoded by Sharp, stripping EXIF and rejecting SVG/executables. Logs redact authorization, cookies and initData. Profile deletion hides active listings, destroys notifications/sessions and anonymizes identity while preserving minimal moderation records. Report vulnerabilities privately; rotate a leaked bot token immediately in BotFather.

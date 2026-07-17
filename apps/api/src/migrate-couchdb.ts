@@ -1,0 +1,6 @@
+import { prisma } from '@board/core';
+const dry=process.argv.includes('--dry-run'); const endpoint=process.env.COUCHDB_URL; if(!endpoint) throw new Error('COUCHDB_URL is required');
+const community=await prisma.community.findFirstOrThrow(); let scanned=0,imported=0,skipped=0;
+const response=await fetch(`${endpoint.replace(/\/$/,'')}/ads/_all_docs?include_docs=true`); if(!response.ok)throw new Error(`CouchDB returned ${response.status}`); const body=await response.json() as {rows:{doc:any}[]};
+for(const {doc} of body.rows){scanned++;try{if(!doc||!doc._id||!doc.username||!doc.title){skipped++;continue;}const user=await prisma.user.findFirst({where:{username:doc.username}});const category=await prisma.category.findFirst({where:{communityId:community.id}});if(!user||!category){skipped++;continue;}if(!dry)await prisma.listing.upsert({where:{legacyId:doc._id},update:{},create:{legacyId:doc._id,communityId:community.id,authorId:user.id,categoryId:category.id,title:String(doc.title).slice(0,80),description:String(doc.description||''),status:'archived'}});imported++;}catch(error){skipped++;console.error(JSON.stringify({legacyId:doc?._id,error:(error as Error).message}));}}
+console.log(JSON.stringify({dryRun:dry,scanned,imported,skipped}));await prisma.$disconnect();
