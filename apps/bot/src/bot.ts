@@ -1,7 +1,7 @@
 import { Telegraf, Markup } from 'telegraf'; import { prisma, assertListingTransition } from '@board/core';
 const tokenValue=process.env.TELEGRAM_BOT_TOKEN; const appUrlValue=process.env.TELEGRAM_MINI_APP_URL; if(!tokenValue||!appUrlValue)throw new Error('TELEGRAM_BOT_TOKEN and TELEGRAM_MINI_APP_URL are required'); const token:string=tokenValue; const appUrl:string=appUrlValue;
-const bot=new Telegraf(token); const board=()=>Markup.inlineKeyboard([Markup.button.webApp('Открыть доску',appUrl)]);
-bot.start(ctx=>ctx.reply('Добро пожаловать на доску объявлений сообщества.',board())); bot.command('board',ctx=>ctx.reply('Открыть объявления:',board())); bot.command('help',ctx=>ctx.reply('/board — открыть доску\n/myads — мои объявления\n/rules — правила'));
+const bot=new Telegraf(token); const privateBoard=()=>Markup.inlineKeyboard([Markup.button.webApp('Открыть доску',appUrl)]); const publicBoard=()=>Markup.inlineKeyboard([Markup.button.url('Открыть доску',appUrl)]);
+bot.start(ctx=>ctx.reply('Добро пожаловать на доску объявлений сообщества.',privateBoard())); bot.command('board',ctx=>ctx.reply('Открыть объявления:',ctx.chat.type==='private'?privateBoard():publicBoard())); bot.command('help',ctx=>ctx.reply('/board — открыть доску\n/myads — мои объявления\n/rules — правила'));
 bot.command('rules',async ctx=>{const c=await prisma.community.findFirst({where:{isActive:true}});await ctx.reply(c?.rules||'Правила сообщества пока не опубликованы.');});
 bot.command('myads',ctx=>ctx.reply('Ваши объявления доступны в профиле Mini App.',Markup.inlineKeyboard([Markup.button.webApp('Мои объявления',`${appUrl}?screen=my-listings`)])));
 const roles=new Set(['moderator','admin','owner']); async function moderator(telegramId:number,communityId:string){return prisma.communityMember.findFirst({where:{communityId,user:{telegramUserId:BigInt(telegramId),status:'active'},role:{in:[...roles] as any}}});}
