@@ -10,3 +10,4 @@
 - Added Telegram-native Vite/React UI with safe-area navigation, theme variables, creation wizard/autosave, profile and moderation dashboard; RU/ES/EN i18n foundation.
 - Added Compose services, health checks, non-root application containers, Nginx edge, CI, deployment/security/testing/backup documentation.
 - Added a production Caddy TLS edge with automatic certificate renewal.
+- Fixed production Mini App bootstrap by loading the official Telegram Web App bridge before React.
