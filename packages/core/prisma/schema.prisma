@@ -89,6 +89,9 @@ model Community {
   autoHideReportThreshold Int @default(3)
   rules String @default("")
   prohibitedWords String[] @default([])
+  minMonthlyMessagesForFree Int @default(10)
+  publicationPriceStars Int @default(50)
+  allowPaidNonMembers Boolean @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   members CommunityMember[]
@@ -97,6 +100,8 @@ model Community {
   reports Report[]
   actions ModerationAction[]
   notifications Notification[]
+  activities MessageActivity[]
+  payments PublicationPayment[]
 }
 
 model User {
@@ -121,6 +126,8 @@ model User {
   targetedActions ModerationAction[] @relation("TargetUser")
   notifications Notification[]
   views ListingView[]
+  activities MessageActivity[]
+  payments PublicationPayment[]
 }
 
 model CommunityMember {
@@ -149,6 +156,7 @@ model Category {
   icon String?
   sortOrder Int @default(0)
   isActive Boolean @default(true)
+  fieldSchema Json @default("[]")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   community Community @relation(fields: [communityId], references: [id], onDelete: Cascade)
@@ -184,6 +192,8 @@ model Listing {
   viewCount Int @default(0)
   favoritesCount Int @default(0)
   duplicateSuspected Boolean @default(false)
+  attributes Json @default("{}")
+  paymentStatus String @default("not_required")
   publicationMessageId Int?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -197,8 +207,37 @@ model Listing {
   reports Report[]
   actions ModerationAction[]
   views ListingView[]
+  payment PublicationPayment?
   @@index([communityId, status, publishedAt])
   @@index([authorId, status])
+}
+
+model MessageActivity {
+  id String @id @default(cuid())
+  communityId String
+  userId String
+  month String
+  messageCount Int @default(0)
+  updatedAt DateTime @updatedAt
+  community Community @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([communityId, userId, month])
+}
+
+model PublicationPayment {
+  id String @id @default(cuid())
+  communityId String
+  userId String
+  listingId String @unique
+  amountStars Int
+  invoicePayload String @unique
+  telegramPaymentChargeId String? @unique
+  status String @default("pending")
+  createdAt DateTime @default(now())
+  paidAt DateTime?
+  community Community @relation(fields: [communityId], references: [id])
+  user User @relation(fields: [userId], references: [id])
+  listing Listing @relation(fields: [listingId], references: [id])
 }
 
 model ListingImage {

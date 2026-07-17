@@ -13,3 +13,4 @@
 - Fixed production Mini App bootstrap by loading the official Telegram Web App bridge before React.
 - Replaced the unreadable native category select with accessible selection cards and moved wizard actions above bottom navigation.
 - Added real multi-image selection/upload previews, visible dark-theme carets, and durable Telegram moderation cards.
+- Added database-managed moderator roles with private moderation delivery, category field schemas, monthly activity quotas, and verified Telegram Stars payment records.

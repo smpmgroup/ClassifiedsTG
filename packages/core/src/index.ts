@@ -24,3 +24,8 @@ export class DomainError extends Error {
 export function expiresAt(days: number, from = new Date()): Date {
   return new Date(from.getTime() + days * 86_400_000);
 }
+
+export function publicationAccess(role: MemberRole, messageCount: number, requiredMessages: number, paid: boolean): 'free'|'paid'|'payment_required' {
+  if (privilegedRoles.has(role) || messageCount >= requiredMessages) return 'free';
+  return paid ? 'paid' : 'payment_required';
+}
