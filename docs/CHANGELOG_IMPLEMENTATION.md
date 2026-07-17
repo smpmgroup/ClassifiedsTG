@@ -11,3 +11,4 @@
 - Added Compose services, health checks, non-root application containers, Nginx edge, CI, deployment/security/testing/backup documentation.
 - Added a production Caddy TLS edge with automatic certificate renewal.
 - Fixed production Mini App bootstrap by loading the official Telegram Web App bridge before React.
+- Replaced the unreadable native category select with accessible selection cards and moved wizard actions above bottom navigation.
