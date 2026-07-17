@@ -1,5 +1,11 @@
 import { useEffect, useState } from "react";
-import { NavLink, Route, Routes, useNavigate } from "react-router-dom";
+import {
+  NavLink,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+} from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { api, login, request } from "./api";
 type Listing = {
@@ -72,6 +78,7 @@ export function App() {
     );
   return (
     <Shell>
+      <ScrollToTop />
       <Routes>
         <Route path="/" element={<Catalog />} />
         <Route path="/categories" element={<Categories />} />
@@ -96,6 +103,13 @@ export function App() {
       </nav>
     </Shell>
   );
+}
+function ScrollToTop() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+  }, [pathname]);
+  return null;
 }
 function Shell({ children }: { children: any }) {
   return <main>{children}</main>;
@@ -300,23 +314,51 @@ function Create() {
       <div className="dynamic-fields">
         {fieldSchema.map((field: any) => (
           <label key={field.key}>
-            <span>{field.label}{field.required ? " *" : ""}</span>
+            <span>
+              {field.label}
+              {field.required ? " *" : ""}
+            </span>
             {field.type === "select" ? (
-              <select value={data.attributes?.[field.key] || ""} onChange={(event) => setAttribute(field.key,event.target.value)}>
+              <select
+                value={data.attributes?.[field.key] || ""}
+                onChange={(event) =>
+                  setAttribute(field.key, event.target.value)
+                }
+              >
                 <option value="">Выберите</option>
-                {field.options?.map((option: string) => <option key={option}>{option}</option>)}
+                {field.options?.map((option: string) => (
+                  <option key={option}>{option}</option>
+                ))}
               </select>
             ) : field.type === "boolean" ? (
-              <input type="checkbox" checked={Boolean(data.attributes?.[field.key])} onChange={(event) => setAttribute(field.key,event.target.checked)} />
+              <input
+                type="checkbox"
+                checked={Boolean(data.attributes?.[field.key])}
+                onChange={(event) =>
+                  setAttribute(field.key, event.target.checked)
+                }
+              />
             ) : (
-              <input type={field.type === "number" ? "number" : "text"} value={data.attributes?.[field.key] || ""} onChange={(event) => setAttribute(field.key,event.target.value)} />
+              <input
+                type={field.type === "number" ? "number" : "text"}
+                value={data.attributes?.[field.key] || ""}
+                onChange={(event) =>
+                  setAttribute(field.key, event.target.value)
+                }
+              />
             )}
           </label>
         ))}
       </div>
     ) : (
-      <select value={data.condition || "good"} onChange={(e) => setData({ ...data, condition: e.target.value })}>
-        <option value="new">Новое</option><option value="like_new">Как новое</option><option value="good">Хорошее</option><option value="fair">Удовлетворительное</option>
+      <select
+        value={data.condition || "good"}
+        onChange={(e) => setData({ ...data, condition: e.target.value })}
+      >
+        <option value="new">Новое</option>
+        <option value="like_new">Как новое</option>
+        <option value="good">Хорошее</option>
+        <option value="fair">Удовлетворительное</option>
       </select>
     ),
     <textarea
@@ -363,14 +405,28 @@ function Create() {
       ? await request(`/listings/${data.listingId}`, "PATCH", data)
       : await request("/listings", "POST", data);
     try {
-      await request(`/listings/${listing.id}/transition`, "POST", { status: "pending" });
+      await request(`/listings/${listing.id}/transition`, "POST", {
+        status: "pending",
+      });
     } catch (error: any) {
       if (error.code !== "PUBLICATION_PAYMENT_REQUIRED") throw error;
-      const invoice = await request(`/listings/${listing.id}/payment-link`, "POST");
+      const invoice = await request(
+        `/listings/${listing.id}/payment-link`,
+        "POST",
+      );
       const webApp = window.Telegram?.WebApp as any;
-      if (!webApp?.openInvoice) throw new Error("Откройте оплату через Telegram");
-      await new Promise<void>((resolve,reject) => webApp.openInvoice(invoice.invoiceUrl,(status: string) => status === "paid" ? resolve() : reject(new Error("Оплата не завершена"))));
-      await request(`/listings/${listing.id}/transition`, "POST", { status: "pending" });
+      if (!webApp?.openInvoice)
+        throw new Error("Откройте оплату через Telegram");
+      await new Promise<void>((resolve, reject) =>
+        webApp.openInvoice(invoice.invoiceUrl, (status: string) =>
+          status === "paid"
+            ? resolve()
+            : reject(new Error("Оплата не завершена")),
+        ),
+      );
+      await request(`/listings/${listing.id}/transition`, "POST", {
+        status: "pending",
+      });
     }
     localStorage.removeItem("draft");
     nav("/profile");
@@ -439,6 +495,7 @@ function Favorites() {
 function Profile() {
   const [me, setMe] = useState<any>();
   const [ads, setAds] = useState<any[]>([]);
+  const [section, setSection] = useState("all");
   useEffect(() => {
     request("/me").then(setMe);
     request("/my/listings").then(setAds);
@@ -453,6 +510,15 @@ function Profile() {
           <small>{me?.role}</small>
         </div>
       </div>
+      {["moderator", "admin", "owner"].includes(me?.role) && (
+        <NavLink className="admin admin-prominent" to="/admin">
+          <span>
+            <b>Панель модератора</b>
+            <small>Объявления, админы и настройки</small>
+          </span>
+          <b>›</b>
+        </NavLink>
+      )}
       <div className="stats">
         <b>
           {ads.length}
@@ -464,26 +530,86 @@ function Profile() {
         </b>
       </div>
       {[
-        "Мои объявления",
-        "Черновики",
-        "На проверке",
-        "Требуют изменений",
-        "Проданные",
-        "Архив",
-        "Настройки",
-        "Правила",
-      ].map((x) => (
-        <button className="row">
-          {x}
+        ["all", "Мои объявления"],
+        ["draft", "Черновики"],
+        ["pending", "На проверке"],
+        ["changes_requested", "Требуют изменений"],
+        ["sold", "Проданные"],
+        ["archived", "Архив"],
+        ["settings", "Настройки"],
+        ["rules", "Правила"],
+      ].map(([key, label]) => (
+        <button
+          className={`row ${section === key ? "selected" : ""}`}
+          key={key}
+          onClick={() => setSection(key)}
+        >
+          {label}
           <b>›</b>
         </button>
       ))}
-      {["moderator", "admin", "owner"].includes(me?.role) && (
-        <NavLink className="admin" to="/admin">
-          Администрирование →
-        </NavLink>
-      )}
+      <ProfileSection
+        section={section}
+        ads={ads}
+        privileged={["moderator", "admin", "owner"].includes(me?.role)}
+      />
     </section>
+  );
+}
+function ProfileSection({
+  section,
+  ads,
+  privileged,
+}: {
+  section: string;
+  ads: any[];
+  privileged: boolean;
+}) {
+  if (section === "settings")
+    return (
+      <div className="profile-panel">
+        <h3>Настройки</h3>
+        <p>
+          {privileged
+            ? "Настройки сообщества доступны в панели модератора."
+            : "Личные настройки будут добавлены здесь."}
+        </p>
+      </div>
+    );
+  if (section === "rules")
+    return (
+      <div className="profile-panel">
+        <h3>Правила публикации</h3>
+        <p>
+          Объявление должно быть достоверным, относиться к выбранной категории и
+          не нарушать правила Telegram и сообщества.
+        </p>
+      </div>
+    );
+  const visible =
+    section === "all" ? ads : ads.filter((ad) => ad.status === section);
+  const statusLabels: Record<string, string> = {
+    draft: "Черновик",
+    pending: "На проверке",
+    changes_requested: "Нужна доработка",
+    published: "Опубликовано",
+    sold: "Продано",
+    archived: "В архиве",
+  };
+  return (
+    <div className="profile-panel">
+      <h3>Объявления</h3>
+      {visible.length ? (
+        visible.map((ad) => (
+          <div className="profile-listing" key={ad.id}>
+            <b>{ad.title || "Без названия"}</b>
+            <small>{statusLabels[ad.status] || ad.status}</small>
+          </div>
+        ))
+      ) : (
+        <p className="hint">В этом разделе пока нет объявлений.</p>
+      )}
+    </div>
   );
 }
 function Admin() {
@@ -538,16 +664,95 @@ function Admin() {
         </article>
       ))}
       <h2>Модераторы и администраторы</h2>
-      <p className="hint">Назначенный сотрудник должен один раз открыть личный чат с ботом, чтобы получать карточки модерации.</p>
+      <p className="hint">
+        Назначенный сотрудник должен один раз открыть личный чат с ботом, чтобы
+        получать карточки модерации.
+      </p>
       {users.map((member) => (
         <div className="admin-user" key={member.id}>
-          <div><b>{member.user.firstName}</b><small>@{member.user.username || "без username"} · {member.role}</small></div>
-          <select value={member.role} onChange={async(event) => {const role=event.target.value;await request(`/admin/users/${member.userId}`,"PATCH",{role});setUsers(current=>current.map(item=>item.id===member.id?{...item,role}:item));}}>
-            <option value="member">Участник</option><option value="moderator">Модератор</option><option value="admin">Администратор</option><option value="owner">Владелец</option>
+          <div>
+            <b>{member.user.firstName}</b>
+            <small>
+              @{member.user.username || "без username"} · {member.role}
+            </small>
+          </div>
+          <select
+            value={member.role}
+            onChange={async (event) => {
+              const role = event.target.value;
+              await request(`/admin/users/${member.userId}`, "PATCH", { role });
+              setUsers((current) =>
+                current.map((item) =>
+                  item.id === member.id ? { ...item, role } : item,
+                ),
+              );
+            }}
+          >
+            <option value="member">Участник</option>
+            <option value="moderator">Модератор</option>
+            <option value="admin">Администратор</option>
+            <option value="owner">Владелец</option>
           </select>
         </div>
       ))}
-      {settings && <div className="admin-settings"><h2>Доступ и Stars</h2><label>Сообщений за месяц для бесплатной публикации<input type="number" min="0" value={settings.minMonthlyMessagesForFree} onChange={event=>setSettings({...settings,minMonthlyMessagesForFree:Number(event.target.value)})}/></label><label>Цена публикации, Stars<input type="number" min="1" value={settings.publicationPriceStars} onChange={event=>setSettings({...settings,publicationPriceStars:Number(event.target.value)})}/></label><label className="check"><input type="checkbox" checked={settings.allowPaidNonMembers} onChange={event=>setSettings({...settings,allowPaidNonMembers:event.target.checked})}/> Разрешить платную публикацию неучастникам</label><button className="primary save-settings" onClick={()=>request('/admin/settings','PATCH',{minMonthlyMessagesForFree:settings.minMonthlyMessagesForFree,publicationPriceStars:settings.publicationPriceStars,allowPaidNonMembers:settings.allowPaidNonMembers})}>Сохранить настройки</button></div>}
+      {settings && (
+        <div className="admin-settings">
+          <h2>Доступ и Stars</h2>
+          <label>
+            Сообщений за месяц для бесплатной публикации
+            <input
+              type="number"
+              min="0"
+              value={settings.minMonthlyMessagesForFree}
+              onChange={(event) =>
+                setSettings({
+                  ...settings,
+                  minMonthlyMessagesForFree: Number(event.target.value),
+                })
+              }
+            />
+          </label>
+          <label>
+            Цена публикации, Stars
+            <input
+              type="number"
+              min="1"
+              value={settings.publicationPriceStars}
+              onChange={(event) =>
+                setSettings({
+                  ...settings,
+                  publicationPriceStars: Number(event.target.value),
+                })
+              }
+            />
+          </label>
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={settings.allowPaidNonMembers}
+              onChange={(event) =>
+                setSettings({
+                  ...settings,
+                  allowPaidNonMembers: event.target.checked,
+                })
+              }
+            />{" "}
+            Разрешить платную публикацию неучастникам
+          </label>
+          <button
+            className="primary save-settings"
+            onClick={() =>
+              request("/admin/settings", "PATCH", {
+                minMonthlyMessagesForFree: settings.minMonthlyMessagesForFree,
+                publicationPriceStars: settings.publicationPriceStars,
+                allowPaidNonMembers: settings.allowPaidNonMembers,
+              })
+            }
+          >
+            Сохранить настройки
+          </button>
+        </div>
+      )}
     </section>
   );
 }

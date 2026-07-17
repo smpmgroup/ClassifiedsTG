@@ -334,6 +334,11 @@ nav .active {
 }
 .row {
   margin: 7px 0;
+  color: var(--tg-theme-text-color, #14231c);
+  cursor: pointer;
+}
+.row.selected {
+  outline: 2px solid var(--tg-theme-button-color, #188b52);
 }
 .admin {
   display: block;
@@ -343,6 +348,37 @@ nav .active {
   padding: 17px;
   border-radius: 14px;
   text-decoration: none;
+}
+.admin-prominent {
+  margin: 18px 0 4px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.admin-prominent span {
+  display: grid;
+  gap: 4px;
+}
+.admin-prominent small {
+  color: #dbe9e1;
+}
+.admin-prominent > b {
+  font-size: 28px;
+}
+.profile-panel {
+  margin-top: 18px;
+  padding: 16px;
+  border-radius: 14px;
+  background: var(--tg-theme-secondary-bg-color, #fff);
+}
+.profile-panel h3 {
+  margin-top: 0;
+}
+.profile-listing {
+  display: grid;
+  gap: 5px;
+  padding: 12px 0;
+  border-top: 1px solid #dce4df;
 }
 .moderate {
   background: #fff;
