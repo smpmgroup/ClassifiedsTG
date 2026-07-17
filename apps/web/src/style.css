@@ -365,6 +365,22 @@ nav .active {
 .admin-prominent > b {
   font-size: 28px;
 }
+.admin-floating {
+  position: fixed;
+  z-index: 11;
+  left: 50%;
+  bottom: calc(67px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  width: min(calc(100% - 32px), 688px);
+  padding: 13px 16px;
+  border-radius: 14px;
+  background: var(--tg-theme-button-color, #188b52);
+  color: var(--tg-theme-button-text-color, #fff);
+  box-shadow: 0 8px 24px #0e442b55;
+  text-align: center;
+  font-weight: 800;
+  text-decoration: none;
+}
 .profile-panel {
   margin-top: 18px;
   padding: 16px;

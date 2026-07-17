@@ -553,6 +553,11 @@ function Profile() {
         ads={ads}
         privileged={["moderator", "admin", "owner"].includes(me?.role)}
       />
+      {["moderator", "admin", "owner"].includes(me?.role) && (
+        <NavLink className="admin-floating" to="/admin">
+          ⚙ Панель модератора
+        </NavLink>
+      )}
     </section>
   );
 }
