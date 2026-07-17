@@ -252,8 +252,8 @@ app.post(
   },
 );
 
-app.get("/api/me", { preHandler: auth }, async (req: any) =>
-  prisma.communityMember.findUnique({
+app.get("/api/me", { preHandler: auth }, async (req: any) => {
+  const member = await prisma.communityMember.findUnique({
     where: {
       communityId_userId: {
         communityId: req.identity.communityId,
@@ -261,8 +261,20 @@ app.get("/api/me", { preHandler: auth }, async (req: any) =>
       },
     },
     include: { user: true, community: true },
-  }),
-);
+  });
+  if (!member) return null;
+  return {
+    ...member,
+    user: {
+      ...member.user,
+      telegramUserId: String(member.user.telegramUserId),
+    },
+    community: {
+      ...member.community,
+      telegramChatId: String(member.community.telegramChatId),
+    },
+  };
+});
 app.delete("/api/me", { preHandler: auth }, async (req: any) => {
   await refreshMembership(req.identity);
   await prisma.$transaction([
@@ -571,9 +583,9 @@ app.post(
         body: JSON.stringify({
           title: "Публикация объявления",
           description: `Публикация «${listing.title}» после модерации`,
-        payload,
-        provider_token: "",
-        currency: "XTR",
+          payload,
+          provider_token: "",
+          currency: "XTR",
           prices: [
             { label: "Публикация", amount: community.publicationPriceStars },
           ],
