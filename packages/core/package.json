@@ -10,7 +10,7 @@
     "test": "vitest run",
     "db:generate": "prisma generate",
     "migrate": "prisma migrate deploy",
-    "seed": "tsx prisma/seed.ts"
+    "seed": "node dist/seed.js"
   },
   "dependencies": {
     "@prisma/client": "6.7.0",
