@@ -2124,6 +2124,9 @@ function Admin() {
         <NavLink to="/admin/users">
           👥<span>Люди</span>
         </NavLink>
+        <NavLink to="/admin/risk">
+          🛡<span>Риски</span>
+        </NavLink>
         <NavLink to="/admin/settings">
           ⚙<span>Настройки</span>
         </NavLink>
@@ -2134,10 +2137,25 @@ function Admin() {
       {view === "dashboard" && <AdminDashboard />}
       {view === "moderation" && <AdminModeration />}
       {view === "users" && <AdminUsers />}
+      {view === "risk" && <AdminRisk />}
       {view === "settings" && <AdminSettings />}
       {view === "audit" && <AdminAudit />}
     </section>
   );
+}
+function AdminRisk() {
+  const [items, setItems] = useState<any[]>([]);
+  const [busy, setBusy] = useState("");
+  const [error, setError] = useState("");
+  const load = () => request("/admin/abuse").then(setItems);
+  useEffect(() => { void load().catch((e) => setError(e.message)); }, []);
+  const resolve = async (id: string, resolution: string) => {
+    setBusy(id); setError("");
+    try { await request(`/admin/abuse/${id}/resolve`, "POST", { resolution }); await load(); }
+    catch (e: any) { setError(e.message); } finally { setBusy(""); }
+  };
+  const labels: Record<string, string> = { prohibited_content: "Запрещённый контент", probable_duplicate: "Вероятный дубликат", similar_listing: "Похожее объявление", new_account: "Новый аккаунт", many_external_links: "Много ссылок", low_information: "Мало полезной информации", invoice_velocity: "Слишком много счетов", risky_listing: "Риск объявления" };
+  return <div className="admin-view"><h2>Риск-контроль</h2><p className="hint">Автоматические сигналы не банят пользователя: администратор видит причины и принимает решение.</p>{error && <LoadError message={error}/>} {!items.length && !error && <div className="admin-empty">Открытых риск-событий нет</div>}{items.map((item) => <article className="risk-card" key={item.id}><header><span><b>{item.type === "payment_risk" ? "Проверка оплаты" : "Проверка объявления"}</b><small>{item.user?.firstName || "Пользователь"} · риск {item.score}/100</small></span><strong>{item.severity}</strong></header>{item.listing && <div><b>{item.listing.title}</b><p>{item.listing.description}</p></div>}<ul>{item.reasons.map((reason: string) => <li key={reason}>{labels[reason] || reason}</li>)}</ul><footer><button disabled={busy === item.id} onClick={() => void resolve(item.id, "false_positive")}>Ложное срабатывание</button>{item.payment && <button className="primary" disabled={busy === item.id} onClick={() => void resolve(item.id, "approved")}>Разрешить оплату</button>}<button className="danger-soft" disabled={busy === item.id} onClick={() => void resolve(item.id, "blocked")}>Подтвердить риск</button></footer></article>)}</div>;
 }
 function LoadError({ message }: { message: string }) {
   return <div className="form-error">{message}</div>;
@@ -2176,6 +2194,10 @@ function AdminDashboard() {
         <NavLink to="/admin/users">
           <b>👥</b>
           <span>Роли и доступ</span>
+        </NavLink>
+        <NavLink to="/admin/risk">
+          <b>{d?.abuseOpen || 0}</b>
+          <span>Риск-события</span>
         </NavLink>
         <NavLink to="/admin/settings">
           <b>⚙</b>
@@ -2226,6 +2248,7 @@ function AdminModeration() {
           <small>
             {x.category?.icon} {x.category?.name} · {x.author?.firstName}
           </small>
+          {x.riskScore > 0 && <div className="moderation-risk">🛡 Риск {x.riskScore}/100 · {(x.riskReasons || []).join(", ")}</div>}
           <p>{x.description}</p>
           <div>
             <button
@@ -2286,6 +2309,14 @@ function AdminUsers() {
       setError(e.message);
     }
   };
+  const changeAccess = async (member: any, status: string) => {
+    const reason = status === "active" ? "" : window.prompt("Причина ограничения:") || "Решение администратора";
+    try {
+      await request(`/admin/users/${member.userId}`, "PATCH", { status, reason });
+      setUsers((current) => current.map((item) => item.id === member.id ? { ...item, enforcementStatus: status, enforcementReason: reason } : item));
+      setSaved(`Доступ ${member.user.firstName} обновлён только для этого сообщества`);
+    } catch (e: any) { setError(e.message); }
+  };
   return (
     <div className="admin-view">
       <h2>Пользователи и роли</h2>
@@ -2334,6 +2365,7 @@ function AdminUsers() {
               <option value="admin">Админ</option>
               <option value="owner">Владелец</option>
             </select>
+            <select aria-label={`Доступ ${member.user.firstName}`} value={member.enforcementStatus || "active"} onChange={(event) => void changeAccess(member, event.target.value)}><option value="active">Доступ разрешён</option><option value="restricted">Ограничить</option><option value="banned">Заблокировать в доске</option></select>
           </div>
         ))}
       </div>
@@ -2365,6 +2397,15 @@ function AdminSettings() {
         publicationPriceStars: settings.publicationPriceStars,
         allowPaidNonMembers: settings.allowPaidNonMembers,
         rules: settings.rules,
+        abuseProtectionMode: settings.abuseProtectionMode,
+        minQualifiedMessageChars: settings.minQualifiedMessageChars,
+        maxLinksPerQualifiedMessage: settings.maxLinksPerQualifiedMessage,
+        maxListingsPerDay: settings.maxListingsPerDay,
+        duplicateWindowDays: settings.duplicateWindowDays,
+        duplicateSimilarityPercent: settings.duplicateSimilarityPercent,
+        riskyListingThreshold: settings.riskyListingThreshold,
+        maxPaidInvoicesPerDay: settings.maxPaidInvoicesPerDay,
+        prohibitedWords: settings.prohibitedWords,
       });
       setSettings(result);
       setMessage("Настройки сохранены");
@@ -2445,6 +2486,15 @@ function AdminSettings() {
             />
             <span>Разрешить платную публикацию людям не из группы</span>
           </label>
+          <fieldset className="abuse-settings"><legend>Защита от злоупотреблений</legend><label><span>Режим</span><select value={settings.abuseProtectionMode} onChange={(e) => setSettings({ ...settings, abuseProtectionMode: e.target.value })}><option value="enforce">Защищать</option><option value="observe">Только наблюдать</option><option value="off">Выключено</option></select></label>{[
+            ["minQualifiedMessageChars", "Минимум символов в полезном сообщении", 1, 500],
+            ["maxLinksPerQualifiedMessage", "Максимум ссылок в сообщении", 0, 10],
+            ["maxListingsPerDay", "Объявлений пользователя за 24 часа", 1, 100],
+            ["duplicateWindowDays", "Окно поиска дубликатов, дней", 1, 365],
+            ["duplicateSimilarityPercent", "Сходство для дубликата, %", 50, 100],
+            ["riskyListingThreshold", "Порог ручной проверки, баллов", 1, 100],
+            ["maxPaidInvoicesPerDay", "Платёжных счетов за 24 часа", 1, 100],
+          ].map(([key, label, min, max]) => <label key={String(key)}><span>{label}</span><input type="number" min={Number(min)} max={Number(max)} value={settings[String(key)]} onChange={(e) => setSettings({ ...settings, [String(key)]: Number(e.target.value) })}/></label>)}<label><span>Запрещённые слова и фразы, по одной в строке</span><textarea rows={5} value={(settings.prohibitedWords || []).join("\n")} onChange={(e) => setSettings({ ...settings, prohibitedWords: e.target.value.split("\n").map((value) => value.trim()).filter(Boolean).slice(0, 200) })}/></label></fieldset>
           <label className="rules-editor">
             <span>Правила сообщества</span>
             <textarea

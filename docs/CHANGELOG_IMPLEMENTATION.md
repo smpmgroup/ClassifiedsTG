@@ -1,5 +1,15 @@
 # Implementation changelog
 
+## 2026-07-19 — Tenant-scoped abuse and risk controls
+
+- Counted only useful, non-duplicate group messages toward free publication while
+  retaining total and rejected activity counters.
+- Added configurable listing velocity, prohibited-content, duplicate and quality risk
+  scoring with visible reasons and a dedicated administrator queue.
+- Added payment-invoice velocity review and a second pre-checkout review-state gate.
+- Moved user enforcement from global account status to each community membership,
+  preventing one tenant from blocking access to unrelated boards.
+
 ## 2026-07-19 — Public SaaS site and versioned consent
 
 - Replaced the outside-Telegram dead end with a responsive public landing, pricing,

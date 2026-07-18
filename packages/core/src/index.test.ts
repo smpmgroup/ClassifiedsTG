@@ -7,6 +7,10 @@ import {
   splitStarsCommission,
   assertBalancedEntries,
   validateTaxonomyAttributes,
+  qualifyCommunityMessage,
+  tokenSimilarity,
+  scoreListingRisk,
+  scorePaymentRisk,
 } from "./index.js";
 
 describe("listing state machine", () => {
@@ -16,6 +20,20 @@ describe("listing state machine", () => {
     expect(() => assertListingTransition("draft", "published")).toThrow(
       /not allowed/,
     ));
+});
+
+describe("abuse risk controls", () => {
+  it("counts useful messages but rejects commands, short text, links and rapid copies", () => {
+    expect(qualifyCommunityMessage({ text: "Полезный подробный ответ участнику", minChars: 12, maxLinks: 1 }).qualified).toBe(true);
+    expect(qualifyCommunityMessage({ text: "/start", minChars: 12, maxLinks: 1 }).qualified).toBe(false);
+    const first = qualifyCommunityMessage({ text: "Одинаковое сообщение для проверки", minChars: 12, maxLinks: 1 });
+    expect(qualifyCommunityMessage({ text: "Одинаковое сообщение для проверки", minChars: 12, maxLinks: 1, lastHash: first.hash, lastAt: new Date(), now: new Date() }).reasons).toContain("rapid_duplicate");
+  });
+  it("detects similar listings and produces explainable bounded scores", () => {
+    expect(tokenSimilarity("Продам красный городской велосипед", "Продам городской красный велосипед")).toBe(100);
+    expect(scoreListingRisk({ title: "Продам", description: "запрещенный товар", prohibitedWords: ["запрещенный товар"], duplicateSimilarity: 90, accountAgeHours: 2 }).score).toBe(100);
+    expect(scorePaymentRisk({ invoicesToday: 3, maxInvoicesPerDay: 3, listingRiskScore: 60, accountAgeHours: 2 })).toEqual({ score: 100, reasons: ["invoice_velocity", "risky_listing", "new_account"] });
+  });
 });
 
 describe("Stars commission ledger", () => {

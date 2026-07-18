@@ -197,3 +197,28 @@
   gap: 5px;
   margin-bottom: 7px;
 }
+.risk-card {
+  margin: 12px 0;
+  padding: 16px;
+  border-radius: 16px;
+  background: var(--tg-theme-secondary-bg-color, #fff);
+  border: 1px solid color-mix(in srgb, #d97706 25%, transparent);
+}
+.moderation-risk { margin: 10px 0; padding: 9px; border-radius: 9px; background: #fff3cd; color: #7c4a03; font-size: 12px; font-weight: 700; }
+.risk-card header,
+.risk-card footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.risk-card header span,
+.risk-card header small { display: block; }
+.risk-card header strong { color: #b45309; text-transform: uppercase; font-size: 11px; }
+.risk-card ul { display: flex; flex-wrap: wrap; gap: 6px; padding: 0; list-style: none; }
+.risk-card li { padding: 5px 8px; border-radius: 99px; background: #fff3cd; color: #7c4a03; font-size: 11px; }
+.risk-card footer { justify-content: flex-end; flex-wrap: wrap; }
+.risk-card button { padding: 9px; border: 0; border-radius: 9px; }
+.abuse-settings { display: grid; gap: 12px; padding: 15px; border: 1px solid #b9c9c0; border-radius: 14px; }
+.abuse-settings legend { padding: 0 8px; font-weight: 800; }
+.abuse-settings select { width: 100%; padding: 11px; border-radius: 10px; }

@@ -5,6 +5,7 @@ import {
   assertListingTransition,
   categoryTaxonomies,
   recordPaidPublicationLedger,
+  qualifyCommunityMessage,
 } from "@board/core";
 const tokenValue = process.env.TELEGRAM_BOT_TOKEN;
 const appUrlValue = process.env.TELEGRAM_MINI_APP_URL;
@@ -680,6 +681,7 @@ bot.on("pre_checkout_query", async (ctx) => {
   const valid =
     payment &&
     payment.status === "pending" &&
+    ["clear", "approved"].includes(payment.reviewStatus) &&
     payment.userId ===
       (
         await prisma.user.findUnique({
@@ -771,20 +773,47 @@ bot.on("message", async (ctx) => {
       lastName: ctx.from.last_name,
     },
   });
+  const month = new Date().toISOString().slice(0, 7);
+  const currentActivity = await prisma.messageActivity.findUnique({
+    where: { communityId_userId_month: { communityId: community.id, userId: user.id, month } },
+  });
+  const rawText = "text" in ctx.message
+    ? ctx.message.text
+    : "caption" in ctx.message && typeof ctx.message.caption === "string"
+      ? ctx.message.caption
+      : "";
+  const quality = qualifyCommunityMessage({
+    text: rawText,
+    minChars: community.minQualifiedMessageChars,
+    maxLinks: community.maxLinksPerQualifiedMessage,
+    lastHash: currentActivity?.lastMessageHash,
+    lastAt: currentActivity?.lastMessageAt,
+  });
   await prisma.messageActivity.upsert({
     where: {
       communityId_userId_month: {
         communityId: community.id,
         userId: user.id,
-        month: new Date().toISOString().slice(0, 7),
+        month,
       },
     },
-    update: { messageCount: { increment: 1 } },
+    update: {
+      totalMessageCount: { increment: 1 },
+      ...(quality.qualified
+        ? { messageCount: { increment: 1 } }
+        : { rejectedMessageCount: { increment: 1 } }),
+      lastMessageHash: quality.hash,
+      lastMessageAt: new Date(),
+    },
     create: {
       communityId: community.id,
       userId: user.id,
-      month: new Date().toISOString().slice(0, 7),
-      messageCount: 1,
+      month,
+      messageCount: quality.qualified ? 1 : 0,
+      totalMessageCount: 1,
+      rejectedMessageCount: quality.qualified ? 0 : 1,
+      lastMessageHash: quality.hash,
+      lastMessageAt: new Date(),
     },
   });
 });

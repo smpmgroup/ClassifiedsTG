@@ -30,6 +30,9 @@ import {
   reservePayoutLedger,
   releasePayoutLedger,
   completePayoutLedger,
+  tokenSimilarity,
+  scoreListingRisk,
+  scorePaymentRisk,
 } from "@board/core";
 import { loadConfig } from "./config.js";
 import { telegramMembership, validateInitData } from "./auth.js";
@@ -324,6 +327,8 @@ async function auth(req: any, reply: any) {
     });
     if (!member || member.user.status !== "active")
       throw new DomainError("ACCESS_DENIED", "Доступ ограничен", 403);
+    if (member.enforcementStatus === "banned" || (member.enforcementStatus === "restricted" && (!member.restrictedUntil || member.restrictedUntil > new Date())))
+      throw new DomainError("COMMUNITY_ACCESS_RESTRICTED", member.enforcementReason || "Доступ к этой доске ограничен", 403);
     const community = await prisma.community.findUnique({
       where: { id: decoded.communityId },
       select: { isActive: true, tenantStatus: true },
@@ -3149,7 +3154,7 @@ app.post(
   async (req: any) => {
     const listing = await prisma.listing.findUnique({
       where: { id: req.params.id },
-      include: { category: true, images: { select: { id: true } } },
+      include: { category: true, images: { select: { id: true } }, author: { select: { createdAt: true } } },
     });
     if (!listing || listing.authorId !== req.identity.userId)
       throw new DomainError("LISTING_NOT_FOUND", "Объявление не найдено", 404);
@@ -3191,6 +3196,7 @@ app.post(
       const active = await prisma.listing.count({
         where: {
           authorId: req.identity.userId,
+          communityId: req.identity.communityId,
           status: { in: ["pending", "published"] },
         },
       });
@@ -3203,6 +3209,48 @@ app.post(
           "Достигнут лимит объявлений",
           409,
         );
+      const sinceDay = new Date(Date.now() - 86_400_000);
+      const listingsToday = await prisma.listing.count({
+        where: { communityId: community.id, authorId: req.identity.userId, createdAt: { gte: sinceDay } },
+      });
+      if (community.abuseProtectionMode === "enforce" && listingsToday > community.maxListingsPerDay)
+        throw new DomainError("LISTING_VELOCITY_LIMIT", `Можно создать не более ${community.maxListingsPerDay} объявлений за 24 часа`, 429);
+      const duplicateCandidates = await prisma.listing.findMany({
+        where: {
+          id: { not: listing.id }, communityId: community.id, authorId: req.identity.userId,
+          status: { notIn: ["deleted", "rejected"] },
+          createdAt: { gte: new Date(Date.now() - community.duplicateWindowDays * 86_400_000) },
+        },
+        select: { id: true, title: true, description: true }, take: 50,
+      });
+      let duplicateSimilarity = 0;
+      let duplicateOf: string | null = null;
+      for (const candidate of duplicateCandidates) {
+        const similarity = tokenSimilarity(`${listing.title} ${listing.description}`, `${candidate.title} ${candidate.description}`);
+        if (similarity > duplicateSimilarity) { duplicateSimilarity = similarity; duplicateOf = candidate.id; }
+      }
+      const listingRisk = scoreListingRisk({
+        title: listing.title, description: listing.description,
+        prohibitedWords: community.prohibitedWords,
+        duplicateSimilarity: duplicateSimilarity >= community.duplicateSimilarityPercent ? 85 : duplicateSimilarity,
+        accountAgeHours: (Date.now() - listing.author.createdAt.getTime()) / 3_600_000,
+        links: (`${listing.title} ${listing.description}`.match(/(?:https?:\/\/|www\.|t\.me\/)/gi) || []).length,
+      });
+      const requiresManualReview = community.abuseProtectionMode !== "off" && listingRisk.score >= community.riskyListingThreshold;
+      await prisma.$transaction(async (tx) => {
+        await tx.listing.update({ where: { id: listing.id }, data: {
+          duplicateSuspected: duplicateSimilarity >= community.duplicateSimilarityPercent,
+          riskScore: listingRisk.score, riskReasons: listingRisk.reasons,
+          requiresManualReview,
+        } });
+        if (listingRisk.score > 0 && !(await tx.abuseEvent.findFirst({ where: { listingId: listing.id, type: "listing_risk", status: "open" } })))
+          await tx.abuseEvent.create({ data: {
+            communityId: community.id, userId: listing.authorId, listingId: listing.id,
+            type: "listing_risk", severity: requiresManualReview ? "high" : "low",
+            score: listingRisk.score, reasons: listingRisk.reasons,
+            metadata: { duplicateSimilarity, duplicateOf, prohibitedMatches: listingRisk.prohibitedMatches },
+          } });
+      });
       const month = new Date().toISOString().slice(0, 7);
       const activity = await prisma.messageActivity.findUnique({
         where: {
@@ -3268,6 +3316,7 @@ app.post(
         authorId: req.identity.userId,
         status: "draft",
       },
+      include: { author: { select: { createdAt: true } } },
     });
     if (!listing)
       throw new DomainError("LISTING_NOT_PAYABLE", "Черновик не найден", 404);
@@ -3301,7 +3350,16 @@ app.post(
         "Публикация уже оплачена",
         409,
       );
-    await prisma.publicationPayment.upsert({
+    const invoicesToday = await prisma.publicationPayment.count({
+      where: { communityId: community.id, userId: req.identity.userId, createdAt: { gte: new Date(Date.now() - 86_400_000) } },
+    });
+    const paymentRisk = scorePaymentRisk({
+      invoicesToday, maxInvoicesPerDay: community.maxPaidInvoicesPerDay,
+      listingRiskScore: listing.riskScore,
+      accountAgeHours: (Date.now() - listing.author.createdAt.getTime()) / 3_600_000,
+    });
+    const needsReview = community.abuseProtectionMode === "enforce" && paymentRisk.score >= 50 && existingPayment?.reviewStatus !== "approved";
+    const storedPayment = await prisma.publicationPayment.upsert({
       where: { listingId: listing.id },
       update: {
         amountStars: community.publicationPriceStars,
@@ -3312,6 +3370,9 @@ app.post(
         status: "pending",
         telegramPaymentChargeId: null,
         paidAt: null,
+        riskScore: paymentRisk.score,
+        riskReasons: paymentRisk.reasons,
+        reviewStatus: existingPayment?.reviewStatus === "approved" ? "approved" : needsReview ? "review" : "clear",
       },
       create: {
         communityId: community.id,
@@ -3322,8 +3383,21 @@ app.post(
         platformFeeStars: split.platformFeeStars,
         communityShareStars: split.communityShareStars,
         invoicePayload: payload,
+        riskScore: paymentRisk.score,
+        riskReasons: paymentRisk.reasons,
+        reviewStatus: needsReview ? "review" : "clear",
       },
     });
+    if (needsReview) {
+      if (!(await prisma.abuseEvent.findFirst({ where: { paymentId: storedPayment.id, type: "payment_risk", status: "open" } })))
+        await prisma.abuseEvent.create({ data: {
+          communityId: community.id, userId: req.identity.userId, listingId: listing.id,
+          paymentId: storedPayment.id, type: "payment_risk", severity: "high",
+          score: paymentRisk.score, reasons: paymentRisk.reasons,
+          metadata: { invoicesToday },
+        } });
+      throw new DomainError("PAYMENT_REVIEW_REQUIRED", "Перед оплатой нужна проверка администратора. Мы уведомили модераторов.", 409, { listingId: listing.id });
+    }
     const response = await fetch(
       `https://api.telegram.org/bot${config.TELEGRAM_BOT_TOKEN}/createInvoiceLink`,
       {
@@ -3647,6 +3721,7 @@ app.get(
       activeUsers,
       banned,
       expiring,
+      abuseOpen,
       top,
     ] = await Promise.all([
       prisma.listing.count({ where: { communityId: c, status: "pending" } }),
@@ -3670,7 +3745,7 @@ app.get(
         },
       }),
       prisma.communityMember.count({
-        where: { communityId: c, user: { status: "banned" } },
+        where: { communityId: c, enforcementStatus: "banned" },
       }),
       prisma.listing.count({
         where: {
@@ -3679,6 +3754,7 @@ app.get(
           expiresAt: { lte: new Date(Date.now() + 259200000) },
         },
       }),
+      prisma.abuseEvent.count({ where: { communityId: c, status: "open" } }),
       prisma.listing.findMany({
         where: { communityId: c, status: "published" },
         orderBy: { viewCount: "desc" },
@@ -3693,6 +3769,7 @@ app.get(
       activeUsers,
       banned,
       expiring,
+      abuseOpen,
       top,
     };
   },
@@ -3742,6 +3819,7 @@ app.post(
                   ).listingLifetimeDays,
                 )
               : listing.expiresAt,
+          requiresManualReview: false,
         },
       });
       await tx.moderationAction.create({
@@ -3752,6 +3830,10 @@ app.post(
           action: `listing_${to}`,
           reason: req.body?.reason,
         },
+      });
+      await tx.abuseEvent.updateMany({
+        where: { listingId: listing.id, status: "open" },
+        data: { status: "resolved", resolution: `listing_${to}`, reviewedById: req.identity.userId, reviewedAt: new Date() },
       });
       await tx.notification.create({
         data: {
@@ -3777,6 +3859,45 @@ app.get(
       include: { listing: true, reporter: true },
       orderBy: { createdAt: "asc" },
     }),
+);
+app.get(
+  "/api/admin/abuse",
+  { preHandler: requireRole(privilegedRoles) },
+  async (req: any) => prisma.abuseEvent.findMany({
+    where: { communityId: req.identity.communityId, status: String(req.query?.status || "open") },
+    include: {
+      user: { select: { id: true, firstName: true, username: true, createdAt: true } },
+      listing: { include: { category: true, images: { take: 1 } } },
+      payment: { select: { id: true, amountStars: true, reviewStatus: true, riskScore: true, riskReasons: true } },
+    },
+    orderBy: [{ severity: "desc" }, { createdAt: "asc" }], take: 200,
+  }),
+);
+app.post(
+  "/api/admin/abuse/:id/resolve",
+  { preHandler: requireRole(privilegedRoles) },
+  async (req: any) => {
+    const resolution = String(req.body?.resolution || "");
+    if (!["approved", "false_positive", "confirmed", "blocked"].includes(resolution))
+      throw new DomainError("ABUSE_RESOLUTION_INVALID", "Выберите результат проверки");
+    return prisma.$transaction(async (tx) => {
+      const event = await tx.abuseEvent.findFirst({ where: { id: req.params.id, communityId: req.identity.communityId, status: "open" } });
+      if (!event) throw new DomainError("ABUSE_EVENT_NOT_FOUND", "Риск-событие не найдено", 404);
+      if (event.paymentId)
+        await tx.publicationPayment.update({ where: { id: event.paymentId }, data: { reviewStatus: ["approved", "false_positive"].includes(resolution) ? "approved" : "blocked" } });
+      if (event.listingId && ["approved", "false_positive"].includes(resolution))
+        await tx.listing.update({ where: { id: event.listingId }, data: { requiresManualReview: false } });
+      const updated = await tx.abuseEvent.update({ where: { id: event.id }, data: {
+        status: "resolved", resolution, reviewedById: req.identity.userId, reviewedAt: new Date(),
+      } });
+      await tx.moderationAction.create({ data: {
+        communityId: req.identity.communityId, moderatorId: req.identity.userId,
+        targetUserId: event.userId, listingId: event.listingId,
+        action: "abuse_risk_resolved", reason: resolution, metadata: { abuseEventId: event.id, paymentId: event.paymentId },
+      } });
+      return updated;
+    });
+  },
 );
 app.post(
   "/api/admin/reports/:id/resolve",
@@ -3864,6 +3985,10 @@ app.patch(
     });
     const role = req.body?.role;
     const status = req.body?.status;
+    if (status && !["active", "restricted", "banned"].includes(status))
+      throw new DomainError("ENFORCEMENT_STATUS_INVALID", "Неверный статус доступа");
+    if (status && status !== "active" && target.role === "owner")
+      throw new DomainError("OWNER_PROTECTED", "Сначала передайте права владельца", 409);
     if (["admin", "owner"].includes(role) && req.identity.role !== "owner")
       throw new DomainError(
         "OWNER_REQUIRED",
@@ -3882,17 +4007,14 @@ app.patch(
         );
     }
     return prisma.$transaction(async (tx) => {
-      if (status)
-        await tx.user.update({
-          where: { id: target.userId },
-          data: { status },
-        });
       const member = await tx.communityMember.update({
         where: { id: target.id },
         data: {
           role,
           isMuted: req.body?.isMuted,
           mutedUntil: req.body?.mutedUntil && new Date(req.body.mutedUntil),
+          ...(status ? { enforcementStatus: status === "active" ? "active" : status, enforcementReason: String(req.body?.reason || "").slice(0, 500) || null } : {}),
+          ...(req.body?.restrictedUntil ? { restrictedUntil: new Date(req.body.restrictedUntil) } : status === "active" ? { restrictedUntil: null } : {}),
         },
       });
       await tx.moderationAction.create({
@@ -3999,6 +4121,14 @@ app.patch(
       "minMonthlyMessagesForFree",
       "publicationPriceStars",
       "allowPaidNonMembers",
+      "abuseProtectionMode",
+      "minQualifiedMessageChars",
+      "maxLinksPerQualifiedMessage",
+      "maxListingsPerDay",
+      "duplicateWindowDays",
+      "duplicateSimilarityPercent",
+      "riskyListingThreshold",
+      "maxPaidInvoicesPerDay",
     ];
     const data: any = Object.fromEntries(
       Object.entries(req.body || {}).filter(([key]) => allowed.includes(key)),
@@ -4006,6 +4136,22 @@ app.patch(
     if (typeof data.rules === "string") data.rules = data.rules.slice(0, 10000);
     if (typeof data.description === "string")
       data.description = data.description.trim().slice(0, 500);
+    if (data.prohibitedWords !== undefined) {
+      if (!Array.isArray(data.prohibitedWords) || data.prohibitedWords.length > 200)
+        throw new DomainError("SETTINGS_INVALID", "Допустимо не более 200 запрещённых фраз");
+      data.prohibitedWords = [...new Set(data.prohibitedWords.map((value: unknown) => String(value).trim().toLowerCase().slice(0, 80)).filter((value: string) => value.length >= 2))];
+    }
+    if (data.abuseProtectionMode !== undefined && !["off", "observe", "enforce"].includes(data.abuseProtectionMode))
+      throw new DomainError("SETTINGS_INVALID", "Неверный режим защиты");
+    const abuseRanges: Record<string, [number, number]> = {
+      minQualifiedMessageChars: [1, 500], maxLinksPerQualifiedMessage: [0, 10],
+      maxListingsPerDay: [1, 100], duplicateWindowDays: [1, 365],
+      duplicateSimilarityPercent: [50, 100], riskyListingThreshold: [1, 100],
+      maxPaidInvoicesPerDay: [1, 100],
+    };
+    for (const [key, [minimum, maximum]] of Object.entries(abuseRanges))
+      if (data[key] !== undefined && (!Number.isInteger(data[key]) || data[key] < minimum || data[key] > maximum))
+        throw new DomainError("SETTINGS_INVALID", `${key}: допустимо от ${minimum} до ${maximum}`);
     if (
       data.minMonthlyMessagesForFree !== undefined &&
       (!Number.isInteger(data.minMonthlyMessagesForFree) ||

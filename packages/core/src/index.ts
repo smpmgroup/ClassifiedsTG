@@ -6,6 +6,7 @@ export const prisma = process.env.VITEST
 export { ListingStatus, MemberRole };
 export * from "./taxonomy.js";
 export * from "./ledger.js";
+export * from "./abuse.js";
 
 export function jsonStringify(value: unknown): string {
   return JSON.stringify(value, (_key, item) =>

@@ -125,6 +125,14 @@ model Community {
   minMonthlyMessagesForFree Int @default(10)
   publicationPriceStars Int @default(50)
   allowPaidNonMembers Boolean @default(true)
+  abuseProtectionMode String @default("enforce")
+  minQualifiedMessageChars Int @default(12)
+  maxLinksPerQualifiedMessage Int @default(1)
+  maxListingsPerDay Int @default(5)
+  duplicateWindowDays Int @default(30)
+  duplicateSimilarityPercent Int @default(85)
+  riskyListingThreshold Int @default(50)
+  maxPaidInvoicesPerDay Int @default(3)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   members CommunityMember[]
@@ -139,6 +147,7 @@ model Community {
   auditEvents AuditEvent[]
   ledgerTransactions LedgerTransaction[]
   supportTickets SupportTicket[]
+  abuseEvents AbuseEvent[]
   @@index([organizationId, tenantStatus])
 }
 
@@ -177,6 +186,7 @@ model User {
   payoutRequests PayoutRequest[] @relation("PayoutRequester")
   payoutReviews PayoutRequest[] @relation("PayoutReviewer")
   legalAcceptances LegalAcceptance[]
+  abuseEvents AbuseEvent[]
 }
 
 model Organization {
@@ -402,6 +412,9 @@ model CommunityMember {
   membershipCheckedAt DateTime?
   isMuted Boolean @default(false)
   mutedUntil DateTime?
+  enforcementStatus String @default("active")
+  restrictedUntil DateTime?
+  enforcementReason String?
   notifyListingUpdates Boolean @default(true)
   notifyBuyerInterest Boolean @default(true)
   allowDirectContact Boolean @default(true)
@@ -459,6 +472,9 @@ model Listing {
   viewCount Int @default(0)
   favoritesCount Int @default(0)
   duplicateSuspected Boolean @default(false)
+  riskScore Int @default(0)
+  riskReasons String[] @default([])
+  requiresManualReview Boolean @default(false)
   attributes Json @default("{}")
   paymentStatus String @default("not_required")
   publicationMessageId Int?
@@ -475,6 +491,7 @@ model Listing {
   actions ModerationAction[]
   views ListingView[]
   payment PublicationPayment?
+  abuseEvents AbuseEvent[]
   @@index([communityId, status, publishedAt])
   @@index([authorId, status])
 }
@@ -485,6 +502,10 @@ model MessageActivity {
   userId String
   month String
   messageCount Int @default(0)
+  totalMessageCount Int @default(0)
+  rejectedMessageCount Int @default(0)
+  lastMessageHash String?
+  lastMessageAt DateTime?
   updatedAt DateTime @updatedAt
   community Community @relation(fields: [communityId], references: [id], onDelete: Cascade)
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -503,6 +524,9 @@ model PublicationPayment {
   invoicePayload String @unique
   telegramPaymentChargeId String? @unique
   status String @default("pending")
+  riskScore Int @default(0)
+  riskReasons String[] @default([])
+  reviewStatus String @default("clear")
   createdAt DateTime @default(now())
   paidAt DateTime?
   community Community @relation(fields: [communityId], references: [id])
@@ -510,6 +534,33 @@ model PublicationPayment {
   listing Listing @relation(fields: [listingId], references: [id])
   ledgerTransactions LedgerTransaction[]
   telegramObservations TelegramStarObservation[]
+  abuseEvents AbuseEvent[]
+}
+
+model AbuseEvent {
+  id String @id @default(cuid())
+  communityId String
+  userId String?
+  listingId String?
+  paymentId String?
+  type String
+  severity String @default("medium")
+  score Int @default(0)
+  reasons String[] @default([])
+  status String @default("open")
+  resolution String?
+  reviewedById String?
+  reviewedAt DateTime?
+  metadata Json @default("{}")
+  createdAt DateTime @default(now())
+  community Community @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+  listing Listing? @relation(fields: [listingId], references: [id], onDelete: SetNull)
+  payment PublicationPayment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  @@index([communityId, status, createdAt])
+  @@index([userId, createdAt])
+  @@index([listingId])
+  @@index([paymentId])
 }
 
 model LedgerAccount {
