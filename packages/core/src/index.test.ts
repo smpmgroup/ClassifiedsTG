@@ -44,6 +44,11 @@ describe("Stars commission ledger", () => {
       assertBalancedEntries([-50, 50, 37, -37, 13, -13]),
     ).not.toThrow();
   });
+  it("balances payout reservation, release and completion journals", () => {
+    expect(() => assertBalancedEntries([-100, 100, 100, -100])).not.toThrow();
+    expect(() => assertBalancedEntries([100, -100, -100, 100])).not.toThrow();
+    expect(() => assertBalancedEntries([-100, 100])).not.toThrow();
+  });
 });
 
 describe("expiration", () => {

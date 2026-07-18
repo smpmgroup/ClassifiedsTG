@@ -27,6 +27,9 @@ import {
   splitStarsCommission,
   recordRefundLedger,
   settlePaidPublicationLedger,
+  reservePayoutLedger,
+  releasePayoutLedger,
+  completePayoutLedger,
 } from "@board/core";
 import { loadConfig } from "./config.js";
 import { telegramMembership, validateInitData } from "./auth.js";
@@ -1301,17 +1304,12 @@ app.get(
   { preHandler: platformAuth },
   async (req: any) => {
     const organizationId = String(req.params.id);
-    const membership = await prisma.organizationMember.findUnique({
-      where: {
-        organizationId_userId: {
-          organizationId,
-          userId: req.platformIdentity.userId,
-        },
-      },
-    });
-    if (!membership)
-      throw new DomainError("FORBIDDEN", "Недостаточно прав", 403);
-    const [accounts, transactions] = await prisma.$transaction([
+    await organizationPlatformMembership(
+      organizationId,
+      req.platformIdentity.userId,
+      ["owner", "administrator"],
+    );
+    const [accounts, transactions, payouts] = await prisma.$transaction([
       prisma.ledgerAccount.findMany({
         where: { organizationId },
         include: { entries: { select: { amount: true } } },
@@ -1333,6 +1331,15 @@ app.get(
         orderBy: { occurredAt: "desc" },
         take: 100,
       }),
+      prisma.payoutRequest.findMany({
+        where: { organizationId },
+        include: {
+          requestedBy: { select: { firstName: true, username: true } },
+          reviewedBy: { select: { firstName: true, username: true } },
+        },
+        orderBy: { requestedAt: "desc" },
+        take: 50,
+      }),
     ]);
     const balances = Object.fromEntries(
       accounts.map((account) => [
@@ -1345,10 +1352,66 @@ app.get(
       balances: {
         pending: balances.liability_pending || 0,
         available: balances.liability_available || 0,
-        paidOut: balances.liability_paid || 0,
+        reserved: balances.liability_reserved || 0,
+        paidOut: payouts.filter((item) => item.status === "paid").reduce((sum, item) => sum + item.amountStars, 0),
       },
+      minimumPayoutStars: (await prisma.platformSetting.findUnique({ where: { id: "global" } }))?.minimumPayoutStars || 1000,
+      payoutsEnabled: (await prisma.platformSetting.findUnique({ where: { id: "global" } }))?.payoutsEnabled || false,
       transactions,
+      payouts,
     };
+  },
+);
+
+app.post(
+  "/api/platform/organizations/:id/payouts",
+  { preHandler: platformAuth },
+  async (req: any) => {
+    const organizationId = String(req.params.id);
+    await organizationPlatformMembership(organizationId, req.platformIdentity.userId, ["owner"]);
+    const amountStars = Number(req.body?.amountStars);
+    const settings = await prisma.platformSetting.findUnique({ where: { id: "global" } });
+    if (!settings?.payoutsEnabled)
+      throw new DomainError("PAYOUTS_DISABLED", "Выплаты пока закрыты владельцем платформы", 409);
+    if (!Number.isSafeInteger(amountStars) || amountStars < settings.minimumPayoutStars)
+      throw new DomainError("PAYOUT_AMOUNT_INVALID", `Минимальная выплата — ${settings.minimumPayoutStars} Stars`);
+    try {
+      return await prisma.$transaction(async (tx) => {
+        const payout = await tx.payoutRequest.create({ data: {
+          organizationId, requestedById: req.platformIdentity.userId, amountStars,
+          status: "requested", rail: "manual_sepa",
+        } });
+        const reservation = await reservePayoutLedger(tx, { payoutId: payout.id, organizationId, amountStars });
+        const updated = await tx.payoutRequest.update({ where: { id: payout.id }, data: { reservationTransactionId: reservation.id } });
+        await tx.auditEvent.create({ data: {
+          actorId: req.platformIdentity.userId, scope: "platform_finance", action: "payout_requested",
+          targetType: "PayoutRequest", targetId: payout.id, metadata: { organizationId, amountStars },
+        } });
+        return updated;
+      }, { isolationLevel: "Serializable" });
+    } catch (e: any) {
+      if (String(e?.message || "").includes("insufficient available"))
+        throw new DomainError("PAYOUT_BALANCE_INSUFFICIENT", "Недостаточно доступных Stars", 409);
+      throw e;
+    }
+  },
+);
+
+app.post(
+  "/api/platform/organizations/:id/payouts/:payoutId/cancel",
+  { preHandler: platformAuth },
+  async (req: any) => {
+    const organizationId = String(req.params.id);
+    await organizationPlatformMembership(organizationId, req.platformIdentity.userId, ["owner"]);
+    return prisma.$transaction(async (tx) => {
+      const payout = await tx.payoutRequest.findFirst({ where: { id: String(req.params.payoutId), organizationId } });
+      if (!payout) throw new DomainError("PAYOUT_NOT_FOUND", "Заявка не найдена", 404);
+      if (payout.status !== "requested") throw new DomainError("PAYOUT_STATE_INVALID", "Эту заявку уже нельзя отменить", 409);
+      await releasePayoutLedger(tx, { payoutId: payout.id, organizationId, amountStars: payout.amountStars, reason: "cancelled_by_owner" });
+      const updated = await tx.payoutRequest.update({ where: { id: payout.id }, data: { status: "cancelled", processedAt: new Date() } });
+      await tx.auditEvent.create({ data: { actorId: req.platformIdentity.userId, scope: "platform_finance", action: "payout_cancelled", targetType: "PayoutRequest", targetId: payout.id, metadata: { amountStars: payout.amountStars } } });
+      return updated;
+    });
   },
 );
 
@@ -1790,6 +1853,108 @@ app.get(
       },
       orderBy: { occurredAt: "desc" },
       take: limit,
+    });
+  },
+);
+
+app.get(
+  "/api/platform/admin/payouts",
+  { preHandler: requirePlatformRole(platformFinanceRoles) },
+  async (req: any) => {
+    const status = String(req.query?.status || "").trim();
+    return prisma.payoutRequest.findMany({
+      where: status ? { status } : undefined,
+      include: {
+        organization: { select: { id: true, name: true, stripeConnectAccountId: true, connectPayoutsEnabled: true } },
+        requestedBy: { select: { firstName: true, username: true } },
+        reviewedBy: { select: { firstName: true, username: true } },
+      },
+      orderBy: { requestedAt: "desc" }, take: 200,
+    });
+  },
+);
+
+app.post(
+  "/api/platform/admin/payouts/:id/review",
+  { preHandler: requirePlatformRole(new Set(["platform_owner"])) },
+  async (req: any) => {
+    const decision = String(req.body?.decision || "");
+    if (!["approve", "reject"].includes(decision))
+      throw new DomainError("PAYOUT_DECISION_INVALID", "Укажите approve или reject");
+    const settlementAmount = Number(req.body?.settlementAmount);
+    const settlementCurrency = String(req.body?.settlementCurrency || "EUR").toUpperCase();
+    const rail = String(req.body?.rail || "manual_sepa");
+    if (decision === "approve" && (!Number.isSafeInteger(settlementAmount) || settlementAmount <= 0))
+      throw new DomainError("PAYOUT_SETTLEMENT_INVALID", "Укажите сумму выплаты в центах");
+    if (!/^[A-Z]{3}$/.test(settlementCurrency) || !["manual_sepa", "stripe_connect"].includes(rail))
+      throw new DomainError("PAYOUT_SETTLEMENT_INVALID", "Неверная валюта или способ выплаты");
+    return prisma.$transaction(async (tx) => {
+      const payout = await tx.payoutRequest.findUnique({ where: { id: String(req.params.id) }, include: { organization: true } });
+      if (!payout) throw new DomainError("PAYOUT_NOT_FOUND", "Заявка не найдена", 404);
+      if (payout.status !== "requested") throw new DomainError("PAYOUT_STATE_INVALID", "Заявка уже рассмотрена", 409);
+      if (decision === "reject") {
+        await releasePayoutLedger(tx, { payoutId: payout.id, organizationId: payout.organizationId, amountStars: payout.amountStars, reason: String(req.body?.reason || "rejected_by_platform") });
+      } else if (rail === "stripe_connect" && (!payout.organization.stripeConnectAccountId || !payout.organization.connectPayoutsEnabled)) {
+        throw new DomainError("CONNECT_NOT_READY", "Stripe Connect организации не готов к выплатам", 409);
+      }
+      const updated = await tx.payoutRequest.update({ where: { id: payout.id }, data: {
+        status: decision === "approve" ? "approved" : "rejected",
+        reviewedById: req.platformIdentity.userId, reviewedAt: new Date(),
+        ...(decision === "approve" ? { settlementAmount, settlementCurrency, rail, statementNote: String(req.body?.statementNote || "").trim() || null } : { failureReason: String(req.body?.reason || "Отклонено платформой") }),
+      } });
+      await tx.auditEvent.create({ data: {
+        actorId: req.platformIdentity.userId, scope: "platform_finance", action: `payout_${decision === "approve" ? "approved" : "rejected"}`,
+        targetType: "PayoutRequest", targetId: payout.id, metadata: { amountStars: payout.amountStars, settlementAmount: decision === "approve" ? settlementAmount : null, settlementCurrency, rail },
+      } });
+      return updated;
+    });
+  },
+);
+
+app.post(
+  "/api/platform/admin/payouts/:id/execute",
+  { preHandler: requirePlatformRole(new Set(["platform_owner"])) },
+  async (req: any) => {
+    const payout = await prisma.payoutRequest.findUnique({ where: { id: String(req.params.id) }, include: { organization: true } });
+    if (!payout) throw new DomainError("PAYOUT_NOT_FOUND", "Заявка не найдена", 404);
+    if (payout.status === "paid") return payout;
+    if (!['approved', 'failed'].includes(payout.status) || !payout.settlementAmount)
+      throw new DomainError("PAYOUT_STATE_INVALID", "Выплата не готова к исполнению", 409);
+    let externalReference = String(req.body?.externalReference || "").trim();
+    let stripeTransferId: string | null = payout.stripeTransferId;
+    if (payout.rail === "stripe_connect") {
+      const stripeClient = requireStripe();
+      if (!payout.organization.stripeConnectAccountId || !payout.organization.connectPayoutsEnabled)
+        throw new DomainError("CONNECT_NOT_READY", "Stripe Connect организации не готов", 409);
+      try {
+        const transfer = await stripeClient.transfers.create({
+          amount: payout.settlementAmount, currency: payout.settlementCurrency.toLowerCase(),
+          destination: payout.organization.stripeConnectAccountId,
+          description: `Community payout ${payout.id}`,
+          metadata: { payoutId: payout.id, organizationId: payout.organizationId, amountStars: String(payout.amountStars) },
+        }, { idempotencyKey: `community-payout-${payout.id}` });
+        stripeTransferId = transfer.id;
+        externalReference = transfer.id;
+      } catch (e: any) {
+        await prisma.payoutRequest.update({ where: { id: payout.id }, data: { status: "failed", failureReason: String(e?.message || "Stripe transfer failed").slice(0, 1000) } });
+        throw new DomainError("PAYOUT_EXECUTION_FAILED", "Stripe не выполнил перевод; резерв сохранён для повтора", 502);
+      }
+    } else if (!externalReference) {
+      throw new DomainError("PAYOUT_REFERENCE_REQUIRED", "Укажите банковский reference ручной выплаты");
+    }
+    return prisma.$transaction(async (tx) => {
+      const current = await tx.payoutRequest.findUniqueOrThrow({ where: { id: payout.id } });
+      if (current.status === "paid") return current;
+      const completion = await completePayoutLedger(tx, { payoutId: payout.id, organizationId: payout.organizationId, amountStars: payout.amountStars, rail: payout.rail, externalReference });
+      const updated = await tx.payoutRequest.update({ where: { id: payout.id }, data: {
+        status: "paid", completionTransactionId: completion.id, stripeTransferId,
+        externalReference, failureReason: null, processedAt: new Date(),
+      } });
+      await tx.auditEvent.create({ data: {
+        actorId: req.platformIdentity.userId, scope: "platform_finance", action: "payout_paid",
+        targetType: "PayoutRequest", targetId: payout.id, metadata: { rail: payout.rail, externalReference, settlementAmount: payout.settlementAmount, settlementCurrency: payout.settlementCurrency },
+      } });
+      return updated;
     });
   },
 );
@@ -2398,6 +2563,7 @@ app.patch(
     const defaultCommissionBps = Number(req.body?.defaultCommissionBps);
     const starsHoldDays = Number(req.body?.starsHoldDays);
     const minimumPayoutStars = Number(req.body?.minimumPayoutStars);
+    const payoutsEnabled = Boolean(req.body?.payoutsEnabled);
     if (
       !Number.isInteger(minimumPublicationStars) ||
       minimumPublicationStars < 1 ||
@@ -2437,6 +2603,7 @@ app.patch(
         defaultCommissionBps,
         starsHoldDays,
         minimumPayoutStars,
+        payoutsEnabled,
       },
     });
     await prisma.auditEvent.create({
@@ -2451,6 +2618,7 @@ app.patch(
           defaultCommissionBps,
           starsHoldDays,
           minimumPayoutStars,
+          payoutsEnabled,
         },
       },
     });

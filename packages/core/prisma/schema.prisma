@@ -174,6 +174,8 @@ model User {
   supportTicketsCreated SupportTicket[] @relation("SupportTicketCreator")
   supportTicketsAssigned SupportTicket[] @relation("SupportTicketAssignee")
   supportMessages SupportMessage[]
+  payoutRequests PayoutRequest[] @relation("PayoutRequester")
+  payoutReviews PayoutRequest[] @relation("PayoutReviewer")
 }
 
 model Organization {
@@ -204,6 +206,7 @@ model Organization {
   ledgerTransactions LedgerTransaction[]
   supportTickets SupportTicket[]
   stripeInvoices StripeInvoiceRecord[]
+  payoutRequests PayoutRequest[]
 }
 
 model BillingPlan {
@@ -497,10 +500,42 @@ model LedgerTransaction {
   community Community? @relation(fields: [communityId], references: [id], onDelete: Restrict)
   payment PublicationPayment? @relation(fields: [paymentId], references: [id], onDelete: Restrict)
   entries LedgerEntry[]
+  payoutReservation PayoutRequest? @relation("PayoutReservation")
+  payoutCompletion PayoutRequest? @relation("PayoutCompletion")
   @@index([organizationId, occurredAt])
   @@index([communityId, occurredAt])
   @@index([paymentId])
   @@index([type, status, occurredAt])
+}
+
+model PayoutRequest {
+  id String @id @default(cuid())
+  organizationId String
+  requestedById String
+  reviewedById String?
+  amountStars Int
+  settlementCurrency String @default("EUR")
+  settlementAmount Int?
+  status String @default("requested")
+  rail String @default("manual_sepa")
+  reservationTransactionId String? @unique
+  completionTransactionId String? @unique
+  stripeTransferId String? @unique
+  externalReference String?
+  statementNote String?
+  failureReason String?
+  requestedAt DateTime @default(now())
+  reviewedAt DateTime?
+  processedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  requestedBy User @relation("PayoutRequester", fields: [requestedById], references: [id], onDelete: Restrict)
+  reviewedBy User? @relation("PayoutReviewer", fields: [reviewedById], references: [id], onDelete: Restrict)
+  reservationTransaction LedgerTransaction? @relation("PayoutReservation", fields: [reservationTransactionId], references: [id], onDelete: Restrict)
+  completionTransaction LedgerTransaction? @relation("PayoutCompletion", fields: [completionTransactionId], references: [id], onDelete: Restrict)
+  @@index([organizationId, requestedAt])
+  @@index([status, requestedAt])
 }
 
 model LedgerEntry {

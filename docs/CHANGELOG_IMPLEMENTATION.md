@@ -1,5 +1,15 @@
 # Implementation changelog
 
+## 2026-07-19 — Controlled community payouts
+
+- Added organisation payout requests with atomic available-to-reserved Stars journals,
+  minimum threshold enforcement, cancellation and rejection releases.
+- Added platform-owner approval with an explicit fiat snapshot and controlled manual
+  SEPA or idempotent Stripe Connect execution.
+- Added failed-transfer recovery, immutable completion journals, audit events and
+  organisation/platform payout views.
+- Kept payout intake disabled by default and documented that Stars do not fund Stripe.
+
 ## 2026-07-17 — production modernization
 
 - Audited the upstream contest project and documented the replacement decision.

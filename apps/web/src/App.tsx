@@ -499,10 +499,11 @@ function CommunityOperations({
 function OrganizationFinance({ organizationId }: { organizationId: string }) {
   const [finance, setFinance] = useState<any>();
   const [expanded, setExpanded] = useState(false);
+  const [amount, setAmount] = useState("");
+  const [message, setMessage] = useState("");
+  const load = () => request(`/platform/organizations/${organizationId}/finance`).then(setFinance);
   useEffect(() => {
-    request(`/platform/organizations/${organizationId}/finance`)
-      .then(setFinance)
-      .catch(() => undefined);
+    load().catch(() => undefined);
   }, [organizationId]);
   if (!finance) return null;
   return (
@@ -522,7 +523,21 @@ function OrganizationFinance({ organizationId }: { organizationId: string }) {
         <div className="finance-details">
           <div><span>Ожидает разблокировки</span><b>{finance.balances.pending} ⭐</b></div>
           <div><span>Доступно к выплате</span><b>{finance.balances.available} ⭐</b></div>
+          <div><span>Зарезервировано</span><b>{finance.balances.reserved} ⭐</b></div>
           <div><span>Выплачено</span><b>{finance.balances.paidOut} ⭐</b></div>
+          {finance.payoutsEnabled ? (
+            <form className="payout-request" onSubmit={async (event) => {
+              event.preventDefault(); setMessage("");
+              try { await request(`/platform/organizations/${organizationId}/payouts`, "POST", { amountStars: Number(amount) }); setAmount(""); setMessage("✓ Заявка создана, Stars зарезервированы"); await load(); }
+              catch (e: any) { setMessage(e.message); }
+            }}>
+              <label>Запросить выплату<input type="number" min={finance.minimumPayoutStars} max={finance.balances.available} placeholder={`от ${finance.minimumPayoutStars} Stars`} value={amount} onChange={(e) => setAmount(e.target.value)} /></label>
+              <button className="primary" disabled={!amount || Number(amount) > finance.balances.available}>Отправить заявку</button>
+            </form>
+          ) : <p className="muted">Выплаты откроются после проверки платёжного контура платформы.</p>}
+          {message && <p className="platform-message">{message}</p>}
+          <h4>Заявки на выплату</h4>
+          {finance.payouts.map((payout: any) => <p key={payout.id}><span>{payout.status}<small>{new Date(payout.requestedAt).toLocaleDateString("ru")}{payout.externalReference ? ` · ${payout.externalReference}` : ""}</small></span><b>{payout.amountStars} ⭐{payout.settlementAmount ? ` → ${(payout.settlementAmount / 100).toFixed(2)} ${payout.settlementCurrency}` : ""}</b></p>)}
           <h4>Последние операции</h4>
           {finance.transactions.slice(0, 10).map((transaction: any) => (
             <p key={transaction.id}>
@@ -660,14 +675,17 @@ function PlatformSupportPanel() {
 function PlatformFinancePanel() {
   const [ledger, setLedger] = useState<any[]>([]);
   const [events, setEvents] = useState<any[]>([]);
+  const [payouts, setPayouts] = useState<any[]>([]);
   const [error, setError] = useState("");
   useEffect(() => {
     Promise.all([
       request("/platform/admin/ledger?limit=100"),
       request("/platform/admin/stripe-events"),
-    ]).then(([ledgerItems, eventItems]) => {
+      request("/platform/admin/payouts"),
+    ]).then(([ledgerItems, eventItems, payoutItems]) => {
       setLedger(ledgerItems);
       setEvents(eventItems);
+      setPayouts(payoutItems);
     }).catch((e) => setError(e.message));
   }, []);
   return (
@@ -678,6 +696,8 @@ function PlatformFinancePanel() {
       <div className="global-audit">{ledger.map((item) => <p key={item.id}><span><b>{item.type}</b><small>{item.organization?.name || "Платформа"} · {item.status}</small></span><time>{item.grossAmount} ⭐</time></p>)}</div>
       <h3>Stripe webhooks</h3>
       <div className="global-audit">{events.map((item) => <p key={item.id}><span><b>{item.type}</b><small>{item.status} · попыток {item.attempts}{item.lastError ? ` · ${item.lastError}` : ""}</small></span><time>{new Date(item.createdAt).toLocaleString("ru")}</time></p>)}</div>
+      <h3>Заявки на выплату</h3>
+      <div className="global-audit">{payouts.map((item) => <p key={item.id}><span><b>{item.organization.name}</b><small>{item.status} · {item.rail}</small></span><time>{item.amountStars} ⭐</time></p>)}</div>
       {!ledger.length && !events.length && !error && <p className="muted">Финансовых событий пока нет.</p>}
     </section>
   );
@@ -724,17 +744,20 @@ function PlatformOwnerPanel({ canEdit }: { canEdit: boolean }) {
   const [commissionPercent, setCommissionPercent] = useState(25);
   const [holdDays, setHoldDays] = useState(21);
   const [minimumPayout, setMinimumPayout] = useState(1000);
+  const [payoutsEnabled, setPayoutsEnabled] = useState(false);
+  const [payouts, setPayouts] = useState<any[]>([]);
   const [ledger, setLedger] = useState<any[]>([]);
   const [billingPlans, setBillingPlans] = useState<any[]>([]);
   const [reconciliation, setReconciliation] = useState<any>();
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const load = async () => {
-    const [summary, tenantItems, ledgerItems, planItems] = await Promise.all([
+    const [summary, tenantItems, ledgerItems, planItems, payoutItems] = await Promise.all([
       request("/platform/admin/overview"),
       request("/platform/admin/communities"),
       request("/platform/admin/ledger?limit=50"),
       request("/platform/admin/billing-plans"),
+      request("/platform/admin/payouts"),
     ]);
     setOverview(summary);
     setCommunities(tenantItems);
@@ -742,8 +765,10 @@ function PlatformOwnerPanel({ canEdit }: { canEdit: boolean }) {
     setCommissionPercent(summary.settings.defaultCommissionBps / 100);
     setHoldDays(summary.settings.starsHoldDays);
     setMinimumPayout(summary.settings.minimumPayoutStars);
+    setPayoutsEnabled(summary.settings.payoutsEnabled);
     setLedger(ledgerItems);
     setBillingPlans(planItems);
+    setPayouts(payoutItems);
   };
   useEffect(() => {
     void load().catch((e) => setMessage(e.message));
@@ -758,6 +783,7 @@ function PlatformOwnerPanel({ canEdit }: { canEdit: boolean }) {
         defaultCommissionBps: Math.round(Number(commissionPercent) * 100),
         starsHoldDays: Number(holdDays),
         minimumPayoutStars: Number(minimumPayout),
+        payoutsEnabled,
       });
       setMessage("✓ Глобальные настройки сохранены");
       await load();
@@ -879,6 +905,7 @@ function PlatformOwnerPanel({ canEdit }: { canEdit: boolean }) {
             Минимум для выплаты, Stars
             <input type="number" min="1" max="10000000" value={minimumPayout} onChange={(e) => setMinimumPayout(Number(e.target.value))} />
           </label>
+          <label className="check"><input type="checkbox" checked={payoutsEnabled} onChange={(e) => setPayoutsEnabled(e.target.checked)} />Разрешить новые заявки на выплату</label>
           <button className="primary" disabled={busy}>{busy ? "Сохраняем…" : "Сохранить"}</button>
         </form>
       )}
@@ -905,6 +932,11 @@ function PlatformOwnerPanel({ canEdit }: { canEdit: boolean }) {
       {reconciliation && (
         <p className="platform-message">Баланс: {reconciliation.balance.amount} ⭐ · Операций: {reconciliation.remoteCount} · Не сопоставлено: {reconciliation.unknownIncoming}</p>
       )}
+      <h3>Заявки на выплату</h3>
+      <div className="platform-tenants">
+        {payouts.map((payout) => <div key={payout.id}><span><b>{payout.organization.name} · {payout.amountStars} ⭐</b><small>{payout.status}{payout.settlementAmount ? ` · ${(payout.settlementAmount / 100).toFixed(2)} ${payout.settlementCurrency} · ${payout.rail}` : ""}</small></span>{canEdit && payout.status === "requested" && <button onClick={async () => { const cents = Number(window.prompt("Сумма выплаты в евроцентах:")); if (!Number.isInteger(cents) || cents <= 0) return; const rail = window.confirm("Использовать Stripe Connect? Нажмите Отмена для manual SEPA") ? "stripe_connect" : "manual_sepa"; try { await request(`/platform/admin/payouts/${payout.id}/review`, "POST", { decision: "approve", settlementAmount: cents, settlementCurrency: "EUR", rail }); await load(); } catch (e: any) { setMessage(e.message); } }}>Согласовать</button>}{canEdit && ["approved", "failed"].includes(payout.status) && <button className="primary" onClick={async () => { const externalReference = payout.rail === "manual_sepa" ? window.prompt("Банковский reference выполненного перевода:") : ""; if (payout.rail === "manual_sepa" && !externalReference) return; try { await request(`/platform/admin/payouts/${payout.id}/execute`, "POST", { externalReference }); await load(); } catch (e: any) { setMessage(e.message); } }}>Выплатить</button>}</div>)}
+        {!payouts.length && <p className="muted">Заявок пока нет.</p>}
+      </div>
       <h3>Финансовые операции</h3>
       <div className="platform-tenants">
         {ledger.slice(0, 15).map((transaction) => (

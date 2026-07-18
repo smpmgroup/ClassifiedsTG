@@ -299,3 +299,105 @@ export async function settlePaidPublicationLedger(
   });
   return settlement;
 }
+
+async function payoutAccounts(
+  tx: Prisma.TransactionClient,
+  organizationId: string,
+) {
+  const availableAsset = await tx.ledgerAccount.upsert({
+    where: { key: "platform:telegram-stars:available" },
+    update: {},
+    create: { key: "platform:telegram-stars:available", kind: "asset_available", name: "Telegram Stars available reward" },
+  });
+  const reservedAsset = await tx.ledgerAccount.upsert({
+    where: { key: "platform:telegram-stars:reserved" },
+    update: {},
+    create: { key: "platform:telegram-stars:reserved", kind: "asset_reserved", name: "Telegram Stars reserved for payouts" },
+  });
+  const availablePayable = await tx.ledgerAccount.upsert({
+    where: { key: `organization:${organizationId}:stars-payable:available` },
+    update: {},
+    create: { key: `organization:${organizationId}:stars-payable:available`, organizationId, kind: "liability_available", name: "Community earnings available" },
+  });
+  const reservedPayable = await tx.ledgerAccount.upsert({
+    where: { key: `organization:${organizationId}:stars-payable:reserved` },
+    update: {},
+    create: { key: `organization:${organizationId}:stars-payable:reserved`, organizationId, kind: "liability_reserved", name: "Community earnings reserved" },
+  });
+  return { availableAsset, reservedAsset, availablePayable, reservedPayable };
+}
+
+export async function reservePayoutLedger(
+  tx: Prisma.TransactionClient,
+  input: { payoutId: string; organizationId: string; amountStars: number; occurredAt?: Date },
+) {
+  const externalRef = `payout-reservation:${input.payoutId}`;
+  const existing = await tx.ledgerTransaction.findUnique({ where: { externalRef } });
+  if (existing) return existing;
+  if (!Number.isSafeInteger(input.amountStars) || input.amountStars <= 0)
+    throw new Error("payout amount must be a positive integer");
+  const accounts = await payoutAccounts(tx, input.organizationId);
+  const available = await tx.ledgerEntry.aggregate({
+    where: { accountId: accounts.availablePayable.id },
+    _sum: { amount: true },
+  });
+  if (-(available._sum.amount || 0) < input.amountStars)
+    throw new Error("insufficient available payout balance");
+  const entries = [
+    { accountId: accounts.availableAsset.id, amount: -input.amountStars },
+    { accountId: accounts.reservedAsset.id, amount: input.amountStars },
+    { accountId: accounts.availablePayable.id, amount: input.amountStars },
+    { accountId: accounts.reservedPayable.id, amount: -input.amountStars },
+  ];
+  assertBalancedEntries(entries.map((entry) => entry.amount));
+  return tx.ledgerTransaction.create({ data: {
+    externalRef, type: "stars_payout_reserved", status: "completed",
+    organizationId: input.organizationId, grossAmount: input.amountStars,
+    commissionBps: 0, occurredAt: input.occurredAt || new Date(),
+    metadata: { payoutId: input.payoutId }, entries: { create: entries },
+  } });
+}
+
+export async function releasePayoutLedger(
+  tx: Prisma.TransactionClient,
+  input: { payoutId: string; organizationId: string; amountStars: number; reason: string; occurredAt?: Date },
+) {
+  const externalRef = `payout-release:${input.payoutId}`;
+  const existing = await tx.ledgerTransaction.findUnique({ where: { externalRef } });
+  if (existing) return existing;
+  const reservation = await tx.ledgerTransaction.findUniqueOrThrow({
+    where: { externalRef: `payout-reservation:${input.payoutId}` }, include: { entries: true },
+  });
+  const entries = reservation.entries.map((entry) => ({ accountId: entry.accountId, amount: -entry.amount }));
+  assertBalancedEntries(entries.map((entry) => entry.amount));
+  return tx.ledgerTransaction.create({ data: {
+    externalRef, type: "stars_payout_released", status: "completed",
+    organizationId: input.organizationId, grossAmount: -input.amountStars,
+    commissionBps: 0, occurredAt: input.occurredAt || new Date(),
+    metadata: { payoutId: input.payoutId, reason: input.reason }, entries: { create: entries },
+  } });
+}
+
+export async function completePayoutLedger(
+  tx: Prisma.TransactionClient,
+  input: { payoutId: string; organizationId: string; amountStars: number; rail: string; externalReference: string; occurredAt?: Date },
+) {
+  const externalRef = `payout-completion:${input.payoutId}`;
+  const existing = await tx.ledgerTransaction.findUnique({ where: { externalRef } });
+  if (existing) return existing;
+  const accounts = await payoutAccounts(tx, input.organizationId);
+  const entries = [
+    { accountId: accounts.reservedAsset.id, amount: -input.amountStars },
+    { accountId: accounts.reservedPayable.id, amount: input.amountStars },
+  ];
+  // The Stars asset and liability are cleared. Fiat settlement details remain on
+  // PayoutRequest and are never presented as an automatic XTR conversion.
+  assertBalancedEntries(entries.map((entry) => entry.amount));
+  return tx.ledgerTransaction.create({ data: {
+    externalRef, type: "stars_payout_completed", status: "completed",
+    organizationId: input.organizationId, grossAmount: input.amountStars,
+    commissionBps: 0, occurredAt: input.occurredAt || new Date(),
+    metadata: { payoutId: input.payoutId, rail: input.rail, externalReference: input.externalReference },
+    entries: { create: entries },
+  } });
+}
