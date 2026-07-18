@@ -14,6 +14,7 @@ declare global {
         colorScheme: string;
         ready(): void;
         expand(): void;
+        openTelegramLink?(url: string): void;
         HapticFeedback?: {
           notificationOccurred(type: "success" | "warning" | "error"): void;
         };

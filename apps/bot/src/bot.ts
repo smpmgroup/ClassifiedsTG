@@ -1,5 +1,10 @@
 import { Telegraf, Markup } from "telegraf";
-import { prisma, assertListingTransition } from "@board/core";
+import crypto from "node:crypto";
+import {
+  prisma,
+  assertListingTransition,
+  categoryTaxonomies,
+} from "@board/core";
 const tokenValue = process.env.TELEGRAM_BOT_TOKEN;
 const appUrlValue = process.env.TELEGRAM_MINI_APP_URL;
 const usernameValue = process.env.TELEGRAM_BOT_USERNAME;
@@ -29,7 +34,143 @@ const publicBoard = (communitySlug: string) =>
       `https://t.me/${botUsername}?start=community_${communitySlug}`,
     ),
   ]);
+const categorySlug = (name: string, index: number) =>
+  name
+    .toLowerCase()
+    .replace(/[^a-zа-яё0-9]+/gi, "-")
+    .replace(/^-|-$/g, "") || `category-${index}`;
+
+async function claimCommunityConnection(ctx: any, rawToken: string) {
+  if (ctx.chat.type === "private")
+    return ctx.reply("Добавьте бота именно в Telegram-группу.");
+  const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+  const intent = await prisma.communityConnectionIntent.findUnique({
+    where: { tokenHash },
+    include: { requestedBy: true, organization: true },
+  });
+  if (
+    !intent ||
+    intent.status !== "pending" ||
+    intent.expiresAt <= new Date()
+  )
+    return ctx.reply(
+      "Ссылка подключения недействительна или истекла. Создайте новую в кабинете.",
+    );
+  if (intent.requestedBy.telegramUserId !== BigInt(ctx.from.id))
+    return ctx.reply(
+      "Эта ссылка создана другим пользователем. Войдите в свой кабинет.",
+    );
+  const requesterMembership = await ctx.telegram.getChatMember(
+    ctx.chat.id,
+    ctx.from.id,
+  );
+  if (!['creator', 'administrator'].includes(requesterMembership.status))
+    return ctx.reply(
+      "Подключить группу может только её владелец или администратор.",
+    );
+  const existing = await prisma.community.findUnique({
+    where: { telegramChatId: BigInt(ctx.chat.id) },
+  });
+  if (existing) {
+    await prisma.communityConnectionIntent.update({
+      where: { id: intent.id },
+      data: {
+        status: "claimed",
+        claimedChatId: BigInt(ctx.chat.id),
+        communityId: existing.id,
+      },
+    });
+    return ctx.reply(
+      "Эта группа уже подключена.",
+      publicBoard(existing.slug),
+    );
+  }
+  let inviteUrl =
+    "username" in ctx.chat && ctx.chat.username
+      ? `https://t.me/${ctx.chat.username}`
+      : "";
+  if (!inviteUrl)
+    inviteUrl = await ctx.telegram
+      .exportChatInviteLink(ctx.chat.id)
+      .catch(() => `https://t.me/${botUsername}`);
+  const chatId = BigInt(ctx.chat.id);
+  const slug = `telegram-${chatId.toString().replace("-", "")}`;
+  const community = await prisma.$transaction(async (tx) => {
+    const claimed = await tx.communityConnectionIntent.updateMany({
+      where: { id: intent.id, status: "pending", expiresAt: { gt: new Date() } },
+      data: { status: "claiming", claimedChatId: chatId },
+    });
+    if (claimed.count !== 1) throw new Error("connection intent already claimed");
+    const created = await tx.community.create({
+      data: {
+        organizationId: intent.organizationId,
+        telegramChatId: chatId,
+        name: ctx.chat.title || intent.organization.name,
+        slug,
+        inviteUrl,
+        tenantStatus: "active",
+        connectedAt: new Date(),
+      },
+    });
+    await tx.communityMember.upsert({
+      where: {
+        communityId_userId: {
+          communityId: created.id,
+          userId: intent.requestedById,
+        },
+      },
+      update: { role: "owner", telegramMembershipStatus: requesterMembership.status },
+      create: {
+        communityId: created.id,
+        userId: intent.requestedById,
+        role: "owner",
+        telegramMembershipStatus: requesterMembership.status,
+        membershipCheckedAt: new Date(),
+      },
+    });
+    for (const [index, taxonomy] of categoryTaxonomies.entries())
+      await tx.category.create({
+        data: {
+          communityId: created.id,
+          name: taxonomy.name,
+          slug: categorySlug(taxonomy.name, index),
+          icon: taxonomy.icon,
+          sortOrder: index,
+          conditionEnabled: taxonomy.conditionEnabled,
+          fieldSchema: taxonomy.fields as any,
+        },
+      });
+    await tx.communityConnectionIntent.update({
+      where: { id: intent.id },
+      data: { status: "claimed", communityId: created.id },
+    });
+    await tx.auditEvent.create({
+      data: {
+        communityId: created.id,
+        actorId: intent.requestedById,
+        scope: "onboarding",
+        action: "community_connected",
+        targetType: "Community",
+        targetId: created.id,
+        metadata: { telegramChatId: String(chatId) },
+      },
+    });
+    return created;
+  });
+  await ctx.reply(
+    `✅ Доска для «${community.name}» подключена.\n\nВажно: не отключайте боту доступ к сообщениям — он нужен для учёта активности.`,
+    publicBoard(community.slug),
+  );
+}
+
 bot.start(async (ctx) => {
+  if (
+    ctx.chat.type !== "private" &&
+    ctx.startPayload?.startsWith("connect_")
+  ) {
+    await claimCommunityConnection(ctx, ctx.startPayload.slice(8));
+    return;
+  }
   const user = await prisma.user.findUnique({
     where: { telegramUserId: BigInt(ctx.from.id) },
     include: { members: true },
@@ -97,9 +238,19 @@ bot.command("board", async (ctx) => {
 });
 bot.command("help", (ctx) =>
   ctx.reply(
-    "/board — открыть доску\n/myads — мои объявления\n/rules — правила",
+    "/board — открыть доску\n/myads — мои объявления\n/rules — правила\n/connect — кабинет владельца сообщества",
   ),
 );
+bot.command("connect", (ctx) => {
+  if (ctx.chat.type !== "private")
+    return ctx.reply("Откройте личный чат с ботом и отправьте /connect.");
+  return ctx.reply(
+    "Откройте кабинет, чтобы подключить свою Telegram-группу.",
+    Markup.inlineKeyboard([
+      Markup.button.webApp("Кабинет владельца", boardUrl(undefined, undefined) + (appUrl.includes("?") ? "&" : "?") + "mode=platform"),
+    ]),
+  );
+});
 bot.command("rules", async (ctx) => {
   const c =
     ctx.chat.type === "private"

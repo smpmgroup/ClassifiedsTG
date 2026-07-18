@@ -69,9 +69,43 @@ type Identity = {
   role: "member" | "moderator" | "admin" | "owner";
   telegramUserId: string;
 };
+type PlatformIdentity = {
+  userId: string;
+  telegramUserId: string;
+  platformRole: "user" | "support" | "finance" | "platform_admin" | "platform_owner";
+};
 declare module "fastify" {
   interface FastifyRequest {
     identity?: Identity;
+    platformIdentity?: PlatformIdentity;
+  }
+}
+async function platformAuth(req: any, reply: any) {
+  try {
+    const decoded = (await req.jwtVerify()) as PlatformIdentity & {
+      scope?: string;
+    };
+    if (decoded.scope !== "platform" || !decoded.userId)
+      throw new Error("invalid platform session");
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.userId },
+      select: {
+        id: true,
+        telegramUserId: true,
+        status: true,
+        platformRole: true,
+      },
+    });
+    if (!user || user.status !== "active")
+      throw new DomainError("ACCESS_DENIED", "Доступ ограничен", 403);
+    req.platformIdentity = {
+      userId: user.id,
+      telegramUserId: String(user.telegramUserId),
+      platformRole: user.platformRole,
+    };
+  } catch (e) {
+    if (e instanceof DomainError) throw e;
+    return reply.status(401).send(error("UNAUTHORIZED", "Требуется вход"));
   }
 }
 const error = (code: string, message: string, details: unknown = null) => ({
@@ -377,6 +411,209 @@ app.post(
         role: result.role,
         locale: result.user.languageCode,
       },
+    };
+  },
+);
+
+app.post(
+  "/api/auth/platform/telegram",
+  { config: { rateLimit: { max: 10, timeWindow: "1 minute" } } },
+  async (req: any, reply) => {
+    const raw = req.body?.initData;
+    if (typeof raw !== "string")
+      throw new DomainError("INIT_DATA_REQUIRED", "initData обязателен");
+    let verified;
+    try {
+      verified = validateInitData(
+        raw,
+        config.TELEGRAM_BOT_TOKEN,
+        config.TELEGRAM_INIT_DATA_MAX_AGE_SECONDS,
+      );
+    } catch (e) {
+      throw new DomainError(
+        (e as Error).message,
+        "Telegram-авторизация недействительна",
+        401,
+      );
+    }
+    const replay = `platform-init:${verified.hash}`;
+    if (await redis.get(replay))
+      throw new DomainError(
+        "INIT_DATA_REPLAYED",
+        "Эти данные входа уже использованы",
+        401,
+      );
+    const user = await prisma.user.upsert({
+      where: { telegramUserId: BigInt(verified.user.id) },
+      update: {
+        username: verified.user.username,
+        firstName: verified.user.first_name,
+        lastName: verified.user.last_name,
+        languageCode: verified.user.language_code,
+        photoUrl: verified.user.photo_url,
+        lastSeenAt: new Date(),
+      },
+      create: {
+        telegramUserId: BigInt(verified.user.id),
+        username: verified.user.username,
+        firstName: verified.user.first_name,
+        lastName: verified.user.last_name,
+        languageCode: verified.user.language_code,
+        photoUrl: verified.user.photo_url,
+      },
+    });
+    await redis.set(
+      replay,
+      "1",
+      "EX",
+      config.TELEGRAM_INIT_DATA_MAX_AGE_SECONDS,
+    );
+    const accessToken = await reply.jwtSign(
+      {
+        scope: "platform",
+        userId: user.id,
+        telegramUserId: String(user.telegramUserId),
+        platformRole: user.platformRole,
+      },
+      { expiresIn: config.ACCESS_TOKEN_TTL_SECONDS },
+    );
+    return {
+      accessToken,
+      expiresIn: config.ACCESS_TOKEN_TTL_SECONDS,
+      user: {
+        id: user.id,
+        firstName: user.firstName,
+        username: user.username,
+        platformRole: user.platformRole,
+      },
+    };
+  },
+);
+
+app.get("/api/platform/me", { preHandler: platformAuth }, async (req: any) => {
+  const user = await prisma.user.findUniqueOrThrow({
+    where: { id: req.platformIdentity.userId },
+    include: {
+      organizations: {
+        include: {
+          organization: {
+            include: {
+              communities: {
+                orderBy: { createdAt: "asc" },
+                select: {
+                  id: true,
+                  name: true,
+                  slug: true,
+                  tenantStatus: true,
+                  telegramChatId: true,
+                  createdAt: true,
+                },
+              },
+            },
+          },
+        },
+        orderBy: { createdAt: "asc" },
+      },
+    },
+  });
+  return {
+    user: {
+      id: user.id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      username: user.username,
+      platformRole: user.platformRole,
+    },
+    organizations: user.organizations.map((membership) => ({
+      ...membership.organization,
+      role: membership.role,
+      communities: membership.organization.communities.map((community) => ({
+        ...community,
+        telegramChatId: String(community.telegramChatId),
+      })),
+    })),
+  };
+});
+
+app.post(
+  "/api/platform/organizations",
+  { preHandler: platformAuth },
+  async (req: any) => {
+    const name = String(req.body?.name || "").trim().slice(0, 100);
+    if (name.length < 2)
+      throw new DomainError(
+        "ORGANIZATION_NAME_REQUIRED",
+        "Укажите название организации",
+      );
+    const baseSlug =
+      name
+        .toLowerCase()
+        .normalize("NFKD")
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-|-$/g, "") || "community";
+    const slug = `${baseSlug}-${crypto.randomBytes(3).toString("hex")}`;
+    return prisma.$transaction(async (tx) => {
+      const organization = await tx.organization.create({
+        data: { name, slug },
+      });
+      await tx.organizationMember.create({
+        data: {
+          organizationId: organization.id,
+          userId: req.platformIdentity.userId,
+          role: "owner",
+        },
+      });
+      await tx.auditEvent.create({
+        data: {
+          actorId: req.platformIdentity.userId,
+          scope: "platform",
+          action: "organization_created",
+          targetType: "Organization",
+          targetId: organization.id,
+        },
+      });
+      return organization;
+    });
+  },
+);
+
+app.post(
+  "/api/platform/connect-intents",
+  { preHandler: platformAuth },
+  async (req: any) => {
+    const organizationId = String(req.body?.organizationId || "");
+    const membership = await prisma.organizationMember.findUnique({
+      where: {
+        organizationId_userId: {
+          organizationId,
+          userId: req.platformIdentity.userId,
+        },
+      },
+    });
+    if (!membership || !["owner", "administrator"].includes(membership.role))
+      throw new DomainError("FORBIDDEN", "Недостаточно прав", 403);
+    await prisma.communityConnectionIntent.updateMany({
+      where: {
+        requestedById: req.platformIdentity.userId,
+        organizationId,
+        status: "pending",
+      },
+      data: { status: "cancelled" },
+    });
+    const rawToken = crypto.randomBytes(16).toString("hex");
+    const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+    const intent = await prisma.communityConnectionIntent.create({
+      data: {
+        tokenHash,
+        organizationId,
+        requestedById: req.platformIdentity.userId,
+        expiresAt: new Date(Date.now() + 30 * 60 * 1000),
+      },
+    });
+    return {
+      id: intent.id,
+      expiresAt: intent.expiresAt,
+      addBotUrl: `https://t.me/${config.TELEGRAM_BOT_USERNAME}?startgroup=connect_${rawToken}&admin=delete_messages+restrict_members+invite_users`,
     };
   },
 );

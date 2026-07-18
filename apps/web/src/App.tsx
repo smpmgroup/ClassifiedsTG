@@ -9,7 +9,14 @@ import {
   useSearchParams,
 } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { api, apiBlob, login, request } from "./api";
+import {
+  activateSession,
+  api,
+  apiBlob,
+  login,
+  platformLogin,
+  request,
+} from "./api";
 type Listing = {
   id: string;
   title: string;
@@ -37,9 +44,11 @@ type CommunityShowcase = {
 };
 export function App() {
   const { t } = useTranslation();
+  const platformMode =
+    new URLSearchParams(window.location.search).get("mode") === "platform";
   const [state, setState] = useState<
     "loading" | "ready" | "outside" | "denied" | "select" | "error"
-  >(sessionStorage.token ? "ready" : "loading");
+  >(activateSession(platformMode ? "platform" : "tenant") ? "ready" : "loading");
   const [invite, setInvite] = useState("");
   const [communityChoices, setCommunityChoices] = useState<any[]>([]);
   const boot = async () => {
@@ -55,11 +64,13 @@ export function App() {
       return;
     }
     try {
-      await login(
-        init,
-        new URLSearchParams(window.location.search).get("community") ||
-          undefined,
-      );
+      if (platformMode) await platformLogin(init);
+      else
+        await login(
+          init,
+          new URLSearchParams(window.location.search).get("community") ||
+            undefined,
+        );
       setState("ready");
     } catch (e: any) {
       if (e.code === "NOT_GROUP_MEMBER") {
@@ -127,6 +138,7 @@ export function App() {
         actions={<button onClick={boot}>{t("retry")}</button>}
       />
     );
+  if (platformMode) return <PlatformWorkspace />;
   return (
     <Shell>
       <ScrollToTop />
@@ -154,6 +166,135 @@ export function App() {
         ))}
       </nav>
     </Shell>
+  );
+}
+
+function PlatformWorkspace() {
+  const [data, setData] = useState<any>();
+  const [error, setError] = useState("");
+  const [organizationName, setOrganizationName] = useState("");
+  const [busy, setBusy] = useState("");
+  const load = () =>
+    request("/platform/me")
+      .then(setData)
+      .catch((e) => setError(e.message));
+  useEffect(() => {
+    void load();
+  }, []);
+  const createOrganization = async (event: any) => {
+    event.preventDefault();
+    setBusy("organization");
+    setError("");
+    try {
+      await request("/platform/organizations", "POST", {
+        name: organizationName,
+      });
+      setOrganizationName("");
+      await load();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy("");
+    }
+  };
+  const connect = async (organizationId: string) => {
+    setBusy(organizationId);
+    setError("");
+    try {
+      const intent = await request("/platform/connect-intents", "POST", {
+        organizationId,
+      });
+      window.Telegram?.WebApp.openTelegramLink
+        ? window.Telegram.WebApp.openTelegramLink(intent.addBotUrl)
+        : (window.location.href = intent.addBotUrl);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy("");
+    }
+  };
+  if (!data)
+    return <Message text={error || "Загружаем кабинет…"} />;
+  return (
+    <main className="platform-workspace">
+      <header className="platform-header">
+        <div>
+          <small>COMMUNITY BOARD SAAS</small>
+          <h1>Кабинет владельца</h1>
+          <p>
+            {data.user.firstName}
+            {data.user.username ? ` · @${data.user.username}` : ""}
+          </p>
+        </div>
+        <div className="avatar">
+          {data.user.firstName?.charAt(0).toUpperCase() || "U"}
+        </div>
+      </header>
+      <section className="platform-intro">
+        <span>🧩</span>
+        <div>
+          <h2>Подключите Telegram-сообщество</h2>
+          <p>
+            Бот проверит ваши права администратора и создаст
+            отдельную защищённую доску.
+          </p>
+        </div>
+      </section>
+      {error && <LoadError message={error} />}
+      <div className="organization-list">
+        {data.organizations.map((organization: any) => (
+          <section className="organization-card" key={organization.id}>
+            <div className="organization-title">
+              <div>
+                <small>ОРГАНИЗАЦИЯ</small>
+                <h2>{organization.name}</h2>
+              </div>
+              <span>{organization.role === "owner" ? "Владелец" : "Админ"}</span>
+            </div>
+            <div className="connected-boards">
+              {organization.communities.map((community: any) => (
+                <a
+                  href={`/?community=${encodeURIComponent(community.slug)}`}
+                  key={community.id}
+                >
+                  <b>{community.name}</b>
+                  <small>{community.tenantStatus === "active" ? "● Работает" : community.tenantStatus}</small>
+                  <span>›</span>
+                </a>
+              ))}
+              {!organization.communities.length && (
+                <p className="muted">Группы пока не подключены.</p>
+              )}
+            </div>
+            <button
+              className="primary connect-community"
+              disabled={busy === organization.id}
+              onClick={() => void connect(organization.id)}
+            >
+              {busy === organization.id
+                ? "Создаём ссылку…"
+                : "＋ Добавить бота в группу"}
+            </button>
+          </section>
+        ))}
+      </div>
+      {!data.organizations.length && (
+        <form className="create-organization" onSubmit={createOrganization}>
+          <h2>Создайте организацию</h2>
+          <p>В ней будут храниться ваши сообщества и биллинг.</p>
+          <input
+            value={organizationName}
+            onChange={(event) => setOrganizationName(event.target.value)}
+            placeholder="Название организации"
+            required
+            minLength={2}
+          />
+          <button className="primary" disabled={busy === "organization"}>
+            {busy === "organization" ? "Создаём…" : "Продолжить"}
+          </button>
+        </form>
+      )}
+    </main>
   );
 }
 function ScrollToTop() {

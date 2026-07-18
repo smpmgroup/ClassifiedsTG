@@ -157,6 +157,7 @@ model User {
   payments PublicationPayment[]
   organizations OrganizationMember[]
   auditEvents AuditEvent[] @relation("AuditActor")
+  connectionIntents CommunityConnectionIntent[]
 }
 
 model Organization {
@@ -171,6 +172,7 @@ model Organization {
   updatedAt DateTime @updatedAt
   communities Community[]
   members OrganizationMember[]
+  connectionIntents CommunityConnectionIntent[]
 }
 
 model OrganizationMember {
@@ -212,6 +214,23 @@ model AuditEvent {
   @@index([communityId, createdAt])
   @@index([actorId, createdAt])
   @@index([scope, action, createdAt])
+}
+
+model CommunityConnectionIntent {
+  id String @id @default(cuid())
+  tokenHash String @unique
+  organizationId String
+  requestedById String
+  status String @default("pending")
+  expiresAt DateTime
+  claimedChatId BigInt?
+  communityId String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  requestedBy User @relation(fields: [requestedById], references: [id], onDelete: Cascade)
+  @@index([requestedById, status, expiresAt])
+  @@index([organizationId, status])
 }
 
 model CommunityMember {

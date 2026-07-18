@@ -2,6 +2,7 @@ import { z } from 'zod';
 const schema = z.object({
   NODE_ENV: z.enum(['development','test','production']).default('development'),
   TELEGRAM_BOT_TOKEN: z.string().min(1),
+  TELEGRAM_BOT_USERNAME: z.string().min(1),
   TELEGRAM_GROUP_ID: z.preprocess((value) => value === "" || value == null ? undefined : value, z.coerce.bigint().optional()),
   TELEGRAM_GROUP_INVITE_URL: z.preprocess((value) => value === "" || value == null ? undefined : value, z.string().url().optional()),
   TELEGRAM_INIT_DATA_MAX_AGE_SECONDS: z.coerce.number().int().positive().default(3600), MEMBERSHIP_CACHE_SECONDS: z.coerce.number().int().positive().default(600),

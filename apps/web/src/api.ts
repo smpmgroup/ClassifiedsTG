@@ -1,5 +1,14 @@
 const base = "/api";
-let token = sessionStorage.getItem("token");
+let token: string | null = null;
+
+export function activateSession(scope: "tenant" | "platform") {
+  token = sessionStorage.getItem(`${scope}Token`);
+  if (!token && scope === "tenant") {
+    token = sessionStorage.getItem("token");
+    if (token) sessionStorage.setItem("tenantToken", token);
+  }
+  return Boolean(token);
+}
 
 function authenticatedHeaders(initial?: HeadersInit) {
   const headers = new Headers(initial);
@@ -38,7 +47,17 @@ export async function login(initData: string, community?: string) {
     body: JSON.stringify({ initData, community }),
   });
   token = result.accessToken;
-  sessionStorage.setItem("token", token!);
+  sessionStorage.setItem("tenantToken", token!);
+  return result;
+}
+
+export async function platformLogin(initData: string) {
+  const result = await api<any>("/auth/platform/telegram", {
+    method: "POST",
+    body: JSON.stringify({ initData }),
+  });
+  token = result.accessToken;
+  sessionStorage.setItem("platformToken", token!);
   return result;
 }
 
