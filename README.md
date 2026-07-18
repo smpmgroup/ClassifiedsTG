@@ -4,6 +4,9 @@ Production-oriented classifieds board for a Telegram community: a mobile-first M
 
 The original MIT-licensed contest project is preserved in Git history. Its product ideas and Telegram image option were retained; the unsafe CouchDB/shared-request identity and obsolete CRA runtime were replaced with Fastify, Prisma/PostgreSQL, Redis and Vite/React. See [initial audit](docs/INITIAL_AUDIT.md) and [architecture](docs/ARCHITECTURE.md).
 
+The planned evolution from a single-community installation into a multi-community
+service is tracked in the [SaaS delivery roadmap](docs/SAAS_ROADMAP.md).
+
 ## Start locally
 
 Requirements: Docker 24+ with Compose v2, a BotFather token, a Telegram group where the bot is an administrator, and its numeric chat ID.
