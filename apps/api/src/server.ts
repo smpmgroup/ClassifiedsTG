@@ -413,7 +413,7 @@ async function getTelegramChatInfo(
   }
 }
 
-app.get("/health", async () => {
+app.get("/health", { config: { rateLimit: false } }, async () => {
   await Promise.all([prisma.$queryRaw`SELECT 1`, redis.ping()]);
   return { status: "ok" };
 });
