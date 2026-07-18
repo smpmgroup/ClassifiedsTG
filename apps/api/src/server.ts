@@ -1934,6 +1934,29 @@ app.get(
 );
 
 app.get(
+  "/api/platform/admin/reliability",
+  { preHandler: requirePlatformRole(platformAdminRoles) },
+  async () => {
+    const since = new Date(Date.now() - 24 * 60 * 60_000);
+    const [runs, alerts, failedNotifications, pendingNotifications] = await prisma.$transaction([
+      prisma.jobRun.findMany({ where: { startedAt: { gte: since } }, orderBy: { startedAt: "desc" }, take: 100 }),
+      prisma.systemAlert.findMany({ where: { status: "open" }, orderBy: [{ severity: "desc" }, { lastSeenAt: "desc" }], take: 100 }),
+      prisma.notification.count({ where: { status: "failed", attempts: { gte: 5 } } }),
+      prisma.notification.count({ where: { status: { in: ["pending", "processing"] } } }),
+    ]);
+    const latest = new Map<string, any>();
+    for (const run of runs) if (!latest.has(run.jobName)) latest.set(run.jobName, run);
+    return {
+      checkedAt: new Date(),
+      jobs: [...latest.values()],
+      recentFailures: runs.filter((run) => run.status === "failed").slice(0, 20),
+      alerts,
+      notifications: { pending: pendingNotifications, deadLetter: failedNotifications },
+    };
+  },
+);
+
+app.get(
   "/api/platform/admin/legal-documents",
   { preHandler: requirePlatformRole(platformAdminRoles) },
   async () => prisma.legalDocument.findMany({

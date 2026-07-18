@@ -13,4 +13,5 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: npm audit --omit=dev --audit-level=high
+      - run: sh -n scripts/backup.sh scripts/restore.sh scripts/restore-drill.sh scripts/rotate-backups.sh
       - run: docker compose build

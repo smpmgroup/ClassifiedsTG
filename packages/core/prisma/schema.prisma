@@ -749,8 +749,41 @@ model Notification {
   attempts Int @default(0)
   lastError String?
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
   sentAt DateTime?
   user User? @relation(fields: [userId], references: [id])
   community Community @relation(fields: [communityId], references: [id])
   @@index([status, createdAt])
+}
+
+model JobRun {
+  id String @id @default(cuid())
+  jobName String
+  status String @default("running")
+  startedAt DateTime @default(now())
+  finishedAt DateTime?
+  durationMs Int?
+  processedCount Int @default(0)
+  details Json @default("{}")
+  error String?
+  instanceId String?
+  @@index([jobName, startedAt])
+  @@index([status, startedAt])
+}
+
+model SystemAlert {
+  id String @id @default(cuid())
+  severity String @default("warning")
+  source String
+  fingerprint String
+  title String
+  message String
+  status String @default("open")
+  occurrences Int @default(1)
+  firstSeenAt DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+  resolvedAt DateTime?
+  metadata Json @default("{}")
+  @@unique([fingerprint, status])
+  @@index([status, severity, lastSeenAt])
 }

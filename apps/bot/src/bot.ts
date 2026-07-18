@@ -527,6 +527,11 @@ async function poll() {
     take: 20,
   });
   for (const n of pending) {
+    const claimed = await prisma.notification.updateMany({
+      where: { id: n.id, status: "pending" },
+      data: { status: "processing" },
+    });
+    if (!claimed.count) continue;
     try {
       if (n.type === "moderation_pending")
         await sendModerationCard((n.payload as any).listingId);

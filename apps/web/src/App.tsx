@@ -764,15 +764,17 @@ function PlatformOwnerPanel({ canEdit }: { canEdit: boolean }) {
   const [ledger, setLedger] = useState<any[]>([]);
   const [billingPlans, setBillingPlans] = useState<any[]>([]);
   const [reconciliation, setReconciliation] = useState<any>();
+  const [reliability, setReliability] = useState<any>();
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const load = async () => {
-    const [summary, tenantItems, ledgerItems, planItems, payoutItems] = await Promise.all([
+    const [summary, tenantItems, ledgerItems, planItems, payoutItems, reliabilityStatus] = await Promise.all([
       request("/platform/admin/overview"),
       request("/platform/admin/communities"),
       request("/platform/admin/ledger?limit=50"),
       request("/platform/admin/billing-plans"),
       request("/platform/admin/payouts"),
+      request("/platform/admin/reliability"),
     ]);
     setOverview(summary);
     setCommunities(tenantItems);
@@ -784,6 +786,7 @@ function PlatformOwnerPanel({ canEdit }: { canEdit: boolean }) {
     setLedger(ledgerItems);
     setBillingPlans(planItems);
     setPayouts(payoutItems);
+    setReliability(reliabilityStatus);
   };
   useEffect(() => {
     void load().catch((e) => setMessage(e.message));
@@ -925,6 +928,12 @@ function PlatformOwnerPanel({ canEdit }: { canEdit: boolean }) {
         </form>
       )}
       {message && <p className="platform-message">{message}</p>}
+      <h3>Надёжность системы</h3>
+      <div className="platform-tenants">
+        {reliability?.jobs.map((job: any) => <div key={job.jobName}><span><b>{job.jobName}</b><small>{job.status} · обработано {job.processedCount} · {job.durationMs ?? 0} мс</small></span><time>{new Date(job.startedAt).toLocaleString("ru")}</time></div>)}
+        {!reliability?.jobs.length && <p className="muted">Планировщик запускается…</p>}
+      </div>
+      {reliability && <p className="platform-message">Уведомления в очереди: {reliability.notifications.pending} · dead-letter: {reliability.notifications.deadLetter} · открытых алертов: {reliability.alerts.length}</p>}
       <PlatformLegalManagement canEdit={canEdit} />
       <h3>Stripe Billing</h3>
       <div className="billing-plan-admin">
