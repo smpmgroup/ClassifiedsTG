@@ -713,6 +713,16 @@ bot.on("message", async (ctx) => {
   });
 });
 const timer = setInterval(() => void poll(), 5000);
+await bot.telegram.setMyCommands([
+  { command: "board", description: "Открыть доску объявлений" },
+  { command: "myads", description: "Мои объявления" },
+  { command: "rules", description: "Правила сообщества" },
+  { command: "connect", description: "Кабинет владельца" },
+  { command: "terms", description: "Условия сервиса" },
+  { command: "support", description: "Поддержка" },
+  { command: "paysupport", description: "Поддержка по оплате" },
+  { command: "help", description: "Справка" },
+]);
 bot.launch();
 process.once("SIGTERM", () => {
   clearInterval(timer);
