@@ -64,3 +64,15 @@
 - Provision new communities with owner membership and the complete maintained category
   taxonomy in one database transaction.
 - Published `/connect` in the production bot command list.
+
+## Platform control centre — session 4
+
+- Added a platform-owner overview with organisations, active tenants, users, listings,
+  paid publications and gross Stars metrics.
+- Added global minimum publication price and default commission settings using integer
+  basis points for deterministic percentage storage.
+- Enforced the platform minimum in every community settings update.
+- Added a tenant registry with organisation/member/listing counts and audited
+  suspend/reactivate controls.
+- Restricted platform controls to refreshed `platform_admin` and `platform_owner` roles;
+  only the platform owner can change global financial defaults.
