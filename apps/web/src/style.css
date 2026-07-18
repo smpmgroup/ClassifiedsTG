@@ -1000,6 +1000,124 @@ nav .active {
   transform: translateY(-50%);
   font-size: 24px;
 }
+.community-operations {
+  overflow: hidden;
+  border-radius: 14px;
+  background: var(--tg-theme-bg-color, #f6f8f7);
+}
+.community-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 62px;
+  padding: 12px 14px;
+  border: 0;
+  background: transparent;
+  color: var(--tg-theme-text-color, #14231c);
+  text-align: left;
+}
+.community-summary span,
+.community-summary b,
+.community-summary small {
+  display: block;
+}
+.community-summary small {
+  margin-top: 4px;
+  font-size: 11px;
+}
+.community-summary .status-active {
+  color: var(--tg-theme-button-color, #188b52);
+}
+.community-summary .status-warning {
+  color: #b15b2c;
+}
+.community-summary i {
+  font-size: 22px;
+  font-style: normal;
+}
+.community-details {
+  display: grid;
+  gap: 12px;
+  padding: 0 13px 13px;
+}
+.setup-progress,
+.community-numbers {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.setup-progress span,
+.setup-progress small,
+.community-numbers small {
+  display: block;
+}
+.setup-progress small {
+  margin-top: 3px;
+  color: var(--tg-theme-hint-color, #748078);
+}
+.setup-progress strong {
+  color: var(--tg-theme-button-color, #188b52);
+  font-size: 22px;
+}
+.setup-list {
+  display: grid;
+  gap: 5px;
+}
+.setup-list span {
+  color: var(--tg-theme-hint-color, #748078);
+  font-size: 12px;
+}
+.setup-list .done {
+  color: var(--tg-theme-button-color, #188b52);
+}
+.community-numbers {
+  padding: 10px 0;
+  border-block: 1px solid color-mix(in srgb, var(--tg-theme-hint-color, #748078) 14%, transparent);
+}
+.community-numbers > span {
+  flex: 1;
+  font-size: 18px;
+  font-weight: 800;
+}
+.community-numbers small {
+  color: var(--tg-theme-hint-color, #748078);
+  font-size: 10px;
+  font-weight: 500;
+}
+.connected-boards .open-board-link {
+  padding: 11px 0;
+  background: transparent;
+  color: var(--tg-theme-link-color, #16815a);
+  font-weight: 750;
+}
+.community-tools {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.community-tools button,
+.ownership-transfer {
+  min-height: 42px;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--tg-theme-hint-color, #748078) 22%, transparent);
+  border-radius: 11px;
+  background: transparent;
+  color: var(--tg-theme-text-color, #14231c);
+  font-weight: 700;
+}
+.community-tools .danger-soft {
+  color: #a33b35;
+}
+.community-tools button:last-child {
+  grid-column: 1 / -1;
+}
+.ownership-transfer {
+  width: 100%;
+  margin-bottom: 12px;
+  color: var(--tg-theme-hint-color, #748078);
+}
 .connect-community,
 .create-organization button,
 .create-organization input {

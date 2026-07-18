@@ -73,12 +73,53 @@ async function claimCommunityConnection(ctx: any, rawToken: string) {
     where: { telegramChatId: BigInt(ctx.chat.id) },
   });
   if (existing) {
+    if (existing.organizationId !== intent.organizationId)
+      return ctx.reply(
+        "Эта группа уже привязана к другой организации. Перенос должен выполнить её текущий владелец.",
+      );
+    const botMembership = await ctx.telegram.getChatMember(
+      ctx.chat.id,
+      ctx.botInfo.id,
+    );
+    const isAdministrator = botMembership.status === "administrator";
+    if (!isAdministrator)
+      return ctx.reply(
+        "Для подключения назначьте бота администратором группы, затем повторите подключение из кабинета.",
+      );
     await prisma.communityConnectionIntent.update({
       where: { id: intent.id },
       data: {
         status: "claimed",
         claimedChatId: BigInt(ctx.chat.id),
         communityId: existing.id,
+      },
+    });
+    await prisma.community.update({
+      where: { id: existing.id },
+      data: {
+        tenantStatus: "active",
+        isActive: true,
+        connectedAt: new Date(),
+        disconnectedAt: null,
+        botStatus: botMembership.status,
+        botIsAdministrator: isAdministrator,
+        botCanDeleteMessages:
+          isAdministrator && Boolean((botMembership as any).can_delete_messages),
+        botCanRestrictMembers:
+          isAdministrator && Boolean((botMembership as any).can_restrict_members),
+        botCanInviteUsers:
+          isAdministrator && Boolean((botMembership as any).can_invite_users),
+        botLastCheckedAt: new Date(),
+      },
+    });
+    await prisma.auditEvent.create({
+      data: {
+        communityId: existing.id,
+        actorId: intent.requestedById,
+        scope: "onboarding",
+        action: "community_reconnected",
+        targetType: "Community",
+        targetId: existing.id,
       },
     });
     return ctx.reply(
@@ -94,6 +135,15 @@ async function claimCommunityConnection(ctx: any, rawToken: string) {
     inviteUrl = await ctx.telegram
       .exportChatInviteLink(ctx.chat.id)
       .catch(() => `https://t.me/${botUsername}`);
+  const botMembership = await ctx.telegram.getChatMember(
+    ctx.chat.id,
+    ctx.botInfo.id,
+  );
+  const botIsAdministrator = botMembership.status === "administrator";
+  if (!botIsAdministrator)
+    return ctx.reply(
+      "Боту нужны права администратора. Выдайте их и запустите подключение ещё раз.",
+    );
   const chatId = BigInt(ctx.chat.id);
   const slug = `telegram-${chatId.toString().replace("-", "")}`;
   const community = await prisma.$transaction(async (tx) => {
@@ -111,6 +161,15 @@ async function claimCommunityConnection(ctx: any, rawToken: string) {
         inviteUrl,
         tenantStatus: "active",
         connectedAt: new Date(),
+        botStatus: botMembership.status,
+        botIsAdministrator,
+        botCanDeleteMessages:
+          botIsAdministrator && Boolean((botMembership as any).can_delete_messages),
+        botCanRestrictMembers:
+          botIsAdministrator && Boolean((botMembership as any).can_restrict_members),
+        botCanInviteUsers:
+          botIsAdministrator && Boolean((botMembership as any).can_invite_users),
+        botLastCheckedAt: new Date(),
       },
     });
     await tx.communityMember.upsert({
@@ -709,6 +768,46 @@ bot.on("message", async (ctx) => {
       userId: user.id,
       month: new Date().toISOString().slice(0, 7),
       messageCount: 1,
+    },
+  });
+});
+bot.on("my_chat_member", async (ctx) => {
+  if (ctx.chat.type === "private") return;
+  const community = await prisma.community.findUnique({
+    where: { telegramChatId: BigInt(ctx.chat.id) },
+  });
+  if (!community) return;
+  const member = ctx.myChatMember.new_chat_member as any;
+  const active = ["member", "administrator"].includes(member.status);
+  const isAdministrator = member.status === "administrator";
+  await prisma.community.update({
+    where: { id: community.id },
+    data: {
+      botStatus: member.status,
+      botIsAdministrator: isAdministrator,
+      botCanDeleteMessages:
+        isAdministrator && Boolean(member.can_delete_messages),
+      botCanRestrictMembers:
+        isAdministrator && Boolean(member.can_restrict_members),
+      botCanInviteUsers: isAdministrator && Boolean(member.can_invite_users),
+      botLastCheckedAt: new Date(),
+      ...(active
+        ? community.tenantStatus === "onboarding"
+          ? { tenantStatus: "active", isActive: true, connectedAt: new Date() }
+          : {}
+        : community.tenantStatus !== "closed"
+          ? { tenantStatus: "onboarding", isActive: false, disconnectedAt: new Date() }
+          : {}),
+    },
+  });
+  await prisma.auditEvent.create({
+    data: {
+      communityId: community.id,
+      scope: "telegram_lifecycle",
+      action: active ? "bot_membership_updated" : "bot_disconnected",
+      targetType: "Community",
+      targetId: community.id,
+      metadata: { status: member.status, isAdministrator },
     },
   });
 });

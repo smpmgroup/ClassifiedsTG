@@ -546,6 +546,17 @@ app.get("/api/platform/me", { preHandler: platformAuth }, async (req: any) => {
                   tenantStatus: true,
                   telegramChatId: true,
                   createdAt: true,
+                  connectedAt: true,
+                  disconnectedAt: true,
+                  botStatus: true,
+                  botIsAdministrator: true,
+                  botCanDeleteMessages: true,
+                  botCanRestrictMembers: true,
+                  botCanInviteUsers: true,
+                  botLastCheckedAt: true,
+                  rules: true,
+                  description: true,
+                  _count: { select: { members: true, listings: true } },
                 },
               },
             },
@@ -569,6 +580,16 @@ app.get("/api/platform/me", { preHandler: platformAuth }, async (req: any) => {
       communities: membership.organization.communities.map((community) => ({
         ...community,
         telegramChatId: String(community.telegramChatId),
+        setup: {
+          connected: ["member", "administrator"].includes(community.botStatus),
+          administrator: community.botIsAdministrator,
+          permissions:
+            community.botCanDeleteMessages &&
+            community.botCanRestrictMembers &&
+            community.botCanInviteUsers,
+          rules: Boolean(community.rules.trim()),
+          branding: Boolean(community.description.trim()),
+        },
       })),
     })),
   };
@@ -654,6 +675,275 @@ app.post(
       expiresAt: intent.expiresAt,
       addBotUrl: `https://t.me/${config.TELEGRAM_BOT_USERNAME}?startgroup=connect_${rawToken}&admin=delete_messages+restrict_members+invite_users`,
     };
+  },
+);
+
+app.post(
+  "/api/platform/communities/:id/connection-check",
+  { preHandler: platformAuth },
+  async (req: any) => {
+    const community = await prisma.community.findUnique({
+      where: { id: String(req.params.id) },
+      include: { organization: { include: { members: true } } },
+    });
+    if (!community || !community.organization)
+      throw new DomainError("COMMUNITY_NOT_FOUND", "Сообщество не найдено", 404);
+    const membership = community.organization.members.find(
+      (item) => item.userId === req.platformIdentity.userId,
+    );
+    if (!membership || !["owner", "administrator"].includes(membership.role))
+      throw new DomainError("FORBIDDEN", "Недостаточно прав", 403);
+    const bot = await telegramBotApi<{ id: number }>("getMe", {});
+    let member: any;
+    try {
+      member = await telegramBotApi<any>("getChatMember", {
+        chat_id: String(community.telegramChatId),
+        user_id: bot.id,
+      });
+    } catch (unknownError) {
+      member = { status: "unavailable" };
+    }
+    const active = ["member", "administrator"].includes(member.status);
+    const isAdministrator = member.status === "administrator";
+    const updated = await prisma.community.update({
+      where: { id: community.id },
+      data: {
+        botStatus: member.status,
+        botIsAdministrator: isAdministrator,
+        botCanDeleteMessages:
+          isAdministrator && Boolean(member.can_delete_messages),
+        botCanRestrictMembers:
+          isAdministrator && Boolean(member.can_restrict_members),
+        botCanInviteUsers:
+          isAdministrator && Boolean(member.can_invite_users),
+        botLastCheckedAt: new Date(),
+        ...(!active && community.tenantStatus === "active"
+          ? {
+              tenantStatus: "onboarding" as any,
+              isActive: false,
+              disconnectedAt: new Date(),
+            }
+          : {}),
+      },
+    });
+    await prisma.auditEvent.create({
+      data: {
+        communityId: community.id,
+        actorId: req.platformIdentity.userId,
+        scope: "tenant_lifecycle",
+        action: "bot_connection_checked",
+        targetType: "Community",
+        targetId: community.id,
+        metadata: { status: member.status, isAdministrator },
+      },
+    });
+    return updated;
+  },
+);
+
+app.post(
+  "/api/platform/communities/:id/disconnect",
+  { preHandler: platformAuth },
+  async (req: any) => {
+    if (String(req.body?.confirmation || "") !== "DISCONNECT")
+      throw new DomainError(
+        "CONFIRMATION_REQUIRED",
+        "Подтвердите отключение",
+      );
+    const community = await prisma.community.findUnique({
+      where: { id: String(req.params.id) },
+      include: { organization: { include: { members: true } } },
+    });
+    if (!community?.organization)
+      throw new DomainError("COMMUNITY_NOT_FOUND", "Сообщество не найдено", 404);
+    const membership = community.organization.members.find(
+      (item) => item.userId === req.platformIdentity.userId,
+    );
+    if (!membership || !["owner", "administrator"].includes(membership.role))
+      throw new DomainError("FORBIDDEN", "Недостаточно прав", 403);
+    return prisma.$transaction(async (tx) => {
+      const updated = await tx.community.update({
+        where: { id: community.id },
+        data: {
+          tenantStatus: "closed",
+          isActive: false,
+          disconnectedAt: new Date(),
+        },
+      });
+      await tx.communityConnectionIntent.updateMany({
+        where: { communityId: community.id, status: { in: ["pending", "claiming"] } },
+        data: { status: "cancelled" },
+      });
+      await tx.auditEvent.create({
+        data: {
+          communityId: community.id,
+          actorId: req.platformIdentity.userId,
+          scope: "tenant_lifecycle",
+          action: "community_disconnected",
+          targetType: "Community",
+          targetId: community.id,
+        },
+      });
+      return updated;
+    });
+  },
+);
+
+app.post(
+  "/api/platform/communities/:id/reconnect",
+  { preHandler: platformAuth },
+  async (req: any) => {
+    const community = await prisma.community.findUnique({
+      where: { id: String(req.params.id) },
+      include: { organization: { include: { members: true } } },
+    });
+    if (!community?.organization)
+      throw new DomainError("COMMUNITY_NOT_FOUND", "Сообщество не найдено", 404);
+    const membership = community.organization.members.find(
+      (item) => item.userId === req.platformIdentity.userId,
+    );
+    if (!membership || !["owner", "administrator"].includes(membership.role))
+      throw new DomainError("FORBIDDEN", "Недостаточно прав", 403);
+    const bot = await telegramBotApi<{ id: number }>("getMe", {});
+    const member = await telegramBotApi<any>("getChatMember", {
+      chat_id: String(community.telegramChatId),
+      user_id: bot.id,
+    });
+    if (member.status !== "administrator")
+      throw new DomainError(
+        "BOT_ADMIN_REQUIRED",
+        "Сначала верните бота в группу и назначьте администратором",
+        409,
+      );
+    return prisma.$transaction(async (tx) => {
+      const updated = await tx.community.update({
+        where: { id: community.id },
+        data: {
+          tenantStatus: "active",
+          isActive: true,
+          connectedAt: new Date(),
+          disconnectedAt: null,
+          botStatus: member.status,
+          botIsAdministrator: true,
+          botCanDeleteMessages: Boolean(member.can_delete_messages),
+          botCanRestrictMembers: Boolean(member.can_restrict_members),
+          botCanInviteUsers: Boolean(member.can_invite_users),
+          botLastCheckedAt: new Date(),
+        },
+      });
+      await tx.auditEvent.create({
+        data: {
+          communityId: community.id,
+          actorId: req.platformIdentity.userId,
+          scope: "tenant_lifecycle",
+          action: "community_reconnected",
+          targetType: "Community",
+          targetId: community.id,
+        },
+      });
+      return updated;
+    });
+  },
+);
+
+app.get(
+  "/api/platform/communities/:id/export",
+  { preHandler: platformAuth },
+  async (req: any) => {
+    const community = await prisma.community.findUnique({
+      where: { id: String(req.params.id) },
+      include: {
+        organization: { include: { members: true } },
+        members: { include: { user: true } },
+        categories: true,
+        listings: { include: { images: true, payment: true } },
+        actions: true,
+        reports: true,
+        auditEvents: { orderBy: { createdAt: "asc" } },
+      },
+    });
+    if (!community?.organization)
+      throw new DomainError("COMMUNITY_NOT_FOUND", "Сообщество не найдено", 404);
+    const membership = community.organization.members.find(
+      (item) => item.userId === req.platformIdentity.userId,
+    );
+    if (!membership || !["owner", "administrator"].includes(membership.role))
+      throw new DomainError("FORBIDDEN", "Недостаточно прав", 403);
+    const { organization, ...tenantData } = community;
+    await prisma.auditEvent.create({
+      data: {
+        communityId: community.id,
+        actorId: req.platformIdentity.userId,
+        scope: "data_portability",
+        action: "community_exported",
+        targetType: "Community",
+        targetId: community.id,
+      },
+    });
+    return {
+      format: "classifiedstg-community-export-v1",
+      exportedAt: new Date(),
+      organization: { id: organization.id, name: organization.name },
+      community: tenantData,
+    };
+  },
+);
+
+app.post(
+  "/api/platform/organizations/:id/transfer-ownership",
+  { preHandler: platformAuth },
+  async (req: any) => {
+    const organizationId = String(req.params.id);
+    const targetTelegramUserId = String(req.body?.telegramUserId || "").trim();
+    if (!/^\d{3,20}$/.test(targetTelegramUserId))
+      throw new DomainError("USER_ID_INVALID", "Укажите Telegram ID нового владельца");
+    const current = await prisma.organizationMember.findUnique({
+      where: {
+        organizationId_userId: {
+          organizationId,
+          userId: req.platformIdentity.userId,
+        },
+      },
+    });
+    if (!current || current.role !== "owner")
+      throw new DomainError("FORBIDDEN", "Только владелец может передать организацию", 403);
+    const target = await prisma.user.findUnique({
+      where: { telegramUserId: BigInt(targetTelegramUserId) },
+    });
+    if (!target)
+      throw new DomainError(
+        "TARGET_NOT_REGISTERED",
+        "Новый владелец должен сначала открыть бота и кабинет",
+        409,
+      );
+    if (target.id === req.platformIdentity.userId)
+      throw new DomainError("TARGET_IS_CURRENT_OWNER", "Это уже текущий владелец");
+    return prisma.$transaction(async (tx) => {
+      await tx.organizationMember.updateMany({
+        where: {
+          organizationId,
+          role: "owner",
+          userId: { not: target.id },
+        },
+        data: { role: "administrator" },
+      });
+      await tx.organizationMember.upsert({
+        where: { organizationId_userId: { organizationId, userId: target.id } },
+        update: { role: "owner" },
+        create: { organizationId, userId: target.id, role: "owner" },
+      });
+      await tx.auditEvent.create({
+        data: {
+          actorId: req.platformIdentity.userId,
+          scope: "organization_security",
+          action: "organization_ownership_transferred",
+          targetType: "Organization",
+          targetId: organizationId,
+          metadata: { newOwnerId: target.id },
+        },
+      });
+      return { organizationId, owner: { id: target.id, firstName: target.firstName } };
+    });
   },
 );
 

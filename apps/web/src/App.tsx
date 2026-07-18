@@ -253,20 +253,44 @@ function PlatformWorkspace() {
             </div>
             <div className="connected-boards">
               {organization.communities.map((community: any) => (
-                <a
-                  href={`/?community=${encodeURIComponent(community.slug)}`}
+                <CommunityOperations
                   key={community.id}
-                >
-                  <b>{community.name}</b>
-                  <small>{community.tenantStatus === "active" ? "● Работает" : community.tenantStatus}</small>
-                  <span>›</span>
-                </a>
+                  community={community}
+                  canManage={["owner", "administrator"].includes(organization.role)}
+                  onChanged={load}
+                />
               ))}
               {!organization.communities.length && (
                 <p className="muted">Группы пока не подключены.</p>
               )}
             </div>
             <OrganizationFinance organizationId={organization.id} />
+            {organization.role === "owner" && (
+              <button
+                type="button"
+                className="ownership-transfer"
+                disabled={busy === `transfer-${organization.id}`}
+                onClick={async () => {
+                  const telegramUserId = window.prompt(
+                    "Telegram ID нового владельца. Он должен сначала открыть бота.",
+                  );
+                  if (!telegramUserId) return;
+                  if (!window.confirm("После передачи вы станете администратором. Продолжить?")) return;
+                  setBusy(`transfer-${organization.id}`);
+                  setError("");
+                  try {
+                    await request(`/platform/organizations/${organization.id}/transfer-ownership`, "POST", { telegramUserId });
+                    await load();
+                  } catch (e: any) {
+                    setError(e.message);
+                  } finally {
+                    setBusy("");
+                  }
+                }}
+              >
+                Передать права владельца
+              </button>
+            )}
             <button
               className="primary connect-community"
               disabled={busy === organization.id}
@@ -299,6 +323,96 @@ function PlatformWorkspace() {
         data.user.platformRole,
       ) && <PlatformOwnerPanel canEdit={data.user.platformRole === "platform_owner"} />}
     </main>
+  );
+}
+
+function CommunityOperations({
+  community,
+  canManage,
+  onChanged,
+}: {
+  community: any;
+  canManage: boolean;
+  onChanged: () => Promise<void> | void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [busy, setBusy] = useState("");
+  const [error, setError] = useState("");
+  const setup = community.setup || {};
+  const setupItems = [
+    [setup.connected, "Бот в группе"],
+    [setup.administrator, "Бот — администратор"],
+    [setup.permissions, "Выданы нужные права"],
+    [setup.rules, "Опубликованы правила"],
+    [setup.branding, "Добавлено описание"],
+  ];
+  const completed = setupItems.filter(([done]) => done).length;
+  const run = async (name: string, path: string, body: any = {}) => {
+    setBusy(name);
+    setError("");
+    try {
+      await request(path, "POST", body);
+      await onChanged();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy("");
+    }
+  };
+  const exportData = async () => {
+    setBusy("export");
+    setError("");
+    try {
+      const data = await request(`/platform/communities/${community.id}/export`);
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `${community.slug}-export.json`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy("");
+    }
+  };
+  return (
+    <article className="community-operations">
+      <button className="community-summary" type="button" onClick={() => setExpanded((value) => !value)}>
+        <span>
+          <b>{community.name}</b>
+          <small className={community.tenantStatus === "active" ? "status-active" : "status-warning"}>
+            {community.tenantStatus === "active" ? "● Работает" : community.tenantStatus === "closed" ? "● Отключено" : "● Требует внимания"}
+          </small>
+        </span>
+        <i>{expanded ? "−" : "+"}</i>
+      </button>
+      {expanded && (
+        <div className="community-details">
+          <div className="setup-progress"><span><b>Готовность</b><small>{completed} из {setupItems.length} шагов</small></span><strong>{Math.round((completed / setupItems.length) * 100)}%</strong></div>
+          <div className="setup-list">
+            {setupItems.map(([done, label]) => <span key={String(label)} className={done ? "done" : ""}>{done ? "✓" : "·"} {label}</span>)}
+          </div>
+          <div className="community-numbers"><span>{community._count?.members || 0}<small>Участников</small></span><span>{community._count?.listings || 0}<small>Объявлений</small></span></div>
+          <a className="open-board-link" href={`/?community=${encodeURIComponent(community.slug)}`}>Открыть доску →</a>
+          {error && <LoadError message={error} />}
+          {canManage && (
+            <div className="community-tools">
+              <button disabled={Boolean(busy)} onClick={() => void run("check", `/platform/communities/${community.id}/connection-check`)}>{busy === "check" ? "Проверяем…" : "Проверить бота"}</button>
+              <button disabled={Boolean(busy)} onClick={() => void exportData()}>{busy === "export" ? "Готовим…" : "Скачать экспорт"}</button>
+              {community.tenantStatus === "closed" ? (
+                <button className="primary" disabled={Boolean(busy)} onClick={() => void run("reconnect", `/platform/communities/${community.id}/reconnect`)}>Включить снова</button>
+              ) : (
+                <button className="danger-soft" disabled={Boolean(busy)} onClick={() => {
+                  if (window.confirm("Доска перестанет обслуживать группу. Данные сохранятся. Отключить?")) void run("disconnect", `/platform/communities/${community.id}/disconnect`, { confirmation: "DISCONNECT" });
+                }}>Отключить доску</button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </article>
   );
 }
 

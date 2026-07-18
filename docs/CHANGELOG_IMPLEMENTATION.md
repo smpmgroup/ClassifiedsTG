@@ -102,3 +102,18 @@
 - Added finance controls to the platform-owner console and required bot commands
   `/terms`, `/support` and `/paysupport`.
 - Extended ledger invariant tests to cover settlement and post-settlement reversal.
+
+## Tenant lifecycle and data portability — session 7
+
+- Added a customer-facing setup checklist with live bot status, administrator rights,
+  required permissions, rules, branding and tenant usage counters.
+- Added explicit Bot API connection checks and `my_chat_member` lifecycle handling so
+  removed or demoted bots stop serving a tenant instead of leaving stale active state.
+- Added reversible logical disconnect/reconnect controls that preserve all customer data
+  and write immutable audit events.
+- Added a versioned JSON export containing tenant settings, members, taxonomy, listings,
+  images, payments, reports, moderation and audit history.
+- Added guarded organisation ownership transfer to a registered Telegram user; the old
+  owner becomes an administrator and cross-organisation group takeover is rejected.
+- Added onboarding enforcement that refuses to activate a group until the bot is an
+  administrator.

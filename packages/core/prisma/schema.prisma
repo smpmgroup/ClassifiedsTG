@@ -93,7 +93,14 @@ model Community {
   organizationId String?
   tenantStatus TenantStatus @default(active)
   connectedAt DateTime?
+  disconnectedAt DateTime?
   suspendedAt DateTime?
+  botStatus String @default("unknown")
+  botIsAdministrator Boolean @default(false)
+  botCanDeleteMessages Boolean @default(false)
+  botCanRestrictMembers Boolean @default(false)
+  botCanInviteUsers Boolean @default(false)
+  botLastCheckedAt DateTime?
   description String @default("")
   inviteUrl String
   isActive Boolean @default(true)
