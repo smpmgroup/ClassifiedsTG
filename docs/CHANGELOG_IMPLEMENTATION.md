@@ -76,3 +76,16 @@
   suspend/reactivate controls.
 - Restricted platform controls to refreshed `platform_admin` and `platform_owner` roles;
   only the platform owner can change global financial defaults.
+
+## Stars financial ledger — session 5
+
+- Added immutable accounts, transactions and integer double-entry journal entries.
+- Snapshot commission basis points and both split amounts when an invoice is created.
+- Prevent an already-paid listing from being reset to pending by requesting a new link.
+- Process payment state, listing entitlement and balanced journal entries atomically.
+- Added idempotency by Telegram charge ID and safe duplicate-update handling.
+- Added organisation finance balances/history and a global finance ledger API.
+- Added deterministic rounding and balance-invariant tests.
+- Verified a real three-entry journal in production and rolled the entire probe back;
+  the entries summed to zero, duplicate recording returned one transaction and no test
+  financial data remained.
