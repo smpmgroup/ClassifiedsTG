@@ -658,10 +658,19 @@ nav .active {
   font-size: 34px;
 }
 .moderate {
-  background: #fff;
+  background: var(--tg-theme-secondary-bg-color, #fff);
+  color: var(--tg-theme-text-color, #14231c);
   border-radius: 16px;
   padding: 16px;
   margin: 12px 0;
+  box-shadow: 0 5px 20px #00000012;
+}
+.moderate h3 {
+  color: var(--tg-theme-text-color, #14231c);
+}
+.moderate p {
+  color: var(--tg-theme-text-color, #14231c);
+  line-height: 1.5;
 }
 .moderate div {
   display: flex;
@@ -671,6 +680,15 @@ nav .active {
   border: 0;
   padding: 10px;
   border-radius: 9px;
+  background: color-mix(
+    in srgb,
+    var(--tg-theme-hint-color, #748078) 18%,
+    var(--tg-theme-bg-color, #fff)
+  );
+  color: var(--tg-theme-text-color, #14231c);
+}
+.moderate button:disabled {
+  opacity: 0.55;
 }
 .message {
   display: flex;
