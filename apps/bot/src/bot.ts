@@ -305,17 +305,28 @@ bot.command("help", (ctx) =>
     "/board — открыть доску\n/myads — мои объявления\n/rules — правила\n/connect — кабинет владельца сообщества\n/terms — условия сервиса\n/support — поддержка\n/paysupport — вопросы по оплате",
   ),
 );
-bot.command("terms", (ctx) =>
-  ctx.reply(
-    "Публикуя объявление, вы подтверждаете достоверность данных, соблюдение правил сообщества и согласие на модерацию. Платные публикации оплачиваются Telegram Stars; возвраты рассматривает поддержка.",
-  ),
-);
+bot.command("terms", async (ctx) => {
+  const document = await prisma.legalDocument.findFirst({
+    where: { type: "terms", published: true, effectiveAt: { lte: new Date() } },
+    orderBy: { effectiveAt: "desc" },
+  });
+  const termsUrl = new URL("/terms", appUrl).toString();
+  return ctx.reply(
+    document
+      ? `${document.title} · ${document.version}\n\n${document.body.slice(0, 3300)}\n\nПолная актуальная версия: ${termsUrl}`
+      : `Условия сервиса: ${termsUrl}`,
+  );
+});
 const supportReply = (ctx: any) =>
   ctx.reply(
     "Опишите вопрос в ответном сообщении или свяжитесь с администратором вашего сообщества. Для вопроса о Stars укажите дату, сумму и название объявления. Не присылайте коды или пароли.",
   );
 bot.command("support", supportReply);
-bot.command("paysupport", supportReply);
+bot.command("paysupport", (ctx) =>
+  ctx.reply(
+    `По вопросу Telegram Stars укажите дату, сумму, название объявления и опишите проблему. Не присылайте коды или пароли.\n\nПоддержка: ${new URL("/support", appUrl).toString()}`,
+  ),
+);
 bot.command("connect", (ctx) => {
   if (ctx.chat.type !== "private")
     return ctx.reply("Откройте личный чат с ботом и отправьте /connect.");

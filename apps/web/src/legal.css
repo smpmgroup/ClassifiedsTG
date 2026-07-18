@@ -1,0 +1,29 @@
+.legal-acceptance {
+  max-width: none;
+  min-height: 100vh;
+  padding: 28px;
+  display: grid;
+  place-items: center;
+  background: #edf5f0;
+}
+.legal-acceptance section {
+  width: min(580px, 100%);
+  padding: 34px;
+  border-radius: 24px;
+  background: #fff;
+  box-shadow: 0 22px 70px #193b2920;
+}
+.legal-acceptance h1 { margin: 8px 0; font-size: 36px; }
+.legal-acceptance section > div { display: grid; gap: 8px; margin: 24px 0; }
+.legal-acceptance section > div a {
+  display: flex;
+  justify-content: space-between;
+  padding: 15px;
+  border-radius: 12px;
+  background: #f0f6f2;
+  color: #173426;
+  text-decoration: none;
+}
+.legal-acceptance label { display: flex; gap: 10px; align-items: flex-start; margin: 18px 0; line-height: 1.45; }
+.legal-acceptance button { width: 100%; padding: 15px; border: 0; border-radius: 12px; }
+.legal-acceptance button:disabled { opacity: .5; }

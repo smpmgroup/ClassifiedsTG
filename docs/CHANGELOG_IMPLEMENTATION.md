@@ -1,5 +1,15 @@
 # Implementation changelog
 
+## 2026-07-19 — Public SaaS site and versioned consent
+
+- Replaced the outside-Telegram dead end with a responsive public landing, pricing,
+  onboarding documentation, support and legal pages.
+- Added privacy-minimised conversion events and 30-day aggregate funnel metrics.
+- Added immutable legal-document versions, exact-version acceptance records and a
+  consent gate for organisation creation, group connection, billing and payouts.
+- Added platform-owner legal publishing UI and made `/terms` and `/paysupport` resolve
+  current public product surfaces instead of static placeholder copy.
+
 ## 2026-07-19 — Controlled community payouts
 
 - Added organisation payout requests with atomic available-to-reserved Stars journals,

@@ -1344,6 +1344,39 @@ nav .active {
   min-height: 48px;
   border-radius: 14px;
 }
+.platform-legal {
+  margin: 24px 0;
+}
+.platform-legal details {
+  margin-top: 12px;
+  padding: 14px;
+  border-radius: 14px;
+  background: var(--tg-theme-secondary-bg-color, #fff);
+}
+.platform-legal summary {
+  cursor: pointer;
+  font-weight: 750;
+}
+.legal-editor {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+.legal-editor input,
+.legal-editor select,
+.legal-editor textarea {
+  width: 100%;
+  padding: 11px;
+  border: 1px solid #bccbc3;
+  border-radius: 10px;
+  background: var(--tg-theme-bg-color, #fff);
+  color: var(--tg-theme-text-color, #14231c);
+}
+.legal-editor button {
+  padding: 12px;
+  border: 0;
+  border-radius: 10px;
+}
 .organization-finance {
   margin: 0 0 12px;
   border: 1px solid color-mix(in srgb, var(--tg-theme-button-color, #188b52) 18%, transparent);

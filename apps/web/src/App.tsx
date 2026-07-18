@@ -9,6 +9,7 @@ import {
   useSearchParams,
 } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { PublicSite } from "./PublicSite";
 import {
   activateSession,
   api,
@@ -44,8 +45,11 @@ type CommunityShowcase = {
 };
 export function App() {
   const { t } = useTranslation();
+  const pathName = window.location.pathname.replace(/\/$/, "") || "/";
   const platformMode =
     new URLSearchParams(window.location.search).get("mode") === "platform";
+  const publicPath = ["/pricing", "/docs", "/terms", "/privacy", "/prohibited", "/support"].includes(pathName) ||
+    (pathName === "/" && !platformMode && !new URLSearchParams(window.location.search).get("community") && !window.Telegram?.WebApp.initData);
   const [state, setState] = useState<
     "loading" | "ready" | "outside" | "denied" | "select" | "error"
   >(activateSession(platformMode ? "platform" : "tenant") ? "ready" : "loading");
@@ -83,8 +87,9 @@ export function App() {
     }
   };
   useEffect(() => {
-    void boot();
-  }, []);
+    if (!publicPath) void boot();
+  }, [publicPath]);
+  if (publicPath) return <PublicSite />;
   if (state === "loading")
     return (
       <Shell>
@@ -215,6 +220,9 @@ function PlatformWorkspace() {
   };
   if (!data)
     return <Message text={error || "Загружаем кабинет…"} />;
+  const missingLegal = data.legalDocuments?.filter((document: any) => !document.accepted) || [];
+  if (missingLegal.length)
+    return <LegalAcceptance documents={missingLegal} onAccepted={load} />;
   return (
     <main className="platform-workspace">
       <header className="platform-header">
@@ -329,6 +337,13 @@ function PlatformWorkspace() {
       {data.user.platformRole === "finance" && <PlatformFinancePanel />}
     </main>
   );
+}
+
+function LegalAcceptance({ documents, onAccepted }: { documents: any[]; onAccepted: () => Promise<any> }) {
+  const [confirmed, setConfirmed] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  return <main className="legal-acceptance"><section><small>ВАЖНО</small><h1>Условия закрытой beta</h1><p>Перед созданием и управлением сообществом ознакомьтесь с актуальными документами.</p><div>{documents.map((document) => <a key={document.id} href={`/${document.type}`} target="_blank" rel="noreferrer"><span>{document.title}</span><small>Версия {document.version} ↗</small></a>)}</div><label><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} />Я прочитал(а) и принимаю все указанные документы</label>{error && <LoadError message={error}/>}<button className="primary" disabled={!confirmed || busy} onClick={async () => { setBusy(true); setError(""); try { await request("/platform/legal/accept", "POST", { documentIds: documents.map((document) => document.id) }); await onAccepted(); } catch (e: any) { setError(e.message); } finally { setBusy(false); } }}>{busy ? "Сохраняем…" : "Принять и продолжить"}</button></section></main>;
 }
 
 function OrganizationBilling({ organization }: { organization: any }) {
@@ -910,6 +925,7 @@ function PlatformOwnerPanel({ canEdit }: { canEdit: boolean }) {
         </form>
       )}
       {message && <p className="platform-message">{message}</p>}
+      <PlatformLegalManagement canEdit={canEdit} />
       <h3>Stripe Billing</h3>
       <div className="billing-plan-admin">
         {billingPlans.map((plan) => (
@@ -968,6 +984,16 @@ function PlatformOwnerPanel({ canEdit }: { canEdit: boolean }) {
       <PlatformSupportPanel />
     </section>
   );
+}
+
+function PlatformLegalManagement({ canEdit }: { canEdit: boolean }) {
+  const [documents, setDocuments] = useState<any[]>([]);
+  const [conversions, setConversions] = useState<any>();
+  const [draft, setDraft] = useState({ type: "terms", version: "", title: "", body: "", required: true });
+  const [message, setMessage] = useState("");
+  const load = () => Promise.all([request("/platform/admin/legal-documents"), request("/platform/admin/conversions")]).then(([items, metrics]) => { setDocuments(items); setConversions(metrics); });
+  useEffect(() => { void load().catch(() => undefined); }, []);
+  return <section className="platform-legal"><h3>Документы и конверсия</h3>{conversions && <div className="platform-metrics"><div><b>{conversions.uniqueVisitors}</b><span>Посетителей, 30 дней</span></div><div><b>{conversions.events.telegram_cta || 0}</b><span>Переходов в Telegram</span></div><div><b>{conversions.events.pricing_view || 0}</b><span>Просмотров тарифов</span></div></div>}<div className="global-audit">{documents.slice(0, 6).map((document) => <p key={document.id}><span><b>{document.title}</b><small>{document.type} · {document.version} · согласий {document._count.acceptances}</small></span><time>{document.required ? "Обязательный" : "Справочный"}</time></p>)}</div>{canEdit && <details><summary>Опубликовать новую редакцию</summary><form className="legal-editor" onSubmit={async (event) => { event.preventDefault(); setMessage(""); try { await request("/platform/admin/legal-documents", "POST", draft); setDraft({ type: draft.type, version: "", title: "", body: "", required: draft.required }); setMessage("✓ Новая редакция опубликована"); await load(); } catch (e: any) { setMessage(e.message); } }}><select value={draft.type} onChange={(e) => setDraft({ ...draft, type: e.target.value })}><option value="terms">Условия</option><option value="privacy">Конфиденциальность</option><option value="prohibited">Запрещённые товары</option></select><input required placeholder="Версия, например beta-2" value={draft.version} onChange={(e) => setDraft({ ...draft, version: e.target.value })}/><input required placeholder="Заголовок" value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })}/><textarea required minLength={100} rows={12} placeholder="Полный текст новой редакции" value={draft.body} onChange={(e) => setDraft({ ...draft, body: e.target.value })}/><label className="check"><input type="checkbox" checked={draft.required} onChange={(e) => setDraft({ ...draft, required: e.target.checked })}/>Требовать новое согласие</label><button className="primary">Опубликовать неизменяемую редакцию</button></form></details>}{message && <p className="platform-message">{message}</p>}</section>;
 }
 function ScrollToTop() {
   const { pathname } = useLocation();

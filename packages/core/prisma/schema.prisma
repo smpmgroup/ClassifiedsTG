@@ -176,6 +176,7 @@ model User {
   supportMessages SupportMessage[]
   payoutRequests PayoutRequest[] @relation("PayoutRequester")
   payoutReviews PayoutRequest[] @relation("PayoutReviewer")
+  legalAcceptances LegalAcceptance[]
 }
 
 model Organization {
@@ -223,6 +224,47 @@ model BillingPlan {
   sortOrder Int @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model LegalDocument {
+  id String @id @default(cuid())
+  type String
+  version String
+  title String
+  body String
+  required Boolean @default(false)
+  published Boolean @default(false)
+  effectiveAt DateTime
+  publishedById String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  acceptances LegalAcceptance[]
+  @@unique([type, version])
+  @@index([type, published, effectiveAt])
+}
+
+model LegalAcceptance {
+  id String @id @default(cuid())
+  documentId String
+  userId String
+  acceptedAt DateTime @default(now())
+  source String @default("web")
+  document LegalDocument @relation(fields: [documentId], references: [id], onDelete: Restrict)
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+  @@unique([documentId, userId])
+  @@index([userId, acceptedAt])
+}
+
+model ConversionEvent {
+  id String @id @default(cuid())
+  event String
+  visitorHash String
+  path String
+  referrerHost String?
+  metadata Json @default("{}")
+  createdAt DateTime @default(now())
+  @@index([event, createdAt])
+  @@index([visitorHash, createdAt])
 }
 
 model StripeWebhookEvent {

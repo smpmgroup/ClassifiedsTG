@@ -413,6 +413,49 @@ app.get("/health", async () => {
   return { status: "ok" };
 });
 
+app.get("/api/public/site", async () => {
+  const [plans, documents, settings] = await prisma.$transaction([
+    prisma.billingPlan.findMany({
+      where: { active: true },
+      select: { key: true, name: true, description: true, currency: true, unitAmount: true, interval: true, features: true, sortOrder: true },
+      orderBy: { sortOrder: "asc" },
+    }),
+    prisma.legalDocument.findMany({
+      where: { published: true, effectiveAt: { lte: new Date() } },
+      orderBy: [{ type: "asc" }, { effectiveAt: "desc" }],
+      distinct: ["type"],
+      select: { id: true, type: true, version: true, title: true, body: true, required: true, effectiveAt: true },
+    }),
+    prisma.platformSetting.upsert({ where: { id: "global" }, update: {}, create: { id: "global" } }),
+  ]);
+  return {
+    platformName: settings.platformName,
+    botUsername: config.TELEGRAM_BOT_USERNAME,
+    plans,
+    documents,
+    publication: { minimumStars: settings.minimumPublicationStars, defaultCommissionPercent: settings.defaultCommissionBps / 100, holdDays: settings.starsHoldDays },
+  };
+});
+
+app.post(
+  "/api/public/conversion",
+  { config: { rateLimit: { max: 30, timeWindow: "1 minute" } } },
+  async (req: any, reply) => {
+    const event = String(req.body?.event || "");
+    const allowed = new Set(["landing_view", "pricing_view", "docs_view", "telegram_cta", "legal_view"]);
+    if (!allowed.has(event)) throw new DomainError("CONVERSION_EVENT_INVALID", "Unknown event");
+    const visitor = String(req.body?.visitor || "");
+    if (!/^[a-zA-Z0-9_-]{16,100}$/.test(visitor))
+      throw new DomainError("CONVERSION_VISITOR_INVALID", "Invalid visitor");
+    const pathName = String(req.body?.path || "/").slice(0, 200);
+    let referrerHost: string | null = null;
+    try { referrerHost = req.body?.referrer ? new URL(String(req.body.referrer)).hostname.slice(0, 200) : null; } catch { referrerHost = null; }
+    const visitorHash = crypto.createHash("sha256").update(`${visitor}:${config.ACCESS_TOKEN_SECRET}`).digest("hex");
+    await prisma.conversionEvent.create({ data: { event, visitorHash, path: pathName, referrerHost, metadata: {} } });
+    return reply.status(202).send({ accepted: true });
+  },
+);
+
 app.post(
   "/api/webhooks/stripe",
   { config: { rawBody: true } as any },
@@ -769,6 +812,24 @@ app.post(
   },
 );
 
+async function requiredLegalStatus(userId: string) {
+  const documents = await prisma.legalDocument.findMany({
+    where: { required: true, published: true, effectiveAt: { lte: new Date() } },
+    orderBy: [{ type: "asc" }, { effectiveAt: "desc" }],
+    distinct: ["type"],
+    include: { acceptances: { where: { userId }, select: { acceptedAt: true } } },
+  });
+  return documents.map(({ acceptances, body: _body, ...document }) => ({
+    ...document, accepted: acceptances.length > 0, acceptedAt: acceptances[0]?.acceptedAt || null,
+  }));
+}
+
+async function requireCurrentLegalAcceptance(userId: string) {
+  const missing = (await requiredLegalStatus(userId)).filter((item) => !item.accepted);
+  if (missing.length)
+    throw new DomainError("LEGAL_ACCEPTANCE_REQUIRED", "Примите актуальные условия и политику конфиденциальности", 428, missing.map((item) => ({ id: item.id, type: item.type, version: item.version, title: item.title })));
+}
+
 app.get("/api/platform/me", { preHandler: platformAuth }, async (req: any) => {
   const user = await prisma.user.findUniqueOrThrow({
     where: { id: req.platformIdentity.userId },
@@ -835,13 +896,40 @@ app.get("/api/platform/me", { preHandler: platformAuth }, async (req: any) => {
         },
       })),
     })),
+    legalDocuments: await requiredLegalStatus(user.id),
   };
 });
+
+app.post(
+  "/api/platform/legal/accept",
+  { preHandler: platformAuth },
+  async (req: any) => {
+    const documentIds = Array.isArray(req.body?.documentIds) ? req.body.documentIds.map(String) : [];
+    const required = await requiredLegalStatus(req.platformIdentity.userId);
+    const requiredIds = required.filter((item) => !item.accepted).map((item) => item.id);
+    if (!requiredIds.every((id) => documentIds.includes(id)))
+      throw new DomainError("LEGAL_ACCEPTANCE_INCOMPLETE", "Необходимо принять все обязательные документы");
+    await prisma.$transaction(async (tx) => {
+      for (const documentId of requiredIds)
+        await tx.legalAcceptance.upsert({
+          where: { documentId_userId: { documentId, userId: req.platformIdentity.userId } },
+          update: {}, create: { documentId, userId: req.platformIdentity.userId, source: "platform_web" },
+        });
+      if (requiredIds.length)
+        await tx.auditEvent.create({ data: {
+          actorId: req.platformIdentity.userId, scope: "legal", action: "legal_documents_accepted",
+          targetType: "User", targetId: req.platformIdentity.userId, metadata: { documentIds: requiredIds },
+        } });
+    });
+    return { accepted: true, documents: await requiredLegalStatus(req.platformIdentity.userId) };
+  },
+);
 
 app.post(
   "/api/platform/organizations",
   { preHandler: platformAuth },
   async (req: any) => {
+    await requireCurrentLegalAcceptance(req.platformIdentity.userId);
     const name = String(req.body?.name || "").trim().slice(0, 100);
     if (name.length < 2)
       throw new DomainError(
@@ -884,6 +972,7 @@ app.post(
   "/api/platform/connect-intents",
   { preHandler: platformAuth },
   async (req: any) => {
+    await requireCurrentLegalAcceptance(req.platformIdentity.userId);
     const organizationId = String(req.body?.organizationId || "");
     const membership = await prisma.organizationMember.findUnique({
       where: {
@@ -1367,6 +1456,7 @@ app.post(
   "/api/platform/organizations/:id/payouts",
   { preHandler: platformAuth },
   async (req: any) => {
+    await requireCurrentLegalAcceptance(req.platformIdentity.userId);
     const organizationId = String(req.params.id);
     await organizationPlatformMembership(organizationId, req.platformIdentity.userId, ["owner"]);
     const amountStars = Number(req.body?.amountStars);
@@ -1610,6 +1700,7 @@ app.post(
   "/api/platform/organizations/:id/billing/checkout",
   { preHandler: platformAuth },
   async (req: any) => {
+    await requireCurrentLegalAcceptance(req.platformIdentity.userId);
     const stripeClient = requireStripe();
     const membership = await organizationPlatformMembership(
       String(req.params.id),
@@ -1834,6 +1925,56 @@ app.get(
       orderBy: { createdAt: "desc" },
       take: 100,
     });
+  },
+);
+
+app.get(
+  "/api/platform/admin/legal-documents",
+  { preHandler: requirePlatformRole(platformAdminRoles) },
+  async () => prisma.legalDocument.findMany({
+    include: { _count: { select: { acceptances: true } } },
+    orderBy: [{ type: "asc" }, { effectiveAt: "desc" }],
+  }),
+);
+
+app.post(
+  "/api/platform/admin/legal-documents",
+  { preHandler: requirePlatformRole(new Set(["platform_owner"])) },
+  async (req: any) => {
+    const type = String(req.body?.type || "");
+    const version = String(req.body?.version || "").trim();
+    const title = String(req.body?.title || "").trim();
+    const body = String(req.body?.body || "").trim();
+    const required = Boolean(req.body?.required);
+    if (!["terms", "privacy", "prohibited"].includes(type) || !/^[a-zA-Z0-9._-]{1,40}$/.test(version))
+      throw new DomainError("LEGAL_DOCUMENT_INVALID", "Неверный тип или версия документа");
+    if (title.length < 3 || body.length < 100 || body.length > 100000)
+      throw new DomainError("LEGAL_DOCUMENT_INVALID", "Заполните заголовок и текст документа");
+    return prisma.$transaction(async (tx) => {
+      const document = await tx.legalDocument.create({ data: {
+        type, version, title, body, required, published: true,
+        effectiveAt: req.body?.effectiveAt ? new Date(req.body.effectiveAt) : new Date(),
+        publishedById: req.platformIdentity.userId,
+      } });
+      await tx.auditEvent.create({ data: {
+        actorId: req.platformIdentity.userId, scope: "legal", action: "legal_document_published",
+        targetType: "LegalDocument", targetId: document.id, metadata: { type, version, required },
+      } });
+      return document;
+    });
+  },
+);
+
+app.get(
+  "/api/platform/admin/conversions",
+  { preHandler: requirePlatformRole(platformAdminRoles) },
+  async () => {
+    const since = new Date(Date.now() - 30 * 86_400_000);
+    const [events, uniqueVisitors] = await prisma.$transaction([
+      prisma.conversionEvent.groupBy({ by: ["event"], where: { createdAt: { gte: since } }, orderBy: { event: "asc" }, _count: true }),
+      prisma.conversionEvent.findMany({ where: { createdAt: { gte: since } }, distinct: ["visitorHash"], select: { visitorHash: true } }),
+    ]);
+    return { since, uniqueVisitors: uniqueVisitors.length, events: Object.fromEntries(events.map((item) => [item.event, item._count])) };
   },
 );
 
