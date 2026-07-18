@@ -38,9 +38,10 @@ type CommunityShowcase = {
 export function App() {
   const { t } = useTranslation();
   const [state, setState] = useState<
-    "loading" | "ready" | "outside" | "denied" | "error"
+    "loading" | "ready" | "outside" | "denied" | "select" | "error"
   >(sessionStorage.token ? "ready" : "loading");
   const [invite, setInvite] = useState("");
+  const [communityChoices, setCommunityChoices] = useState<any[]>([]);
   const boot = async () => {
     const init =
       window.Telegram?.WebApp.initData ||
@@ -54,12 +55,19 @@ export function App() {
       return;
     }
     try {
-      await login(init);
+      await login(
+        init,
+        new URLSearchParams(window.location.search).get("community") ||
+          undefined,
+      );
       setState("ready");
     } catch (e: any) {
       if (e.code === "NOT_GROUP_MEMBER") {
         setInvite(e.body?.inviteUrl);
         setState("denied");
+      } else if (e.code === "COMMUNITY_REQUIRED") {
+        setCommunityChoices(e.body?.error?.details || []);
+        setState("select");
       } else setState("error");
     }
   };
@@ -84,6 +92,31 @@ export function App() {
             </a>
             <button onClick={boot}>{t("retry")}</button>
           </>
+        }
+      />
+    );
+  if (state === "select")
+    return (
+      <Message
+        text="Выберите доску сообщества"
+        actions={
+          <div className="community-select">
+            {communityChoices.map((community) => (
+              <button
+                className="primary"
+                key={community.id}
+                onClick={() => {
+                  const url = new URL(window.location.href);
+                  url.searchParams.set("community", community.slug);
+                  window.history.replaceState({}, "", url);
+                  setState("loading");
+                  void boot();
+                }}
+              >
+                {community.name}
+              </button>
+            ))}
+          </div>
         }
       />
     );

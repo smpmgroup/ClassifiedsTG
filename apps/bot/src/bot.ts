@@ -12,13 +12,21 @@ const appUrl: string = appUrlValue;
 const botUsername: string = usernameValue;
 const bot = new Telegraf(token);
 const roles = new Set(["moderator", "admin", "owner"]);
-const privateBoard = () =>
-  Markup.inlineKeyboard([Markup.button.webApp("Открыть доску", appUrl)]);
-const publicBoard = () =>
+const boardUrl = (communitySlug?: string, screen?: string) => {
+  const url = new URL(appUrl);
+  if (communitySlug) url.searchParams.set("community", communitySlug);
+  if (screen) url.searchParams.set("screen", screen);
+  return url.toString();
+};
+const privateBoard = (communitySlug?: string, screen?: string) =>
+  Markup.inlineKeyboard([
+    Markup.button.webApp("Открыть доску", boardUrl(communitySlug, screen)),
+  ]);
+const publicBoard = (communitySlug: string) =>
   Markup.inlineKeyboard([
     Markup.button.url(
       "Открыть доску",
-      `https://t.me/${botUsername}?start=board`,
+      `https://t.me/${botUsername}?start=community_${communitySlug}`,
     ),
   ]);
 bot.start(async (ctx) => {
@@ -32,37 +40,100 @@ bot.start(async (ctx) => {
       data: { botStartedAt: new Date() } as any,
     });
   }
-  const privileged = user?.members.find((member) => roles.has(member.role));
+  const requestedSlug = ctx.startPayload?.replace(/^community_/, "");
+  const requestedCommunity = requestedSlug
+    ? await prisma.community.findUnique({ where: { slug: requestedSlug } })
+    : null;
+  const selectedMembership = requestedCommunity
+    ? user?.members.find(
+        (member) => member.communityId === requestedCommunity.id,
+      )
+    : user?.members.length === 1
+      ? user.members[0]
+      : undefined;
+  const privileged = selectedMembership && roles.has(selectedMembership.role)
+    ? selectedMembership
+    : user?.members.find((member) => roles.has(member.role));
+  if (!requestedCommunity && (user?.members.length || 0) > 1) {
+    const communities = await prisma.community.findMany({
+      where: { members: { some: { userId: user!.id } }, isActive: true },
+      orderBy: { name: "asc" },
+    });
+    await ctx.reply(
+      "Выберите доску сообщества:",
+      Markup.inlineKeyboard(
+        communities.map((community) => [
+          Markup.button.webApp(
+            community.name,
+            boardUrl(community.slug),
+          ),
+        ]),
+      ),
+    );
+    return;
+  }
   await ctx.reply(
     privileged
       ? `Бот подключён. Ваша роль: ${privileged.role}. Карточки модерации будут приходить в этот чат.`
       : "Добро пожаловать на доску объявлений сообщества.",
-    privateBoard(),
+    privateBoard(requestedCommunity?.slug),
   );
 });
-bot.command("board", (ctx) =>
-  ctx.reply(
+bot.command("board", async (ctx) => {
+  const community =
+    ctx.chat.type === "private"
+      ? null
+      : await prisma.community.findUnique({
+          where: { telegramChatId: BigInt(ctx.chat.id) },
+        });
+  if (ctx.chat.type !== "private" && !community)
+    return ctx.reply("Эта группа пока не подключена к сервису.");
+  return ctx.reply(
     "Открыть объявления:",
-    ctx.chat.type === "private" ? privateBoard() : publicBoard(),
-  ),
-);
+    ctx.chat.type === "private"
+      ? privateBoard()
+      : publicBoard(community!.slug),
+  );
+});
 bot.command("help", (ctx) =>
   ctx.reply(
     "/board — открыть доску\n/myads — мои объявления\n/rules — правила",
   ),
 );
 bot.command("rules", async (ctx) => {
-  const c = await prisma.community.findFirst({ where: { isActive: true } });
+  const c =
+    ctx.chat.type === "private"
+      ? await prisma.community.findFirst({
+          where: {
+            isActive: true,
+            members: {
+              some: { user: { telegramUserId: BigInt(ctx.from.id) } },
+            },
+          },
+          orderBy: { createdAt: "asc" },
+        })
+      : await prisma.community.findUnique({
+          where: { telegramChatId: BigInt(ctx.chat.id) },
+        });
   await ctx.reply(c?.rules || "Правила сообщества пока не опубликованы.");
 });
-bot.command("myads", (ctx) =>
-  ctx.reply(
+bot.command("myads", async (ctx) => {
+  const community =
+    ctx.chat.type === "private"
+      ? null
+      : await prisma.community.findUnique({
+          where: { telegramChatId: BigInt(ctx.chat.id) },
+        });
+  return ctx.reply(
     "Ваши объявления доступны в профиле Mini App.",
     Markup.inlineKeyboard([
-      Markup.button.webApp("Мои объявления", `${appUrl}?screen=my-listings`),
+      Markup.button.webApp(
+        "Мои объявления",
+        boardUrl(community?.slug, "my-listings"),
+      ),
     ]),
-  ),
-);
+  );
+});
 async function moderator(telegramId: number, communityId: string) {
   return prisma.communityMember.findFirst({
     where: {

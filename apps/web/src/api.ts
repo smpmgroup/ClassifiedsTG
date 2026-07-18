@@ -32,10 +32,10 @@ export async function apiBlob(path: string): Promise<Blob> {
   return response.blob();
 }
 
-export async function login(initData: string) {
+export async function login(initData: string, community?: string) {
   const result = await api<any>("/auth/telegram", {
     method: "POST",
-    body: JSON.stringify({ initData }),
+    body: JSON.stringify({ initData, community }),
   });
   token = result.accessToken;
   sessionStorage.setItem("token", token!);

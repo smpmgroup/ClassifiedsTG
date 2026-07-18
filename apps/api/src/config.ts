@@ -1,7 +1,9 @@
 import { z } from 'zod';
 const schema = z.object({
   NODE_ENV: z.enum(['development','test','production']).default('development'),
-  TELEGRAM_BOT_TOKEN: z.string().min(1), TELEGRAM_GROUP_ID: z.coerce.bigint(), TELEGRAM_GROUP_INVITE_URL: z.string().url(),
+  TELEGRAM_BOT_TOKEN: z.string().min(1),
+  TELEGRAM_GROUP_ID: z.preprocess((value) => value === "" || value == null ? undefined : value, z.coerce.bigint().optional()),
+  TELEGRAM_GROUP_INVITE_URL: z.preprocess((value) => value === "" || value == null ? undefined : value, z.string().url().optional()),
   TELEGRAM_INIT_DATA_MAX_AGE_SECONDS: z.coerce.number().int().positive().default(3600), MEMBERSHIP_CACHE_SECONDS: z.coerce.number().int().positive().default(600),
   ACCESS_TOKEN_SECRET: z.string().min(32), ACCESS_TOKEN_TTL_SECONDS: z.coerce.number().int().positive().default(900),
   REDIS_URL: z.string().url(), APP_URL: z.string().url(), UPLOAD_DIR: z.string().default('/app/uploads'),

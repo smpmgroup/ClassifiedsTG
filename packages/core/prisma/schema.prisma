@@ -66,12 +66,34 @@ enum NotificationStatus {
   sent
   failed
 }
+enum PlatformRole {
+  user
+  support
+  finance
+  platform_admin
+  platform_owner
+}
+enum OrganizationRole {
+  member
+  administrator
+  owner
+}
+enum TenantStatus {
+  onboarding
+  active
+  suspended
+  closed
+}
 
 model Community {
   id String @id @default(cuid())
   telegramChatId BigInt @unique
   name String
   slug String @unique
+  organizationId String?
+  tenantStatus TenantStatus @default(active)
+  connectedAt DateTime?
+  suspendedAt DateTime?
   description String @default("")
   inviteUrl String
   isActive Boolean @default(true)
@@ -102,6 +124,9 @@ model Community {
   notifications Notification[]
   activities MessageActivity[]
   payments PublicationPayment[]
+  organization Organization? @relation(fields: [organizationId], references: [id])
+  auditEvents AuditEvent[]
+  @@index([organizationId, tenantStatus])
 }
 
 model User {
@@ -113,6 +138,7 @@ model User {
   languageCode String?
   photoUrl String?
   status UserStatus @default(active)
+  platformRole PlatformRole @default(user)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   lastSeenAt DateTime @default(now())
@@ -129,6 +155,63 @@ model User {
   views ListingView[]
   activities MessageActivity[]
   payments PublicationPayment[]
+  organizations OrganizationMember[]
+  auditEvents AuditEvent[] @relation("AuditActor")
+}
+
+model Organization {
+  id String @id @default(cuid())
+  name String
+  slug String @unique
+  legalName String?
+  billingEmail String?
+  stripeCustomerId String? @unique
+  stripeConnectAccountId String? @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  communities Community[]
+  members OrganizationMember[]
+}
+
+model OrganizationMember {
+  id String @id @default(cuid())
+  organizationId String
+  userId String
+  role OrganizationRole @default(member)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([organizationId, userId])
+  @@index([userId, role])
+}
+
+model PlatformSetting {
+  id String @id @default("global")
+  platformName String @default("Community Board")
+  minimumPublicationStars Int @default(10)
+  defaultCommissionBps Int @default(2500)
+  payoutsEnabled Boolean @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model AuditEvent {
+  id String @id @default(cuid())
+  communityId String?
+  actorId String?
+  scope String
+  action String
+  targetType String?
+  targetId String?
+  metadata Json @default("{}")
+  ipHash String?
+  createdAt DateTime @default(now())
+  community Community? @relation(fields: [communityId], references: [id], onDelete: SetNull)
+  actor User? @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+  @@index([communityId, createdAt])
+  @@index([actorId, createdAt])
+  @@index([scope, action, createdAt])
 }
 
 model CommunityMember {

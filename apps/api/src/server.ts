@@ -106,6 +106,19 @@ async function auth(req: any, reply: any) {
     });
     if (!member || member.user.status !== "active")
       throw new DomainError("ACCESS_DENIED", "Доступ ограничен", 403);
+    const community = await prisma.community.findUnique({
+      where: { id: decoded.communityId },
+      select: { isActive: true, tenantStatus: true },
+    });
+    if (
+      !community?.isActive ||
+      !["active", "onboarding"].includes(community.tenantStatus)
+    )
+      throw new DomainError(
+        "COMMUNITY_SUSPENDED",
+        "Работа этого сообщества приостановлена",
+        403,
+      );
     req.identity = { ...decoded, role: member.role };
   } catch (e) {
     if (e instanceof DomainError) throw e;
@@ -124,7 +137,15 @@ async function refreshMembership(identity: Identity) {
   const key = `membership:${identity.communityId}:${identity.telegramUserId}`;
   let status = await redis.get(key);
   if (!status) {
-    status = await telegramMembership(config, Number(identity.telegramUserId));
+    const community = await prisma.community.findUniqueOrThrow({
+      where: { id: identity.communityId },
+      select: { telegramChatId: true },
+    });
+    status = await telegramMembership(
+      config,
+      community.telegramChatId,
+      Number(identity.telegramUserId),
+    );
     await redis.set(key, status, "EX", config.MEMBERSHIP_CACHE_SECONDS);
   }
   if (!["creator", "administrator", "member", "restricted"].includes(status))
@@ -142,8 +163,10 @@ type TelegramChatInfo = {
   photo?: { big_file_id?: string };
 };
 
-async function getTelegramChatInfo(): Promise<TelegramChatInfo | null> {
-  const cacheKey = `telegram-chat-info:${config.TELEGRAM_GROUP_ID}`;
+async function getTelegramChatInfo(
+  chatId: bigint,
+): Promise<TelegramChatInfo | null> {
+  const cacheKey = `telegram-chat-info:${chatId}`;
   const cached = await redis.get(cacheKey);
   if (cached) return JSON.parse(cached) as TelegramChatInfo;
   try {
@@ -152,7 +175,7 @@ async function getTelegramChatInfo(): Promise<TelegramChatInfo | null> {
       {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ chat_id: config.TELEGRAM_GROUP_ID }),
+        body: JSON.stringify({ chat_id: chatId.toString() }),
       },
     );
     const payload = (await response.json()) as {
@@ -200,16 +223,66 @@ app.post(
         "Эти данные входа уже использованы",
         401,
       );
+    const requestedCommunity =
+      typeof req.body?.community === "string"
+        ? req.body.community
+        : verified.startParam?.replace(/^community_/, "");
+    const existingUser = await prisma.user.findUnique({
+      where: { telegramUserId: BigInt(verified.user.id) },
+      include: {
+        members: {
+          where: {
+            community: {
+              isActive: true,
+              tenantStatus: { in: ["active", "onboarding"] },
+            },
+          },
+          include: { community: true },
+        },
+      },
+    });
+    let community = requestedCommunity
+      ? await prisma.community.findFirst({
+          where: {
+            OR: [{ id: requestedCommunity }, { slug: requestedCommunity }],
+            isActive: true,
+            tenantStatus: { in: ["active", "onboarding"] },
+          },
+        })
+      : existingUser?.members.length === 1
+        ? existingUser.members[0].community
+        : null;
+    if (
+      !community &&
+      !requestedCommunity &&
+      !existingUser?.members.length &&
+      config.TELEGRAM_GROUP_ID
+    )
+      community = await prisma.community.findUnique({
+        where: { telegramChatId: config.TELEGRAM_GROUP_ID },
+      });
+    if (!community)
+      throw new DomainError(
+        "COMMUNITY_REQUIRED",
+        "Выберите сообщество, доску которого хотите открыть",
+        409,
+        existingUser?.members.map(({ community }) => ({
+          id: community.id,
+          slug: community.slug,
+          name: community.name,
+        })) || [],
+      );
     await redis.set(
       replay,
       "1",
       "EX",
       config.TELEGRAM_INIT_DATA_MAX_AGE_SECONDS,
     );
-    const community = await prisma.community.findUniqueOrThrow({
-      where: { telegramChatId: config.TELEGRAM_GROUP_ID },
-    });
-    const status = await telegramMembership(config, verified.user.id);
+    const status = await telegramMembership(
+      config,
+      community.telegramChatId,
+      verified.user.id,
+    );
     if (
       !["creator", "administrator", "member", "restricted"].includes(status) &&
       !community.allowPaidNonMembers
@@ -219,7 +292,7 @@ app.post(
           "NOT_GROUP_MEMBER",
           "Эта доска объявлений доступна только участникам группы.",
         ),
-        inviteUrl: config.TELEGRAM_GROUP_INVITE_URL,
+        inviteUrl: community.inviteUrl,
       });
     const initialAdmins = (process.env.INITIAL_ADMIN_TELEGRAM_IDS || "").split(
       ",",
@@ -279,6 +352,21 @@ app.post(
       },
       { expiresIn: config.ACCESS_TOKEN_TTL_SECONDS },
     );
+    await prisma.auditEvent
+      .create({
+        data: {
+          communityId: community.id,
+          actorId: result.userId,
+          scope: "authentication",
+          action: "telegram_login",
+          targetType: "Community",
+          targetId: community.id,
+          metadata: { membershipStatus: status },
+        },
+      })
+      .catch((auditError) =>
+        req.log.warn({ err: auditError }, "login audit event failed"),
+      );
     return {
       accessToken: token,
       expiresIn: config.ACCESS_TOKEN_TTL_SECONDS,
@@ -330,7 +418,11 @@ app.get("/api/community/showcase", { preHandler: auth }, async (req: any) => {
         },
       },
     }),
-    getTelegramChatInfo(),
+    prisma.community
+      .findUniqueOrThrow({ where: { id: req.identity.communityId } })
+      .then((selectedCommunity) =>
+        getTelegramChatInfo(selectedCommunity.telegramChatId),
+      ),
   ]);
   const messageCount = activity?.messageCount || 0;
   const isPrivileged = privilegedRoles.has(req.identity.role);
@@ -355,8 +447,12 @@ app.get("/api/community/showcase", { preHandler: auth }, async (req: any) => {
       : Math.max(community.minMonthlyMessagesForFree - messageCount, 0),
   };
 });
-app.get("/api/community/avatar", { preHandler: auth }, async (_req, reply) => {
-  const chat = await getTelegramChatInfo();
+app.get("/api/community/avatar", { preHandler: auth }, async (req: any, reply) => {
+  const community = await prisma.community.findUniqueOrThrow({
+    where: { id: req.identity.communityId },
+    select: { telegramChatId: true },
+  });
+  const chat = await getTelegramChatInfo(community.telegramChatId);
   const fileId = chat?.photo?.big_file_id;
   if (!fileId)
     throw new DomainError("COMMUNITY_AVATAR_NOT_FOUND", "Аватар не найден", 404);
