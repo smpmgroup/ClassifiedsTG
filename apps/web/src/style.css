@@ -1007,6 +1007,60 @@ nav .active {
   min-height: 48px;
   border-radius: 14px;
 }
+.organization-finance {
+  margin: 0 0 12px;
+  border: 1px solid color-mix(in srgb, var(--tg-theme-button-color, #188b52) 18%, transparent);
+  border-radius: 14px;
+  overflow: hidden;
+}
+.finance-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 58px;
+  padding: 10px 13px;
+  border: 0;
+  background: color-mix(in srgb, var(--tg-theme-button-color, #188b52) 9%, var(--tg-theme-bg-color, #fff));
+  text-align: left;
+}
+.finance-summary span,
+.finance-summary small,
+.finance-summary b {
+  display: block;
+}
+.finance-summary b {
+  margin-top: 3px;
+  color: var(--tg-theme-button-color, #188b52);
+  font-size: 19px;
+}
+.finance-summary i {
+  font-size: 22px;
+  font-style: normal;
+}
+.finance-details {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  background: var(--tg-theme-bg-color, #fff);
+}
+.finance-details > div,
+.finance-details > p {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0;
+  padding: 7px 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--tg-theme-hint-color, #748078) 14%, transparent);
+  font-size: 12px;
+}
+.finance-details h4 {
+  margin: 8px 0 0;
+}
+.finance-details p span small {
+  display: block;
+  margin-top: 2px;
+}
 .platform-admin {
   margin-top: 24px;
   padding-top: 24px;

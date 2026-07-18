@@ -4,6 +4,8 @@ import {
   expiresAt,
   jsonStringify,
   publicationAccess,
+  splitStarsCommission,
+  assertBalancedEntries,
   validateTaxonomyAttributes,
 } from "./index.js";
 
@@ -14,6 +16,29 @@ describe("listing state machine", () => {
     expect(() => assertListingTransition("draft", "published")).toThrow(
       /not allowed/,
     ));
+});
+
+describe("Stars commission ledger", () => {
+  it("uses deterministic integer rounding and preserves the gross amount", () => {
+    expect(splitStarsCommission(50, 2500)).toEqual({
+      grossStars: 50,
+      commissionBps: 2500,
+      platformFeeStars: 13,
+      communityShareStars: 37,
+    });
+    expect(splitStarsCommission(10, 2500)).toMatchObject({
+      platformFeeStars: 3,
+      communityShareStars: 7,
+    });
+  });
+  it("rejects invalid splits and unbalanced journal entries", () => {
+    expect(() => splitStarsCommission(0, 2500)).toThrow();
+    expect(() => splitStarsCommission(10, 10001)).toThrow();
+    expect(() => assertBalancedEntries([50, -37, -13])).not.toThrow();
+    expect(() => assertBalancedEntries([50, -37, -12])).toThrow(
+      /not balanced/,
+    );
+  });
 });
 
 describe("expiration", () => {

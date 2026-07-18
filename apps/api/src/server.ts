@@ -22,6 +22,7 @@ import {
   expiresAt,
   validateTaxonomyAttributes,
   jsonStringify,
+  splitStarsCommission,
 } from "@board/core";
 import { loadConfig } from "./config.js";
 import { telegramMembership, validateInitData } from "./auth.js";
@@ -627,6 +628,62 @@ app.post(
 );
 
 app.get(
+  "/api/platform/organizations/:id/finance",
+  { preHandler: platformAuth },
+  async (req: any) => {
+    const organizationId = String(req.params.id);
+    const membership = await prisma.organizationMember.findUnique({
+      where: {
+        organizationId_userId: {
+          organizationId,
+          userId: req.platformIdentity.userId,
+        },
+      },
+    });
+    if (!membership)
+      throw new DomainError("FORBIDDEN", "Недостаточно прав", 403);
+    const [accounts, transactions] = await prisma.$transaction([
+      prisma.ledgerAccount.findMany({
+        where: { organizationId },
+        include: { entries: { select: { amount: true } } },
+      }),
+      prisma.ledgerTransaction.findMany({
+        where: { organizationId },
+        include: {
+          community: { select: { id: true, name: true } },
+          payment: {
+            select: {
+              id: true,
+              amountStars: true,
+              platformFeeStars: true,
+              communityShareStars: true,
+              status: true,
+            },
+          },
+        },
+        orderBy: { occurredAt: "desc" },
+        take: 100,
+      }),
+    ]);
+    const balances = Object.fromEntries(
+      accounts.map((account) => [
+        account.kind,
+        -account.entries.reduce((sum, entry) => sum + entry.amount, 0),
+      ]),
+    );
+    return {
+      currency: "XTR",
+      balances: {
+        pending: balances.liability_pending || 0,
+        available: balances.liability_available || 0,
+        paidOut: balances.liability_paid || 0,
+      },
+      transactions,
+    };
+  },
+);
+
+app.get(
   "/api/platform/admin/overview",
   { preHandler: requirePlatformRole(platformAdminRoles) },
   async () => {
@@ -695,6 +752,26 @@ app.get(
       },
       orderBy: { createdAt: "desc" },
       take: 100,
+    });
+  },
+);
+
+app.get(
+  "/api/platform/admin/ledger",
+  { preHandler: requirePlatformRole(new Set(["finance", "platform_admin", "platform_owner"])) },
+  async (req: any) => {
+    const limit = Math.min(Math.max(Number(req.query?.limit) || 100, 1), 500);
+    return prisma.ledgerTransaction.findMany({
+      include: {
+        organization: { select: { id: true, name: true } },
+        community: { select: { id: true, name: true } },
+        payment: true,
+        entries: {
+          include: { account: { select: { key: true, kind: true, name: true } } },
+        },
+      },
+      orderBy: { occurredAt: "desc" },
+      take: limit,
     });
   },
 );
@@ -1247,22 +1324,56 @@ app.post(
     });
     if (!listing)
       throw new DomainError("LISTING_NOT_PAYABLE", "Черновик не найден", 404);
-    const community = await prisma.community.findUniqueOrThrow({
-      where: { id: req.identity.communityId },
-    });
+    const [community, platformSettings] = await prisma.$transaction([
+      prisma.community.findUniqueOrThrow({
+        where: { id: req.identity.communityId },
+      }),
+      prisma.platformSetting.upsert({
+        where: { id: "global" },
+        update: {},
+        create: { id: "global" },
+      }),
+    ]);
+    if (!community.organizationId)
+      throw new DomainError(
+        "COMMUNITY_BILLING_NOT_CONFIGURED",
+        "Для сообщества не настроена организация",
+        409,
+      );
+    const split = splitStarsCommission(
+      community.publicationPriceStars,
+      platformSettings.defaultCommissionBps,
+    );
     const payload = `publication:${listing.id}:${crypto.randomUUID()}`;
+    const existingPayment = await prisma.publicationPayment.findUnique({
+      where: { listingId: listing.id },
+    });
+    if (existingPayment?.status === "paid")
+      throw new DomainError(
+        "PUBLICATION_ALREADY_PAID",
+        "Публикация уже оплачена",
+        409,
+      );
     await prisma.publicationPayment.upsert({
       where: { listingId: listing.id },
       update: {
         amountStars: community.publicationPriceStars,
+        commissionBps: split.commissionBps,
+        platformFeeStars: split.platformFeeStars,
+        communityShareStars: split.communityShareStars,
         invoicePayload: payload,
         status: "pending",
+        telegramPaymentChargeId: null,
+        paidAt: null,
       },
       create: {
         communityId: community.id,
         userId: req.identity.userId,
         listingId: listing.id,
         amountStars: community.publicationPriceStars,
+        commissionBps: split.commissionBps,
+        platformFeeStars: split.platformFeeStars,
+        communityShareStars: split.communityShareStars,
         invoicePayload: payload,
       },
     });
@@ -1293,6 +1404,8 @@ app.post(
     return {
       invoiceUrl: result.result,
       amountStars: community.publicationPriceStars,
+      platformFeeStars: split.platformFeeStars,
+      communityShareStars: split.communityShareStars,
     };
   },
 );

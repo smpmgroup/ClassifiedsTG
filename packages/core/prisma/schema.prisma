@@ -126,6 +126,7 @@ model Community {
   payments PublicationPayment[]
   organization Organization? @relation(fields: [organizationId], references: [id])
   auditEvents AuditEvent[]
+  ledgerTransactions LedgerTransaction[]
   @@index([organizationId, tenantStatus])
 }
 
@@ -173,6 +174,8 @@ model Organization {
   communities Community[]
   members OrganizationMember[]
   connectionIntents CommunityConnectionIntent[]
+  ledgerAccounts LedgerAccount[]
+  ledgerTransactions LedgerTransaction[]
 }
 
 model OrganizationMember {
@@ -337,6 +340,9 @@ model PublicationPayment {
   userId String
   listingId String @unique
   amountStars Int
+  commissionBps Int @default(2500)
+  platformFeeStars Int @default(0)
+  communityShareStars Int @default(0)
   invoicePayload String @unique
   telegramPaymentChargeId String? @unique
   status String @default("pending")
@@ -345,6 +351,55 @@ model PublicationPayment {
   community Community @relation(fields: [communityId], references: [id])
   user User @relation(fields: [userId], references: [id])
   listing Listing @relation(fields: [listingId], references: [id])
+  ledgerTransactions LedgerTransaction[]
+}
+
+model LedgerAccount {
+  id String @id @default(cuid())
+  key String @unique
+  organizationId String?
+  currency String @default("XTR")
+  kind String
+  name String
+  createdAt DateTime @default(now())
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  entries LedgerEntry[]
+  @@index([organizationId, currency, kind])
+}
+
+model LedgerTransaction {
+  id String @id @default(cuid())
+  externalRef String @unique
+  type String
+  status String
+  organizationId String?
+  communityId String?
+  paymentId String?
+  grossAmount Int
+  commissionBps Int
+  metadata Json @default("{}")
+  occurredAt DateTime @default(now())
+  createdAt DateTime @default(now())
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  community Community? @relation(fields: [communityId], references: [id], onDelete: Restrict)
+  payment PublicationPayment? @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  entries LedgerEntry[]
+  @@index([organizationId, occurredAt])
+  @@index([communityId, occurredAt])
+  @@index([paymentId])
+  @@index([type, status, occurredAt])
+}
+
+model LedgerEntry {
+  id String @id @default(cuid())
+  transactionId String
+  accountId String
+  amount Int
+  createdAt DateTime @default(now())
+  transaction LedgerTransaction @relation(fields: [transactionId], references: [id], onDelete: Restrict)
+  account LedgerAccount @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  @@index([transactionId])
+  @@index([accountId, createdAt])
 }
 
 model ListingImage {

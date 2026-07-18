@@ -266,6 +266,7 @@ function PlatformWorkspace() {
                 <p className="muted">Группы пока не подключены.</p>
               )}
             </div>
+            <OrganizationFinance organizationId={organization.id} />
             <button
               className="primary connect-community"
               disabled={busy === organization.id}
@@ -298,6 +299,47 @@ function PlatformWorkspace() {
         data.user.platformRole,
       ) && <PlatformOwnerPanel canEdit={data.user.platformRole === "platform_owner"} />}
     </main>
+  );
+}
+
+function OrganizationFinance({ organizationId }: { organizationId: string }) {
+  const [finance, setFinance] = useState<any>();
+  const [expanded, setExpanded] = useState(false);
+  useEffect(() => {
+    request(`/platform/organizations/${organizationId}/finance`)
+      .then(setFinance)
+      .catch(() => undefined);
+  }, [organizationId]);
+  if (!finance) return null;
+  return (
+    <section className="organization-finance">
+      <button
+        type="button"
+        className="finance-summary"
+        onClick={() => setExpanded((value) => !value)}
+      >
+        <span>
+          <small>НАЧИСЛЕНО СООБЩЕСТВУ</small>
+          <b>{finance.balances.pending + finance.balances.available} ⭐</b>
+        </span>
+        <i>{expanded ? "−" : "+"}</i>
+      </button>
+      {expanded && (
+        <div className="finance-details">
+          <div><span>Ожидает разблокировки</span><b>{finance.balances.pending} ⭐</b></div>
+          <div><span>Доступно к выплате</span><b>{finance.balances.available} ⭐</b></div>
+          <div><span>Выплачено</span><b>{finance.balances.paidOut} ⭐</b></div>
+          <h4>Последние операции</h4>
+          {finance.transactions.slice(0, 10).map((transaction: any) => (
+            <p key={transaction.id}>
+              <span>{transaction.community?.name || "Сообщество"}<small>{new Date(transaction.occurredAt).toLocaleDateString("ru")}</small></span>
+              <b>+{transaction.payment?.communityShareStars || 0} ⭐</b>
+            </p>
+          ))}
+          {!finance.transactions.length && <p className="muted">Платных публикаций пока нет.</p>}
+        </div>
+      )}
+    </section>
   );
 }
 

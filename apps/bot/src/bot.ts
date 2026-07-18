@@ -4,6 +4,7 @@ import {
   prisma,
   assertListingTransition,
   categoryTaxonomies,
+  recordPaidPublicationLedger,
 } from "@board/core";
 const tokenValue = process.env.TELEGRAM_BOT_TOKEN;
 const appUrlValue = process.env.TELEGRAM_MINI_APP_URL;
@@ -608,26 +609,58 @@ bot.on("message", async (ctx) => {
     const paid = ctx.message.successful_payment;
     const payment = await prisma.publicationPayment.findUnique({
       where: { invoicePayload: paid.invoice_payload },
+      include: { community: true },
     });
     if (
       payment &&
       paid.currency === "XTR" &&
       paid.total_amount === payment.amountStars
-    )
-      await prisma.$transaction([
-        prisma.publicationPayment.update({
-          where: { id: payment.id },
+    ) {
+      if (!payment.community.organizationId)
+        throw new Error("Payment community has no billing organization");
+      const organizationId = payment.community.organizationId;
+      await prisma.$transaction(async (tx) => {
+        const accepted = await tx.publicationPayment.updateMany({
+          where: {
+            id: payment.id,
+            status: "pending",
+            telegramPaymentChargeId: null,
+          },
           data: {
             status: "paid",
             paidAt: new Date(),
             telegramPaymentChargeId: paid.telegram_payment_charge_id,
           },
-        }),
-        prisma.listing.update({
+        });
+        if (accepted.count === 0) {
+          const current = await tx.publicationPayment.findUniqueOrThrow({
+            where: { id: payment.id },
+          });
+          if (
+            current.status === "paid" &&
+            current.telegramPaymentChargeId === paid.telegram_payment_charge_id
+          )
+            return;
+          throw new Error("Payment is not pending or charge ID differs");
+        }
+        await recordPaidPublicationLedger(tx, {
+          externalRef: `telegram-stars:${paid.telegram_payment_charge_id}`,
+          organizationId,
+          communityId: payment.communityId,
+          paymentId: payment.id,
+          telegramPaymentChargeId: paid.telegram_payment_charge_id,
+          grossStars: payment.amountStars,
+          commissionBps: payment.commissionBps,
+          platformFeeStars: payment.platformFeeStars,
+          communityShareStars: payment.communityShareStars,
+          occurredAt: new Date(),
+        });
+        await tx.listing.update({
           where: { id: payment.listingId },
           data: { paymentStatus: "paid" },
-        }),
-      ]);
+        });
+      });
+    }
     return;
   }
   if (ctx.chat.type === "private") return;
