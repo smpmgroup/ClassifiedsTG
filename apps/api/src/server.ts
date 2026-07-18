@@ -136,6 +136,37 @@ async function refreshMembership(identity: Identity) {
   return status;
 }
 
+type TelegramChatInfo = {
+  title?: string;
+  description?: string;
+  photo?: { big_file_id?: string };
+};
+
+async function getTelegramChatInfo(): Promise<TelegramChatInfo | null> {
+  const cacheKey = `telegram-chat-info:${config.TELEGRAM_GROUP_ID}`;
+  const cached = await redis.get(cacheKey);
+  if (cached) return JSON.parse(cached) as TelegramChatInfo;
+  try {
+    const response = await fetch(
+      `https://api.telegram.org/bot${config.TELEGRAM_BOT_TOKEN}/getChat`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ chat_id: config.TELEGRAM_GROUP_ID }),
+      },
+    );
+    const payload = (await response.json()) as {
+      ok?: boolean;
+      result?: TelegramChatInfo;
+    };
+    if (!response.ok || !payload.ok || !payload.result) return null;
+    await redis.set(cacheKey, JSON.stringify(payload.result), "EX", 300);
+    return payload.result;
+  } catch {
+    return null;
+  }
+}
+
 app.get("/health", async () => {
   await Promise.all([prisma.$queryRaw`SELECT 1`, redis.ping()]);
   return { status: "ok" };
@@ -285,6 +316,75 @@ app.get("/api/me", { preHandler: auth }, async (req: any) => {
     },
   };
 });
+app.get("/api/community/showcase", { preHandler: auth }, async (req: any) => {
+  const [community, activity, chat] = await Promise.all([
+    prisma.community.findUniqueOrThrow({
+      where: { id: req.identity.communityId },
+    }),
+    prisma.messageActivity.findUnique({
+      where: {
+        communityId_userId_month: {
+          communityId: req.identity.communityId,
+          userId: req.identity.userId,
+          month: new Date().toISOString().slice(0, 7),
+        },
+      },
+    }),
+    getTelegramChatInfo(),
+  ]);
+  const messageCount = activity?.messageCount || 0;
+  const isPrivileged = privilegedRoles.has(req.identity.role);
+  const freeForUser =
+    isPrivileged || messageCount >= community.minMonthlyMessagesForFree;
+  return {
+    name: chat?.title || community.name,
+    description:
+      community.description ||
+      chat?.description ||
+      "Объявления участников нашего сообщества в одном удобном месте.",
+    hasAvatar: Boolean(chat?.photo?.big_file_id),
+    inviteUrl: community.inviteUrl,
+    minMonthlyMessagesForFree: community.minMonthlyMessagesForFree,
+    publicationPriceStars: community.publicationPriceStars,
+    allowPaidNonMembers: community.allowPaidNonMembers,
+    messageCount,
+    freeForUser,
+    isPrivileged,
+    messagesRemaining: freeForUser
+      ? 0
+      : Math.max(community.minMonthlyMessagesForFree - messageCount, 0),
+  };
+});
+app.get("/api/community/avatar", { preHandler: auth }, async (_req, reply) => {
+  const chat = await getTelegramChatInfo();
+  const fileId = chat?.photo?.big_file_id;
+  if (!fileId)
+    throw new DomainError("COMMUNITY_AVATAR_NOT_FOUND", "Аватар не найден", 404);
+  const fileResponse = await fetch(
+    `https://api.telegram.org/bot${config.TELEGRAM_BOT_TOKEN}/getFile`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ file_id: fileId }),
+    },
+  );
+  const filePayload = (await fileResponse.json()) as {
+    ok?: boolean;
+    result?: { file_path?: string };
+  };
+  if (!fileResponse.ok || !filePayload.ok || !filePayload.result?.file_path)
+    throw new DomainError("COMMUNITY_AVATAR_UNAVAILABLE", "Аватар недоступен", 502);
+  const imageResponse = await fetch(
+    `https://api.telegram.org/file/bot${config.TELEGRAM_BOT_TOKEN}/${filePayload.result.file_path}`,
+  );
+  if (!imageResponse.ok)
+    throw new DomainError("COMMUNITY_AVATAR_UNAVAILABLE", "Аватар недоступен", 502);
+  const image = Buffer.from(await imageResponse.arrayBuffer());
+  return reply
+    .type(imageResponse.headers.get("content-type") || "image/jpeg")
+    .header("cache-control", "private, max-age=300")
+    .send(image);
+});
 app.patch("/api/me/settings", { preHandler: auth }, async (req: any) => {
   const allowed = [
     "notifyListingUpdates",
@@ -367,16 +467,26 @@ app.get("/api/listings", { preHandler: auth }, async (req: any) => {
         : q.sort === "popular"
           ? { viewCount: "desc" }
           : { publishedAt: "desc" };
-  return prisma.listing.findMany({
+  const listings = await prisma.listing.findMany({
     where,
     include: {
       images: { orderBy: { sortOrder: "asc" }, take: 1 },
       category: true,
       author: { select: { firstName: true, username: true } },
+      favorites: {
+        where: { userId: req.identity.userId },
+        select: { id: true },
+      },
+      _count: { select: { images: true } },
     },
     orderBy: order,
     take: Math.min(Number(q.limit) || 30, 100),
   });
+  return listings.map(({ favorites, _count, ...listing }) => ({
+    ...listing,
+    isFavorite: favorites.length > 0,
+    imageCount: _count.images,
+  }));
 });
 app.get("/api/listings/:id", { preHandler: auth }, async (req: any) => {
   const listing = await prisma.listing.findFirst({

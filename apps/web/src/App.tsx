@@ -9,7 +9,7 @@ import {
   useSearchParams,
 } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { api, login, request } from "./api";
+import { api, apiBlob, login, request } from "./api";
 type Listing = {
   id: string;
   title: string;
@@ -20,6 +20,20 @@ type Listing = {
   images: { url?: string }[];
   priceType?: string;
   category?: { name: string; icon?: string };
+  imageCount?: number;
+  isFavorite?: boolean;
+  publishedAt?: string;
+};
+type CommunityShowcase = {
+  name: string;
+  description: string;
+  hasAvatar: boolean;
+  minMonthlyMessagesForFree: number;
+  publicationPriceStars: number;
+  messageCount: number;
+  freeForUser: boolean;
+  isPrivileged: boolean;
+  messagesRemaining: number;
 };
 export function App() {
   const { t } = useTranslation();
@@ -143,41 +157,129 @@ function Skeleton() {
 function Catalog() {
   const { t } = useTranslation();
   const nav = useNavigate();
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
   const [items, setItems] = useState<Listing[]>([]),
     [loading, setLoading] = useState(true),
-    [search, setSearch] = useState("");
+    [search, setSearch] = useState(params.get("search") || ""),
+    [sort, setSort] = useState(params.get("sort") || "newest"),
+    [categories, setCategories] = useState<any[]>([]),
+    [community, setCommunity] = useState<CommunityShowcase>(),
+    [avatarUrl, setAvatarUrl] = useState(""),
+    [loadError, setLoadError] = useState("");
+  const categoryId = params.get("categoryId") || "";
   const load = () => {
     setLoading(true);
+    setLoadError("");
     request(
-      `/listings?search=${encodeURIComponent(search)}&categoryId=${encodeURIComponent(params.get("categoryId") || "")}`,
+      `/listings?search=${encodeURIComponent(params.get("search") || "")}&categoryId=${encodeURIComponent(categoryId)}&sort=${encodeURIComponent(params.get("sort") || "newest")}`,
     )
       .then(setItems)
+      .catch((error) => setLoadError(error.message))
       .finally(() => setLoading(false));
   };
   useEffect(load, [params]);
+  useEffect(() => {
+    Promise.all([request("/categories"), request("/community/showcase")]).then(
+      ([categoryData, communityData]) => {
+        setCategories(categoryData);
+        setCommunity(communityData);
+      },
+    );
+  }, []);
+  useEffect(() => {
+    if (!community?.hasAvatar) return;
+    let objectUrl = "";
+    apiBlob("/community/avatar")
+      .then((blob) => {
+        objectUrl = URL.createObjectURL(blob);
+        setAvatarUrl(objectUrl);
+      })
+      .catch(() => undefined);
+    return () => {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [community?.hasAvatar]);
+  const applyQuery = (updates: Record<string, string>) => {
+    const next = new URLSearchParams(params);
+    Object.entries(updates).forEach(([key, value]) => {
+      if (value) next.set(key, value);
+      else next.delete(key);
+    });
+    setParams(next);
+  };
   const toggleFavorite = async (event: any, id: string) => {
     event.stopPropagation();
     try {
-      await request(`/listings/${id}/favorite`, "POST");
+      const result = await request(`/listings/${id}/favorite`, "POST");
+      setItems((current) =>
+        current.map((item) =>
+          item.id === id ? { ...item, isFavorite: result.favorite } : item,
+        ),
+      );
+      window.Telegram?.WebApp.HapticFeedback?.notificationOccurred("success");
     } catch (error: any) {
       window.Telegram?.WebApp.HapticFeedback?.notificationOccurred("error");
     }
   };
   return (
     <section className="page">
-      <header>
-        <div>
-          <small>COMMUNITY BOARD</small>
-          <h1>{t("newest")}</h1>
-        </div>
-        <div className="avatar">◉</div>
-      </header>
+      <section className="community-hero">
+        <header>
+          <div className="community-copy">
+            <small>ДОСКА ОБЪЯВЛЕНИЙ СООБЩЕСТВА</small>
+            <h1>{community?.name || "Наше сообщество"}</h1>
+          </div>
+          <div className="community-avatar" aria-label="Аватар сообщества">
+            {avatarUrl ? (
+              <img src={avatarUrl} alt="" />
+            ) : (
+              community?.name?.trim().charAt(0).toUpperCase() || "С"
+            )}
+          </div>
+        </header>
+        <p className="community-description">{community?.description}</p>
+        {community && (
+          <div className={`access-note ${community.freeForUser ? "free" : "paid"}`}>
+            <span>{community.freeForUser ? "✓" : "⭐"}</span>
+            <div>
+              <b>
+                {community.freeForUser
+                  ? "Для вас размещение бесплатно"
+                  : `Публикация — ${community.publicationPriceStars} ⭐`}
+              </b>
+              <small>
+                {community.isPrivileged
+                  ? "Для администраторов сообщества без ограничений."
+                  : community.freeForUser
+                    ? `Активность: ${community.messageCount} из ${community.minMonthlyMessagesForFree} сообщений в этом месяце.`
+                    : `До бесплатного размещения осталось ${community.messagesRemaining} сообщений в чате.`}
+              </small>
+            </div>
+          </div>
+        )}
+        <button className="hero-add" onClick={() => nav("/add")}>
+          ＋ Разместить объявление
+        </button>
+      </section>
+      <div className="category-chips" aria-label="Категории">
+        <button className={!categoryId ? "active" : ""} onClick={() => applyQuery({ categoryId: "" })}>
+          Все
+        </button>
+        {categories.map((category) => (
+          <button
+            key={category.id}
+            className={categoryId === category.id ? "active" : ""}
+            onClick={() => applyQuery({ categoryId: category.id })}
+          >
+            <span>{category.icon || "◻"}</span> {category.name}
+          </button>
+        ))}
+      </div>
       <form
         className="search"
         onSubmit={(e) => {
           e.preventDefault();
-          load();
+          applyQuery({ search });
         }}
       >
         <span>⌕</span>
@@ -186,7 +288,25 @@ function Catalog() {
           onChange={(e) => setSearch(e.target.value)}
           placeholder={t("search")}
         />
+        {search && (
+          <button type="button" className="search-clear" onClick={() => { setSearch(""); applyQuery({ search: "" }); }}>
+            ×
+          </button>
+        )}
       </form>
+      <div className="catalog-heading">
+        <div>
+          <small>{categoryId ? "ВЫБРАННАЯ КАТЕГОРИЯ" : "СВЕЖИЕ ОБЪЯВЛЕНИЯ"}</small>
+          <h2>{loading ? "Загрузка…" : `${items.length} ${listingCountLabel(items.length)}`}</h2>
+        </div>
+        <select value={sort} onChange={(e) => { setSort(e.target.value); applyQuery({ sort: e.target.value }); }} aria-label="Сортировка">
+          <option value="newest">Сначала новые</option>
+          <option value="popular">Популярные</option>
+          <option value="price_asc">Цена по возрастанию</option>
+          <option value="price_desc">Цена по убыванию</option>
+        </select>
+      </div>
+      {loadError && <LoadError message={loadError} />}
       {loading ? (
         <Skeleton />
       ) : items.length ? (
@@ -201,13 +321,17 @@ function Catalog() {
                 className="photo"
                 style={{ backgroundImage: `url(${item.images[0]?.url || ""})` }}
               >
+                {!item.images[0]?.url && <span className="photo-placeholder">{item.category?.icon || "📦"}</span>}
+                {Boolean(item.imageCount) && <span className="photo-count">📷 {item.imageCount}</span>}
                 <button
                   aria-label="Добавить в избранное"
+                  className={item.isFavorite ? "favorite active" : "favorite"}
                   onClick={(event) => void toggleFavorite(event, item.id)}
                 >
-                  ♡
+                  {item.isFavorite ? "♥" : "♡"}
                 </button>
               </div>
+              <small className="listing-category">{item.category?.icon} {item.category?.name}</small>
               <h3>{item.title}</h3>
               <strong>
                 {item.priceType === "free"
@@ -233,6 +357,14 @@ function Catalog() {
       )}
     </section>
   );
+}
+function listingCountLabel(count: number) {
+  const lastTwo = count % 100;
+  const last = count % 10;
+  if (lastTwo >= 11 && lastTwo <= 14) return "объявлений";
+  if (last === 1) return "объявление";
+  if (last >= 2 && last <= 4) return "объявления";
+  return "объявлений";
 }
 function Categories() {
   const [data, setData] = useState<any[]>([]);
