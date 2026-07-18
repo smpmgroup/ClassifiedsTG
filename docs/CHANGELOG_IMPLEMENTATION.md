@@ -51,3 +51,16 @@
   changing listing/member IDs or losing application data.
 - Added suspended-tenant enforcement and verified cross-tenant denial against a
   temporary second production tenant.
+
+## SaaS onboarding — sessions 2–3
+
+- Added a community-independent Telegram platform session and separate scoped token.
+- Added an owner workspace listing organisations and their connected boards.
+- Added first-organisation creation for new customers.
+- Added short-lived, single-use, hashed connection intents and generated Telegram
+  `startgroup` links from the owner workspace.
+- Added bot-side requester identity and group administrator verification before tenant
+  creation, plus race-safe intent claiming and immutable onboarding audit records.
+- Provision new communities with owner membership and the complete maintained category
+  taxonomy in one database transaction.
+- Published `/connect` in the production bot command list.
