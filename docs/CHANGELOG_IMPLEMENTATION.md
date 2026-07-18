@@ -36,3 +36,18 @@
 - Added persisted member preferences for listing-status notifications, buyer-interest notifications and direct Telegram contact.
 - Made the bot and contact API enforce those personal preferences.
 - Added one shared community-rules document, an administrator editor and a default initial policy shown verbatim to all users.
+
+## SaaS foundation — session 1
+
+- Replaced singleton Telegram membership and chat-photo lookups with tenant-scoped
+  lookups based on the selected community's persisted chat ID.
+- Added signed `start_param`, explicit community URL and existing-membership tenant
+  resolution while retaining the original group ID only as a migration fallback.
+- Added a community selector for users who administer or participate in multiple boards.
+- Made bot board links tenant-specific and resolved group commands from the actual chat.
+- Added organisations, organisation memberships, platform roles, tenant lifecycle state,
+  global platform settings and immutable audit events.
+- Migrated the existing community and owner into the new organisation model without
+  changing listing/member IDs or losing application data.
+- Added suspended-tenant enforcement and verified cross-tenant denial against a
+  temporary second production tenant.
