@@ -4,7 +4,7 @@
 
 `worker` runs listing expiration, Stars settlement and notification recovery. Every job uses a Redis lease and records its result in `JobRun`. The platform owner panel shows the latest run, queue depth and open `SystemAlert` records.
 
-- A healthy deployment has `backend`, `bot`, `worker`, `frontend`, `postgres`, `redis` and `nginx` running.
+- A healthy deployment has `backend`, `bot`, `worker`, `frontend`, `postgres`, `redis`, `nginx` and `caddy` running. Caddy is part of Compose and its certificate state lives in the named `caddy_data` and `caddy_config` volumes.
 - A failed job opens or increments a deduplicated alert. Notification delivery is retried up to five times; exhausted items form the dead-letter queue.
 - Automatic Stars settlement uses idempotent ledger references and a distributed lock.
 
