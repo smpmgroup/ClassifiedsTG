@@ -703,8 +703,8 @@ app.post(
     } catch (unknownError) {
       member = { status: "unavailable" };
     }
-    const active = ["member", "administrator"].includes(member.status);
     const isAdministrator = member.status === "administrator";
+    const active = isAdministrator;
     const updated = await prisma.community.update({
       where: { id: community.id },
       data: {
@@ -2659,6 +2659,8 @@ app.patch(
       Object.entries(req.body || {}).filter(([key]) => allowed.includes(key)),
     );
     if (typeof data.rules === "string") data.rules = data.rules.slice(0, 10000);
+    if (typeof data.description === "string")
+      data.description = data.description.trim().slice(0, 500);
     if (
       data.minMonthlyMessagesForFree !== undefined &&
       (!Number.isInteger(data.minMonthlyMessagesForFree) ||

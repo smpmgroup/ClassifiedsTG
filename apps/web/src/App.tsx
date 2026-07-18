@@ -1984,6 +1984,7 @@ function AdminSettings() {
     setError("");
     try {
       const result = await request("/admin/settings", "PATCH", {
+        description: settings.description,
         minMonthlyMessagesForFree: settings.minMonthlyMessagesForFree,
         publicationPriceStars: settings.publicationPriceStars,
         allowPaidNonMembers: settings.allowPaidNonMembers,
@@ -2009,6 +2010,19 @@ function AdminSettings() {
       {message && <div className="save-success">{message}</div>}
       {settings ? (
         <div className="admin-settings">
+          <label>
+            <span>Описание доски</span>
+            <textarea
+              rows={4}
+              maxLength={500}
+              value={settings.description || ""}
+              placeholder="Для кого эта доска и какие объявления здесь размещают"
+              onChange={(event) =>
+                setSettings({ ...settings, description: event.target.value })
+              }
+            />
+            <small>Показывается на главной и завершает настройку бренда.</small>
+          </label>
           <label>
             <span>Сообщений в месяц для бесплатной публикации</span>
             <input

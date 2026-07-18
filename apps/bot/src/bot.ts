@@ -652,6 +652,7 @@ function notificationText(type: string, p: any) {
         listing_changes_requested: "Ваше объявление требует изменений.",
         listing_interest: "Вашим объявлением заинтересовались.",
         payment_refunded: "Оплата Telegram Stars возвращена. Платная публикация скрыта.",
+        tenant_permission_failure: "Бот удалён из группы или потерял доступ. Доска приостановлена; проверьте права бота в кабинете владельца.",
       } as any
     )[type] || "Новое уведомление") + reason
   );
@@ -778,8 +779,8 @@ bot.on("my_chat_member", async (ctx) => {
   });
   if (!community) return;
   const member = ctx.myChatMember.new_chat_member as any;
-  const active = ["member", "administrator"].includes(member.status);
   const isAdministrator = member.status === "administrator";
+  const active = isAdministrator;
   await prisma.community.update({
     where: { id: community.id },
     data: {
@@ -800,6 +801,24 @@ bot.on("my_chat_member", async (ctx) => {
           : {}),
     },
   });
+  if (!active) {
+    const recipients = await prisma.communityMember.findMany({
+      where: {
+        communityId: community.id,
+        role: { in: ["owner", "admin"] },
+      },
+      select: { userId: true },
+    });
+    if (recipients.length)
+      await prisma.notification.createMany({
+        data: recipients.map((recipient) => ({
+          communityId: community.id,
+          userId: recipient.userId,
+          type: "tenant_permission_failure",
+          payload: { status: member.status },
+        })),
+      });
+  }
   await prisma.auditEvent.create({
     data: {
       communityId: community.id,
