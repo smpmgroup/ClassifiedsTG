@@ -239,9 +239,20 @@ bot.command("board", async (ctx) => {
 });
 bot.command("help", (ctx) =>
   ctx.reply(
-    "/board — открыть доску\n/myads — мои объявления\n/rules — правила\n/connect — кабинет владельца сообщества",
+    "/board — открыть доску\n/myads — мои объявления\n/rules — правила\n/connect — кабинет владельца сообщества\n/terms — условия сервиса\n/support — поддержка\n/paysupport — вопросы по оплате",
   ),
 );
+bot.command("terms", (ctx) =>
+  ctx.reply(
+    "Публикуя объявление, вы подтверждаете достоверность данных, соблюдение правил сообщества и согласие на модерацию. Платные публикации оплачиваются Telegram Stars; возвраты рассматривает поддержка.",
+  ),
+);
+const supportReply = (ctx: any) =>
+  ctx.reply(
+    "Опишите вопрос в ответном сообщении или свяжитесь с администратором вашего сообщества. Для вопроса о Stars укажите дату, сумму и название объявления. Не присылайте коды или пароли.",
+  );
+bot.command("support", supportReply);
+bot.command("paysupport", supportReply);
 bot.command("connect", (ctx) => {
   if (ctx.chat.type !== "private")
     return ctx.reply("Откройте личный чат с ботом и отправьте /connect.");
@@ -581,6 +592,7 @@ function notificationText(type: string, p: any) {
         listing_rejected: "Ваше объявление отклонено.",
         listing_changes_requested: "Ваше объявление требует изменений.",
         listing_interest: "Вашим объявлением заинтересовались.",
+        payment_refunded: "Оплата Telegram Stars возвращена. Платная публикация скрыта.",
       } as any
     )[type] || "Новое уведомление") + reason
   );

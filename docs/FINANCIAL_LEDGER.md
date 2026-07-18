@@ -47,8 +47,28 @@ Repeated delivery of the same Telegram update returns the existing transaction.
   counters.
 - A transaction is invalid unless its integer entries sum exactly to zero.
 
-## Current lifecycle
+## Reconciliation and settlement
 
-`pending_settlement` represents Telegram's reward holding period. The next financial
-delivery sessions add Telegram transaction reconciliation, refund journals, settlement
-batches, Stripe Connect recipients and payout journals.
+The platform finance console imports the bot's transaction history with
+`getStarTransactions` and records immutable `TelegramStarObservation` rows. A hashed
+fingerprint makes repeated imports safe. Incoming transactions are matched first by
+Telegram charge ID and then by invoice payload; unmatched remote receipts and paid local
+payments missing remotely are shown as discrepancies.
+
+`pending_settlement` represents Telegram's reward holding period. After the configured
+hold (21 days by default), only a paid journal confirmed by an incoming Telegram
+observation is eligible. Settlement creates a new balanced six-entry journal moving the
+asset, organisation payable and commission from pending to available accounts. It does
+not rewrite the paid journal.
+
+## Refunds
+
+Finance roles invoke Telegram `refundStarPayment` only after the local payment has been
+atomically locked as `refund_processing`. A successful external refund creates a linked
+compensating journal, marks the payment refunded, removes the listing's paid entitlement
+and hides it if it was live. A refund after settlement reverses both the original and
+settlement journals, leaving all affected account balances at zero. Duplicate refund
+requests return the existing result.
+
+The bot exposes `/terms`, `/support` and `/paysupport`. Stripe Connect recipients and
+payout journals remain separate future delivery packages.

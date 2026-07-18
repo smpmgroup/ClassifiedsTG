@@ -197,6 +197,8 @@ model PlatformSetting {
   minimumPublicationStars Int @default(10)
   defaultCommissionBps Int @default(2500)
   payoutsEnabled Boolean @default(false)
+  starsHoldDays Int @default(21)
+  minimumPayoutStars Int @default(1000)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -352,6 +354,7 @@ model PublicationPayment {
   user User @relation(fields: [userId], references: [id])
   listing Listing @relation(fields: [listingId], references: [id])
   ledgerTransactions LedgerTransaction[]
+  telegramObservations TelegramStarObservation[]
 }
 
 model LedgerAccount {
@@ -400,6 +403,25 @@ model LedgerEntry {
   account LedgerAccount @relation(fields: [accountId], references: [id], onDelete: Restrict)
   @@index([transactionId])
   @@index([accountId, createdAt])
+}
+
+model TelegramStarObservation {
+  id String @id @default(cuid())
+  fingerprint String @unique
+  telegramTransactionId String
+  amount Int
+  nanostarAmount Int @default(0)
+  direction String
+  transactionDate DateTime
+  partnerType String?
+  invoicePayload String?
+  paymentId String?
+  raw Json
+  observedAt DateTime @default(now())
+  payment PublicationPayment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  @@index([telegramTransactionId])
+  @@index([paymentId, transactionDate])
+  @@index([direction, transactionDate])
 }
 
 model ListingImage {

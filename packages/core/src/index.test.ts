@@ -39,6 +39,11 @@ describe("Stars commission ledger", () => {
       /not balanced/,
     );
   });
+  it("balances settlement movements between pending and available", () => {
+    expect(() =>
+      assertBalancedEntries([-50, 50, 37, -37, 13, -13]),
+    ).not.toThrow();
+  });
 });
 
 describe("expiration", () => {

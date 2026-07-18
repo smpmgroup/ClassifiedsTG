@@ -348,17 +348,25 @@ function PlatformOwnerPanel({ canEdit }: { canEdit: boolean }) {
   const [communities, setCommunities] = useState<any[]>([]);
   const [minimumStars, setMinimumStars] = useState(10);
   const [commissionPercent, setCommissionPercent] = useState(25);
+  const [holdDays, setHoldDays] = useState(21);
+  const [minimumPayout, setMinimumPayout] = useState(1000);
+  const [ledger, setLedger] = useState<any[]>([]);
+  const [reconciliation, setReconciliation] = useState<any>();
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const load = async () => {
-    const [summary, tenantItems] = await Promise.all([
+    const [summary, tenantItems, ledgerItems] = await Promise.all([
       request("/platform/admin/overview"),
       request("/platform/admin/communities"),
+      request("/platform/admin/ledger?limit=50"),
     ]);
     setOverview(summary);
     setCommunities(tenantItems);
     setMinimumStars(summary.settings.minimumPublicationStars);
     setCommissionPercent(summary.settings.defaultCommissionBps / 100);
+    setHoldDays(summary.settings.starsHoldDays);
+    setMinimumPayout(summary.settings.minimumPayoutStars);
+    setLedger(ledgerItems);
   };
   useEffect(() => {
     void load().catch((e) => setMessage(e.message));
@@ -371,8 +379,40 @@ function PlatformOwnerPanel({ canEdit }: { canEdit: boolean }) {
       await request("/platform/admin/settings", "PATCH", {
         minimumPublicationStars: Number(minimumStars),
         defaultCommissionBps: Math.round(Number(commissionPercent) * 100),
+        starsHoldDays: Number(holdDays),
+        minimumPayoutStars: Number(minimumPayout),
       });
       setMessage("✓ Глобальные настройки сохранены");
+      await load();
+    } catch (e: any) {
+      setMessage(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const reconcile = async () => {
+    setBusy(true);
+    setMessage("");
+    try {
+      const result = await request("/platform/admin/stars/reconcile", "POST", {});
+      setReconciliation(result);
+      setMessage("✓ Telegram Stars сверены");
+      await request("/platform/admin/stars/settle", "POST", {});
+      await load();
+    } catch (e: any) {
+      setMessage(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const refund = async (payment: any) => {
+    const reason = window.prompt("Причина возврата Stars пользователю:");
+    if (!reason) return;
+    setBusy(true);
+    setMessage("");
+    try {
+      await request(`/platform/admin/payments/${payment.id}/refund`, "POST", { reason });
+      setMessage("✓ Stars возвращены, объявление скрыто");
       await load();
     } catch (e: any) {
       setMessage(e.message);
@@ -417,10 +457,40 @@ function PlatformOwnerPanel({ canEdit }: { canEdit: boolean }) {
             Комиссия платформы, %
             <input type="number" min="0" max="90" step="0.01" value={commissionPercent} onChange={(e) => setCommissionPercent(Number(e.target.value))} />
           </label>
+          <label>
+            Срок разблокировки Stars, дней
+            <input type="number" min="0" max="90" value={holdDays} onChange={(e) => setHoldDays(Number(e.target.value))} />
+          </label>
+          <label>
+            Минимум для выплаты, Stars
+            <input type="number" min="1" max="10000000" value={minimumPayout} onChange={(e) => setMinimumPayout(Number(e.target.value))} />
+          </label>
           <button className="primary" disabled={busy}>{busy ? "Сохраняем…" : "Сохранить"}</button>
         </form>
       )}
       {message && <p className="platform-message">{message}</p>}
+      <div className="platform-stars-tools">
+        <span>
+          <b>Сверка Telegram Stars</b>
+          <small>Сопоставляет баланс Telegram с внутренним журналом и разблокирует созревшие начисления.</small>
+        </span>
+        <button className="secondary" disabled={busy} onClick={() => void reconcile()}>Сверить</button>
+      </div>
+      {reconciliation && (
+        <p className="platform-message">Баланс: {reconciliation.balance.amount} ⭐ · Операций: {reconciliation.remoteCount} · Не сопоставлено: {reconciliation.unknownIncoming}</p>
+      )}
+      <h3>Финансовые операции</h3>
+      <div className="platform-tenants">
+        {ledger.slice(0, 15).map((transaction) => (
+          <div key={transaction.id}>
+            <span><b>{transaction.type.replaceAll("_", " ")}</b><small>{transaction.organization?.name || "Платформа"} · {new Date(transaction.occurredAt).toLocaleString("ru")} · {transaction.grossAmount} ⭐</small></span>
+            {transaction.type === "stars_publication_paid" && transaction.payment?.status === "paid" && (
+              <button className="danger-soft" disabled={busy} onClick={() => void refund(transaction.payment)}>Вернуть</button>
+            )}
+          </div>
+        ))}
+        {!ledger.length && <p className="muted">Операций пока нет.</p>}
+      </div>
       <h3>Сообщества</h3>
       <div className="platform-tenants">
         {communities.map((community) => (

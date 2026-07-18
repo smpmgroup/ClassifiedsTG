@@ -23,6 +23,8 @@ import {
   validateTaxonomyAttributes,
   jsonStringify,
   splitStarsCommission,
+  recordRefundLedger,
+  settlePaidPublicationLedger,
 } from "@board/core";
 import { loadConfig } from "./config.js";
 import { telegramMembership, validateInitData } from "./auth.js";
@@ -117,9 +119,37 @@ const requirePlatformRole = (roles: Set<string>) =>
       return reply.status(403).send(error("FORBIDDEN", "Недостаточно прав"));
   };
 const platformAdminRoles = new Set(["platform_admin", "platform_owner"]);
+const platformFinanceRoles = new Set([
+  "finance",
+  "platform_admin",
+  "platform_owner",
+]);
 const error = (code: string, message: string, details: unknown = null) => ({
   error: { code, message, details },
 });
+
+async function telegramBotApi<T>(method: string, body: Record<string, unknown>) {
+  const response = await fetch(
+    `https://api.telegram.org/bot${config.TELEGRAM_BOT_TOKEN}/${method}`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
+  const payload = (await response.json()) as {
+    ok: boolean;
+    result?: T;
+    description?: string;
+  };
+  if (!response.ok || !payload.ok)
+    throw new DomainError(
+      "TELEGRAM_API_ERROR",
+      payload.description || `Telegram ${method} failed`,
+      502,
+    );
+  return payload.result as T;
+}
 app.setErrorHandler((unknownError, req, reply) => {
   const err = unknownError as Error & { statusCode?: number };
   const status: number =
@@ -758,7 +788,7 @@ app.get(
 
 app.get(
   "/api/platform/admin/ledger",
-  { preHandler: requirePlatformRole(new Set(["finance", "platform_admin", "platform_owner"])) },
+  { preHandler: requirePlatformRole(platformFinanceRoles) },
   async (req: any) => {
     const limit = Math.min(Math.max(Number(req.query?.limit) || 100, 1), 500);
     return prisma.ledgerTransaction.findMany({
@@ -776,6 +806,262 @@ app.get(
   },
 );
 
+app.post(
+  "/api/platform/admin/stars/reconcile",
+  { preHandler: requirePlatformRole(platformFinanceRoles) },
+  async (req: any) => {
+    const balance = await telegramBotApi<{ amount: number; nanostar_amount?: number }>(
+      "getMyStarBalance",
+      {},
+    );
+    const remote: any[] = [];
+    for (let offset = 0; offset < 1000; offset += 100) {
+      const page = await telegramBotApi<{ transactions: any[] }>(
+        "getStarTransactions",
+        { offset, limit: 100 },
+      );
+      const transactions = page.transactions || [];
+      remote.push(...transactions);
+      if (transactions.length < 100) break;
+    }
+    let inserted = 0;
+    let matched = 0;
+    for (const transaction of remote) {
+      const source = transaction.source || null;
+      const receiver = transaction.receiver || null;
+      const direction = receiver ? "outgoing" : "incoming";
+      const invoicePayload = source?.invoice_payload || null;
+      const payment = await prisma.publicationPayment.findFirst({
+        where: {
+          OR: [
+            ...(transaction.id
+              ? [{ telegramPaymentChargeId: String(transaction.id) }]
+              : []),
+            ...(invoicePayload ? [{ invoicePayload }] : []),
+          ],
+        },
+        select: { id: true },
+      });
+      if (payment) matched++;
+      const fingerprint = crypto
+        .createHash("sha256")
+        .update(
+          JSON.stringify({
+            id: transaction.id || "",
+            amount: transaction.amount || 0,
+            nanostarAmount: transaction.nanostar_amount || 0,
+            date: transaction.date || 0,
+            direction,
+            invoicePayload,
+          }),
+        )
+        .digest("hex");
+      const created = await prisma.telegramStarObservation.createMany({
+        data: [
+          {
+            fingerprint,
+            telegramTransactionId: String(transaction.id || ""),
+            amount: Number(transaction.amount || 0),
+            nanostarAmount: Number(transaction.nanostar_amount || 0),
+            direction,
+            transactionDate: new Date(Number(transaction.date || 0) * 1000),
+            partnerType: source?.type || receiver?.type || null,
+            invoicePayload,
+            paymentId: payment?.id || null,
+            raw: transaction,
+          },
+        ],
+        skipDuplicates: true,
+      });
+      inserted += created.count;
+    }
+    const paidPayments = await prisma.publicationPayment.findMany({
+      where: { status: "paid", telegramPaymentChargeId: { not: null } },
+      select: { id: true, telegramPaymentChargeId: true },
+    });
+    const observedPaymentIds = new Set(
+      (
+        await prisma.telegramStarObservation.findMany({
+          where: { paymentId: { not: null }, direction: "incoming" },
+          select: { paymentId: true },
+        })
+      ).map((item) => item.paymentId),
+    );
+    const unknownIncoming = await prisma.telegramStarObservation.count({
+      where: { direction: "incoming", paymentId: null },
+    });
+    const missingRemote = paidPayments.filter(
+      (payment) => !observedPaymentIds.has(payment.id),
+    );
+    await prisma.auditEvent.create({
+      data: {
+        actorId: req.platformIdentity.userId,
+        scope: "platform_finance",
+        action: "telegram_stars_reconciled",
+        targetType: "TelegramStarObservation",
+        metadata: {
+          remote: remote.length,
+          inserted,
+          matched,
+          missingRemote: missingRemote.length,
+          unknownIncoming,
+        },
+      },
+    });
+    return {
+      balance,
+      remoteCount: remote.length,
+      inserted,
+      matched,
+      missingRemote,
+      unknownIncoming,
+    };
+  },
+);
+
+app.post(
+  "/api/platform/admin/stars/settle",
+  { preHandler: requirePlatformRole(platformFinanceRoles) },
+  async (req: any) => {
+    const settings = await prisma.platformSetting.findUniqueOrThrow({
+      where: { id: "global" },
+    });
+    const cutoff = new Date(Date.now() - settings.starsHoldDays * 86_400_000);
+    const candidates = await prisma.ledgerTransaction.findMany({
+      where: {
+        type: "stars_publication_paid",
+        status: "pending_settlement",
+        occurredAt: { lte: cutoff },
+        payment: {
+          is: {
+            status: "paid",
+            telegramObservations: { some: { direction: "incoming" } },
+          },
+        },
+      },
+      select: { id: true },
+      take: 500,
+    });
+    const settled: string[] = [];
+    const errors: { id: string; message: string }[] = [];
+    for (const candidate of candidates) {
+      try {
+        await prisma.$transaction((tx) =>
+          settlePaidPublicationLedger(tx, candidate.id),
+        );
+        settled.push(candidate.id);
+      } catch (unknownError) {
+        errors.push({
+          id: candidate.id,
+          message:
+            unknownError instanceof Error ? unknownError.message : "unknown error",
+        });
+      }
+    }
+    await prisma.auditEvent.create({
+      data: {
+        actorId: req.platformIdentity.userId,
+        scope: "platform_finance",
+        action: "telegram_stars_settled",
+        targetType: "LedgerTransaction",
+        metadata: { cutoff, settled: settled.length, errors },
+      },
+    });
+    return { cutoff, eligible: candidates.length, settled: settled.length, errors };
+  },
+);
+
+app.post(
+  "/api/platform/admin/payments/:id/refund",
+  { preHandler: requirePlatformRole(platformFinanceRoles) },
+  async (req: any) => {
+    const reason = String(req.body?.reason || "").trim();
+    if (reason.length < 3 || reason.length > 500)
+      throw new DomainError(
+        "REFUND_REASON_REQUIRED",
+        "Укажите причину возврата (от 3 до 500 символов)",
+      );
+    const payment = await prisma.publicationPayment.findUnique({
+      where: { id: String(req.params.id) },
+      include: { listing: true, community: true },
+    });
+    if (!payment)
+      throw new DomainError("PAYMENT_NOT_FOUND", "Платёж не найден", 404);
+    if (payment.status === "refunded") return payment;
+    if (payment.status !== "paid" || !payment.telegramPaymentChargeId)
+      throw new DomainError(
+        "PAYMENT_NOT_REFUNDABLE",
+        "Этот платёж нельзя вернуть",
+        409,
+      );
+    const locked = await prisma.publicationPayment.updateMany({
+      where: { id: payment.id, status: "paid" },
+      data: { status: "refund_processing" },
+    });
+    if (locked.count !== 1)
+      throw new DomainError("REFUND_IN_PROGRESS", "Возврат уже выполняется", 409);
+    try {
+      await telegramBotApi<boolean>("refundStarPayment", {
+        user_id: payment.userId
+          ? Number(
+              (
+                await prisma.user.findUniqueOrThrow({
+                  where: { id: payment.userId },
+                  select: { telegramUserId: true },
+                })
+              ).telegramUserId,
+            )
+          : undefined,
+        telegram_payment_charge_id: payment.telegramPaymentChargeId,
+      });
+    } catch (unknownError) {
+      await prisma.publicationPayment.updateMany({
+        where: { id: payment.id, status: "refund_processing" },
+        data: { status: "paid" },
+      });
+      throw unknownError;
+    }
+    return prisma.$transaction(async (tx) => {
+      await recordRefundLedger(tx, {
+        originalExternalRef: `telegram-stars:${payment.telegramPaymentChargeId}`,
+        refundExternalRef: `telegram-stars-refund:${payment.telegramPaymentChargeId}`,
+        reason,
+      });
+      const refunded = await tx.publicationPayment.update({
+        where: { id: payment.id },
+        data: { status: "refunded" },
+      });
+      await tx.listing.update({
+        where: { id: payment.listingId },
+        data: {
+          paymentStatus: "refunded",
+          ...(payment.listing.status === "published" ? { status: "hidden" } : {}),
+        },
+      });
+      await tx.notification.create({
+        data: {
+          userId: payment.userId,
+          communityId: payment.communityId,
+          type: "payment_refunded",
+          payload: { listingId: payment.listingId, reason },
+        },
+      });
+      await tx.auditEvent.create({
+        data: {
+          actorId: req.platformIdentity.userId,
+          communityId: payment.communityId,
+          scope: "platform_finance",
+          action: "telegram_stars_refunded",
+          targetType: "PublicationPayment",
+          targetId: payment.id,
+          metadata: { reason, amountStars: payment.amountStars },
+        },
+      });
+      return refunded;
+    });
+  },
+);
+
 app.patch(
   "/api/platform/admin/settings",
   { preHandler: requirePlatformRole(new Set(["platform_owner"])) },
@@ -784,6 +1070,8 @@ app.patch(
       req.body?.minimumPublicationStars,
     );
     const defaultCommissionBps = Number(req.body?.defaultCommissionBps);
+    const starsHoldDays = Number(req.body?.starsHoldDays);
+    const minimumPayoutStars = Number(req.body?.minimumPayoutStars);
     if (
       !Number.isInteger(minimumPublicationStars) ||
       minimumPublicationStars < 1 ||
@@ -792,6 +1080,20 @@ app.patch(
       throw new DomainError(
         "PLATFORM_SETTINGS_INVALID",
         "Минимальная цена должна быть от 1 до 100000 Stars",
+      );
+    if (!Number.isInteger(starsHoldDays) || starsHoldDays < 0 || starsHoldDays > 90)
+      throw new DomainError(
+        "PLATFORM_SETTINGS_INVALID",
+        "Период разблокировки должен быть от 0 до 90 дней",
+      );
+    if (
+      !Number.isInteger(minimumPayoutStars) ||
+      minimumPayoutStars < 1 ||
+      minimumPayoutStars > 10000000
+    )
+      throw new DomainError(
+        "PLATFORM_SETTINGS_INVALID",
+        "Порог выплаты должен быть от 1 до 10000000 Stars",
       );
     if (
       !Number.isInteger(defaultCommissionBps) ||
@@ -804,7 +1106,12 @@ app.patch(
       );
     const settings = await prisma.platformSetting.update({
       where: { id: "global" },
-      data: { minimumPublicationStars, defaultCommissionBps },
+      data: {
+        minimumPublicationStars,
+        defaultCommissionBps,
+        starsHoldDays,
+        minimumPayoutStars,
+      },
     });
     await prisma.auditEvent.create({
       data: {
@@ -813,7 +1120,12 @@ app.patch(
         action: "platform_settings_updated",
         targetType: "PlatformSetting",
         targetId: settings.id,
-        metadata: { minimumPublicationStars, defaultCommissionBps },
+        metadata: {
+          minimumPublicationStars,
+          defaultCommissionBps,
+          starsHoldDays,
+          minimumPayoutStars,
+        },
       },
     });
     return settings;

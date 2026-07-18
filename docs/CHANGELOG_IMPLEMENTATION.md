@@ -89,3 +89,16 @@
 - Verified a real three-entry journal in production and rolled the entire probe back;
   the entries summed to zero, duplicate recording returned one transaction and no test
   financial data remained.
+
+## Telegram Stars reconciliation and refunds — session 6
+
+- Added import of the bot's live Stars balance and transaction history with immutable,
+  idempotent observations and local/remote discrepancy reporting.
+- Added configurable reward hold and minimum payout thresholds to platform settings.
+- Added verified settlement batches that move gross assets, community earnings and
+  platform commission from pending to available in one balanced journal.
+- Added role-restricted Telegram refunds with payment locking, compensating journal
+  entries, listing entitlement withdrawal, user notification and audit history.
+- Added finance controls to the platform-owner console and required bot commands
+  `/terms`, `/support` and `/paysupport`.
+- Extended ledger invariant tests to cover settlement and post-settlement reversal.
