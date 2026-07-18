@@ -124,6 +124,11 @@ const platformFinanceRoles = new Set([
   "platform_admin",
   "platform_owner",
 ]);
+const platformSupportRoles = new Set([
+  "support",
+  "platform_admin",
+  "platform_owner",
+]);
 const error = (code: string, message: string, details: unknown = null) => ({
   error: { code, message, details },
 });
@@ -554,6 +559,9 @@ app.get("/api/platform/me", { preHandler: platformAuth }, async (req: any) => {
                   botCanRestrictMembers: true,
                   botCanInviteUsers: true,
                   botLastCheckedAt: true,
+                  deletionRequestedAt: true,
+                  deletionScheduledFor: true,
+                  deletionFinalizedAt: true,
                   rules: true,
                   description: true,
                   _count: { select: { members: true, listings: true } },
@@ -756,6 +764,12 @@ app.post(
     });
     if (!community?.organization)
       throw new DomainError("COMMUNITY_NOT_FOUND", "Сообщество не найдено", 404);
+    if (community.deletionScheduledFor)
+      throw new DomainError(
+        "DELETION_SCHEDULED",
+        "Сначала отмените запланированное удаление",
+        409,
+      );
     const membership = community.organization.members.find(
       (item) => item.userId === req.platformIdentity.userId,
     );
@@ -799,6 +813,12 @@ app.post(
     });
     if (!community?.organization)
       throw new DomainError("COMMUNITY_NOT_FOUND", "Сообщество не найдено", 404);
+    if (community.deletionScheduledFor)
+      throw new DomainError(
+        "DELETION_SCHEDULED",
+        "Сначала отмените запланированное удаление",
+        409,
+      );
     const membership = community.organization.members.find(
       (item) => item.userId === req.platformIdentity.userId,
     );
@@ -837,6 +857,103 @@ app.post(
           actorId: req.platformIdentity.userId,
           scope: "tenant_lifecycle",
           action: "community_reconnected",
+          targetType: "Community",
+          targetId: community.id,
+        },
+      });
+      return updated;
+    });
+  },
+);
+
+app.post(
+  "/api/platform/communities/:id/request-deletion",
+  { preHandler: platformAuth },
+  async (req: any) => {
+    if (
+      String(req.body?.confirmation || "") !== "DELETE" ||
+      req.body?.exportAcknowledged !== true
+    )
+      throw new DomainError(
+        "DELETION_CONFIRMATION_REQUIRED",
+        "Сначала скачайте экспорт и подтвердите удаление",
+      );
+    const community = await prisma.community.findUnique({
+      where: { id: String(req.params.id) },
+      include: { organization: { include: { members: true } } },
+    });
+    if (!community?.organization)
+      throw new DomainError("COMMUNITY_NOT_FOUND", "Сообщество не найдено", 404);
+    const owner = community.organization.members.find(
+      (item) =>
+        item.userId === req.platformIdentity.userId && item.role === "owner",
+    );
+    if (!owner)
+      throw new DomainError("FORBIDDEN", "Только владелец может запросить удаление", 403);
+    if (community.deletionScheduledFor) return community;
+    const now = new Date();
+    const scheduledFor = new Date(now.getTime() + 30 * 86_400_000);
+    return prisma.$transaction(async (tx) => {
+      const updated = await tx.community.update({
+        where: { id: community.id },
+        data: {
+          tenantStatus: "closed",
+          isActive: false,
+          disconnectedAt: now,
+          deletionRequestedAt: now,
+          deletionScheduledFor: scheduledFor,
+          deletionRequestedById: req.platformIdentity.userId,
+        },
+      });
+      await tx.auditEvent.create({
+        data: {
+          communityId: community.id,
+          actorId: req.platformIdentity.userId,
+          scope: "data_retention",
+          action: "community_deletion_requested",
+          targetType: "Community",
+          targetId: community.id,
+          metadata: { scheduledFor },
+        },
+      });
+      return updated;
+    });
+  },
+);
+
+app.post(
+  "/api/platform/communities/:id/cancel-deletion",
+  { preHandler: platformAuth },
+  async (req: any) => {
+    const community = await prisma.community.findUnique({
+      where: { id: String(req.params.id) },
+      include: { organization: { include: { members: true } } },
+    });
+    if (!community?.organization)
+      throw new DomainError("COMMUNITY_NOT_FOUND", "Сообщество не найдено", 404);
+    const owner = community.organization.members.find(
+      (item) =>
+        item.userId === req.platformIdentity.userId && item.role === "owner",
+    );
+    if (!owner)
+      throw new DomainError("FORBIDDEN", "Только владелец может отменить удаление", 403);
+    if (!community.deletionScheduledFor)
+      throw new DomainError("DELETION_NOT_SCHEDULED", "Удаление не запланировано", 409);
+    return prisma.$transaction(async (tx) => {
+      const updated = await tx.community.update({
+        where: { id: community.id },
+        data: {
+          deletionRequestedAt: null,
+          deletionScheduledFor: null,
+          deletionRequestedById: null,
+        },
+      });
+      await tx.auditEvent.create({
+        data: {
+          communityId: community.id,
+          actorId: req.platformIdentity.userId,
+          scope: "data_retention",
+          action: "community_deletion_cancelled",
           targetType: "Community",
           targetId: community.id,
         },
@@ -1004,6 +1121,152 @@ app.get(
 );
 
 app.get(
+  "/api/platform/organizations/:id/support",
+  { preHandler: platformAuth },
+  async (req: any) => {
+    const organizationId = String(req.params.id);
+    const membership = await prisma.organizationMember.findUnique({
+      where: {
+        organizationId_userId: {
+          organizationId,
+          userId: req.platformIdentity.userId,
+        },
+      },
+    });
+    if (!membership)
+      throw new DomainError("FORBIDDEN", "Недостаточно прав", 403);
+    return prisma.supportTicket.findMany({
+      where: { organizationId },
+      include: {
+        community: { select: { id: true, name: true } },
+        assignedTo: { select: { id: true, firstName: true } },
+        messages: {
+          where: { internal: false },
+          include: { author: { select: { id: true, firstName: true, platformRole: true } } },
+          orderBy: { createdAt: "asc" },
+        },
+      },
+      orderBy: { updatedAt: "desc" },
+      take: 100,
+    });
+  },
+);
+
+app.post(
+  "/api/platform/organizations/:id/support",
+  { preHandler: platformAuth },
+  async (req: any) => {
+    const organizationId = String(req.params.id);
+    const membership = await prisma.organizationMember.findUnique({
+      where: {
+        organizationId_userId: {
+          organizationId,
+          userId: req.platformIdentity.userId,
+        },
+      },
+    });
+    if (!membership)
+      throw new DomainError("FORBIDDEN", "Недостаточно прав", 403);
+    const subject = String(req.body?.subject || "").trim().slice(0, 160);
+    const body = String(req.body?.message || "").trim().slice(0, 5000);
+    const communityId = req.body?.communityId
+      ? String(req.body.communityId)
+      : null;
+    if (subject.length < 3 || body.length < 5)
+      throw new DomainError(
+        "SUPPORT_MESSAGE_INVALID",
+        "Заполните тему и описание вопроса",
+      );
+    if (
+      communityId &&
+      !(await prisma.community.count({ where: { id: communityId, organizationId } }))
+    )
+      throw new DomainError("COMMUNITY_NOT_FOUND", "Сообщество не найдено", 404);
+    return prisma.$transaction(async (tx) => {
+      const ticket = await tx.supportTicket.create({
+        data: {
+          organizationId,
+          communityId,
+          createdById: req.platformIdentity.userId,
+          subject,
+          messages: {
+            create: { authorId: req.platformIdentity.userId, body },
+          },
+        },
+        include: { messages: true },
+      });
+      await tx.auditEvent.create({
+        data: {
+          actorId: req.platformIdentity.userId,
+          communityId,
+          scope: "support",
+          action: "support_ticket_created",
+          targetType: "SupportTicket",
+          targetId: ticket.id,
+        },
+      });
+      return ticket;
+    });
+  },
+);
+
+app.post(
+  "/api/platform/support/:id/messages",
+  { preHandler: platformAuth },
+  async (req: any) => {
+    const ticket = await prisma.supportTicket.findUnique({
+      where: { id: String(req.params.id) },
+    });
+    if (!ticket)
+      throw new DomainError("SUPPORT_TICKET_NOT_FOUND", "Обращение не найдено", 404);
+    const membership = await prisma.organizationMember.findUnique({
+      where: {
+        organizationId_userId: {
+          organizationId: ticket.organizationId,
+          userId: req.platformIdentity.userId,
+        },
+      },
+    });
+    const isStaff = platformSupportRoles.has(req.platformIdentity.platformRole);
+    if (!membership && !isStaff)
+      throw new DomainError("FORBIDDEN", "Недостаточно прав", 403);
+    const body = String(req.body?.message || "").trim().slice(0, 5000);
+    const internal = Boolean(req.body?.internal) && isStaff;
+    if (body.length < 2)
+      throw new DomainError("SUPPORT_MESSAGE_INVALID", "Введите сообщение");
+    return prisma.$transaction(async (tx) => {
+      const message = await tx.supportMessage.create({
+        data: {
+          ticketId: ticket.id,
+          authorId: req.platformIdentity.userId,
+          body,
+          internal,
+        },
+      });
+      if (isStaff && !internal && ticket.communityId)
+        await tx.notification.create({
+          data: {
+            communityId: ticket.communityId,
+            userId: ticket.createdById,
+            type: "support_reply",
+            payload: { ticketId: ticket.id, subject: ticket.subject },
+          },
+        });
+      await tx.supportTicket.update({
+        where: { id: ticket.id },
+        data: {
+          status:
+            !isStaff && membership && ticket.status === "waiting_customer"
+              ? "open"
+              : ticket.status,
+        },
+      });
+      return message;
+    });
+  },
+);
+
+app.get(
   "/api/platform/admin/overview",
   { preHandler: requirePlatformRole(platformAdminRoles) },
   async () => {
@@ -1093,6 +1356,274 @@ app.get(
       orderBy: { occurredAt: "desc" },
       take: limit,
     });
+  },
+);
+
+app.get(
+  "/api/platform/admin/users",
+  { preHandler: requirePlatformRole(platformAdminRoles) },
+  async (req: any) => {
+    const search = String(req.query?.search || "").trim();
+    return prisma.user.findMany({
+      where: search
+        ? {
+            OR: [
+              { firstName: { contains: search, mode: "insensitive" } },
+              { lastName: { contains: search, mode: "insensitive" } },
+              { username: { contains: search.replace(/^@/, ""), mode: "insensitive" } },
+              ...(/^\d+$/.test(search)
+                ? [{ telegramUserId: BigInt(search) }]
+                : []),
+            ],
+          }
+        : { platformRole: { not: "user" } },
+      select: {
+        id: true,
+        telegramUserId: true,
+        username: true,
+        firstName: true,
+        lastName: true,
+        status: true,
+        platformRole: true,
+        lastSeenAt: true,
+      },
+      orderBy: [{ platformRole: "desc" }, { lastSeenAt: "desc" }],
+      take: 100,
+    });
+  },
+);
+
+app.patch(
+  "/api/platform/admin/users/:id/role",
+  { preHandler: requirePlatformRole(new Set(["platform_owner"])) },
+  async (req: any) => {
+    const platformRole = String(req.body?.platformRole || "");
+    if (
+      !["user", "support", "finance", "platform_admin", "platform_owner"].includes(
+        platformRole,
+      )
+    )
+      throw new DomainError("PLATFORM_ROLE_INVALID", "Неверная роль");
+    const target = await prisma.user.findUnique({
+      where: { id: String(req.params.id) },
+    });
+    if (!target)
+      throw new DomainError("USER_NOT_FOUND", "Пользователь не найден", 404);
+    if (
+      target.platformRole === "platform_owner" &&
+      platformRole !== "platform_owner" &&
+      (await prisma.user.count({ where: { platformRole: "platform_owner", status: "active" } })) <= 1
+    )
+      throw new DomainError(
+        "LAST_PLATFORM_OWNER",
+        "Нельзя снять роль у единственного владельца платформы",
+        409,
+      );
+    return prisma.$transaction(async (tx) => {
+      const updated = await tx.user.update({
+        where: { id: target.id },
+        data: { platformRole: platformRole as any },
+      });
+      await tx.auditEvent.create({
+        data: {
+          actorId: req.platformIdentity.userId,
+          scope: "platform_security",
+          action: "platform_role_changed",
+          targetType: "User",
+          targetId: target.id,
+          metadata: { from: target.platformRole, to: platformRole },
+        },
+      });
+      return updated;
+    });
+  },
+);
+
+app.get(
+  "/api/platform/admin/audit",
+  { preHandler: requirePlatformRole(platformAdminRoles) },
+  async (req: any) => {
+    const limit = Math.min(Math.max(Number(req.query?.limit) || 100, 1), 500);
+    return prisma.auditEvent.findMany({
+      include: {
+        actor: { select: { id: true, firstName: true, username: true } },
+        community: { select: { id: true, name: true } },
+      },
+      orderBy: { createdAt: "desc" },
+      take: limit,
+    });
+  },
+);
+
+app.get(
+  "/api/platform/admin/support",
+  { preHandler: requirePlatformRole(platformSupportRoles) },
+  async (req: any) => {
+    const status = String(req.query?.status || "").trim();
+    return prisma.supportTicket.findMany({
+      where: status ? { status } : undefined,
+      include: {
+        organization: { select: { id: true, name: true } },
+        community: { select: { id: true, name: true } },
+        createdBy: { select: { id: true, firstName: true, username: true } },
+        assignedTo: { select: { id: true, firstName: true } },
+        messages: {
+          include: { author: { select: { id: true, firstName: true, platformRole: true } } },
+          orderBy: { createdAt: "asc" },
+        },
+      },
+      orderBy: [{ priority: "desc" }, { updatedAt: "desc" }],
+      take: 200,
+    });
+  },
+);
+
+app.patch(
+  "/api/platform/admin/support/:id",
+  { preHandler: requirePlatformRole(platformSupportRoles) },
+  async (req: any) => {
+    const status = String(req.body?.status || "");
+    const priority = String(req.body?.priority || "");
+    if (status && !["open", "in_progress", "waiting_customer", "resolved", "closed"].includes(status))
+      throw new DomainError("SUPPORT_STATUS_INVALID", "Неверный статус");
+    if (priority && !["low", "normal", "high", "urgent"].includes(priority))
+      throw new DomainError("SUPPORT_PRIORITY_INVALID", "Неверный приоритет");
+    const updated = await prisma.supportTicket.update({
+      where: { id: String(req.params.id) },
+      data: {
+        ...(status ? { status } : {}),
+        ...(priority ? { priority } : {}),
+        ...(Boolean(req.body?.assignToMe)
+          ? { assignedToId: req.platformIdentity.userId }
+          : {}),
+        ...(status === "resolved" ? { resolvedAt: new Date() } : {}),
+      },
+    });
+    await prisma.auditEvent.create({
+      data: {
+        actorId: req.platformIdentity.userId,
+        scope: "support",
+        action: "support_ticket_updated",
+        targetType: "SupportTicket",
+        targetId: updated.id,
+        metadata: { status: updated.status, priority: updated.priority },
+      },
+    });
+    return updated;
+  },
+);
+
+app.get(
+  "/api/platform/admin/deletions",
+  { preHandler: requirePlatformRole(platformAdminRoles) },
+  async () =>
+    prisma.community.findMany({
+      where: { deletionScheduledFor: { not: null } },
+      include: { organization: { select: { id: true, name: true } } },
+      orderBy: { deletionScheduledFor: "asc" },
+    }),
+);
+
+app.post(
+  "/api/platform/admin/communities/:id/finalize-deletion",
+  { preHandler: requirePlatformRole(new Set(["platform_owner"])) },
+  async (req: any) => {
+    const communityId = String(req.params.id);
+    if (String(req.body?.confirmation || "") !== communityId)
+      throw new DomainError(
+        "DELETION_CONFIRMATION_REQUIRED",
+        "Для финализации укажите ID сообщества",
+      );
+    const community = await prisma.community.findUnique({
+      where: { id: communityId },
+      include: {
+        listings: { include: { images: true } },
+      },
+    });
+    if (!community)
+      throw new DomainError("COMMUNITY_NOT_FOUND", "Сообщество не найдено", 404);
+    if (community.deletionFinalizedAt) return community;
+    if (!community.deletionScheduledFor || community.deletionScheduledFor > new Date())
+      throw new DomainError(
+        "DELETION_COOLING_PERIOD",
+        "30-дневный период отмены ещё не завершён",
+        409,
+      );
+    const imageKeys = community.listings
+      .flatMap((listing) => listing.images)
+      .map((item) => item.storageKey)
+      .filter((item): item is string => Boolean(item));
+    const finalized = await prisma.$transaction(async (tx) => {
+      await tx.supportTicket.updateMany({
+        where: { communityId },
+        data: { communityId: null },
+      });
+      await tx.favorite.deleteMany({ where: { listing: { communityId } } });
+      await tx.listingView.deleteMany({ where: { listing: { communityId } } });
+      await tx.listingImage.deleteMany({ where: { listing: { communityId } } });
+      await tx.notification.deleteMany({ where: { communityId } });
+      await tx.messageActivity.deleteMany({ where: { communityId } });
+      await tx.communityMember.deleteMany({ where: { communityId } });
+      await tx.report.updateMany({
+        where: { communityId },
+        data: { comment: null },
+      });
+      await tx.listing.updateMany({
+        where: { communityId },
+        data: {
+          title: "Deleted listing",
+          description: "",
+          price: null,
+          locationText: null,
+          latitude: null,
+          longitude: null,
+          moderationComment: null,
+          attributes: {},
+          status: "deleted",
+          deletedAt: new Date(),
+        },
+      });
+      const updated = await tx.community.update({
+        where: { id: communityId },
+        data: {
+          name: `Deleted community ${communityId.slice(-6)}`,
+          description: "",
+          rules: "",
+          prohibitedWords: [],
+          inviteUrl: "",
+          tenantStatus: "closed",
+          isActive: false,
+          botStatus: "deleted",
+          botIsAdministrator: false,
+          botCanDeleteMessages: false,
+          botCanRestrictMembers: false,
+          botCanInviteUsers: false,
+          deletionFinalizedAt: new Date(),
+        },
+      });
+      await tx.auditEvent.create({
+        data: {
+          communityId,
+          actorId: req.platformIdentity.userId,
+          scope: "data_retention",
+          action: "community_deletion_finalized",
+          targetType: "Community",
+          targetId: communityId,
+          metadata: {
+            scrubbedListings: community.listings.length,
+            deletedImages: imageKeys.length,
+            retainedFinancialRecords: true,
+          },
+        },
+      });
+      return updated;
+    });
+    await Promise.all(
+      imageKeys.map((key) =>
+        fs.unlink(path.join(config.UPLOAD_DIR, path.basename(key))).catch(() => undefined),
+      ),
+    );
+    return finalized;
   },
 );
 

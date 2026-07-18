@@ -77,6 +77,10 @@ async function claimCommunityConnection(ctx: any, rawToken: string) {
       return ctx.reply(
         "Эта группа уже привязана к другой организации. Перенос должен выполнить её текущий владелец.",
       );
+    if (existing.deletionScheduledFor)
+      return ctx.reply(
+        "Для этой доски запрошено удаление. Сначала отмените его в кабинете владельца.",
+      );
     const botMembership = await ctx.telegram.getChatMember(
       ctx.chat.id,
       ctx.botInfo.id,
@@ -653,6 +657,7 @@ function notificationText(type: string, p: any) {
         listing_interest: "Вашим объявлением заинтересовались.",
         payment_refunded: "Оплата Telegram Stars возвращена. Платная публикация скрыта.",
         tenant_permission_failure: "Бот удалён из группы или потерял доступ. Доска приостановлена; проверьте права бота в кабинете владельца.",
+        support_reply: "Поддержка ответила на ваше обращение. Откройте кабинет владельца, чтобы прочитать ответ.",
       } as any
     )[type] || "Новое уведомление") + reason
   );

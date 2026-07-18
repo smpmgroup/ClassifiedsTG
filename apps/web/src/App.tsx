@@ -257,6 +257,7 @@ function PlatformWorkspace() {
                   key={community.id}
                   community={community}
                   canManage={["owner", "administrator"].includes(organization.role)}
+                  canDelete={organization.role === "owner"}
                   onChanged={load}
                 />
               ))}
@@ -265,6 +266,7 @@ function PlatformWorkspace() {
               )}
             </div>
             <OrganizationFinance organizationId={organization.id} />
+            <OrganizationSupport organization={organization} />
             {organization.role === "owner" && (
               <button
                 type="button"
@@ -322,6 +324,7 @@ function PlatformWorkspace() {
       {["platform_admin", "platform_owner"].includes(
         data.user.platformRole,
       ) && <PlatformOwnerPanel canEdit={data.user.platformRole === "platform_owner"} />}
+      {data.user.platformRole === "support" && <PlatformSupportPanel />}
     </main>
   );
 }
@@ -329,15 +332,18 @@ function PlatformWorkspace() {
 function CommunityOperations({
   community,
   canManage,
+  canDelete,
   onChanged,
 }: {
   community: any;
   canManage: boolean;
+  canDelete: boolean;
   onChanged: () => Promise<void> | void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
+  const [exported, setExported] = useState(false);
   const setup = community.setup || {};
   const setupItems = [
     [setup.connected, "Бот в группе"],
@@ -371,6 +377,7 @@ function CommunityOperations({
       anchor.download = `${community.slug}-export.json`;
       anchor.click();
       URL.revokeObjectURL(url);
+      setExported(true);
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -397,6 +404,13 @@ function CommunityOperations({
           <div className="community-numbers"><span>{community._count?.members || 0}<small>Участников</small></span><span>{community._count?.listings || 0}<small>Объявлений</small></span></div>
           <a className="open-board-link" href={`/?community=${encodeURIComponent(community.slug)}`}>Открыть доску →</a>
           {error && <LoadError message={error} />}
+          {community.deletionScheduledFor && (
+            <div className="deletion-warning">
+              <b>Удаление запланировано</b>
+              <small>Данные будут удалены не ранее {new Date(community.deletionScheduledFor).toLocaleDateString("ru")}.</small>
+              {canDelete && <button disabled={Boolean(busy)} onClick={() => void run("cancel-delete", `/platform/communities/${community.id}/cancel-deletion`)}>Отменить удаление</button>}
+            </div>
+          )}
           {canManage && (
             <div className="community-tools">
               <button disabled={Boolean(busy)} onClick={() => void run("check", `/platform/communities/${community.id}/connection-check`)}>{busy === "check" ? "Проверяем…" : "Проверить бота"}</button>
@@ -407,6 +421,17 @@ function CommunityOperations({
                 <button className="danger-soft" disabled={Boolean(busy)} onClick={() => {
                   if (window.confirm("Доска перестанет обслуживать группу. Данные сохранятся. Отключить?")) void run("disconnect", `/platform/communities/${community.id}/disconnect`, { confirmation: "DISCONNECT" });
                 }}>Отключить доску</button>
+              )}
+              {canDelete && !community.deletionScheduledFor && (
+                <button
+                  className="delete-request"
+                  disabled={Boolean(busy) || !exported}
+                  title={exported ? "" : "Сначала скачайте экспорт"}
+                  onClick={() => {
+                    const confirmation = window.prompt("Данные будут удалены через 30 дней. Введите DELETE:");
+                    if (confirmation === "DELETE") void run("delete", `/platform/communities/${community.id}/request-deletion`, { confirmation, exportAcknowledged: true });
+                  }}
+                >Запросить удаление</button>
               )}
             </div>
           )}
@@ -454,6 +479,160 @@ function OrganizationFinance({ organizationId }: { organizationId: string }) {
         </div>
       )}
     </section>
+  );
+}
+
+function OrganizationSupport({ organization }: { organization: any }) {
+  const [expanded, setExpanded] = useState(false);
+  const [tickets, setTickets] = useState<any[]>([]);
+  const [subject, setSubject] = useState("");
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const load = () =>
+    request(`/platform/organizations/${organization.id}/support`).then(setTickets);
+  useEffect(() => {
+    void load().catch(() => undefined);
+  }, [organization.id]);
+  const create = async (event: any) => {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      await request(`/platform/organizations/${organization.id}/support`, "POST", {
+        subject,
+        message,
+        communityId: organization.communities[0]?.id,
+      });
+      setSubject("");
+      setMessage("");
+      await load();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const reply = async (ticket: any) => {
+    const text = window.prompt("Ваш ответ поддержке:");
+    if (!text) return;
+    setBusy(true);
+    try {
+      await request(`/platform/support/${ticket.id}/messages`, "POST", { message: text });
+      await load();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <section className="organization-support">
+      <button type="button" className="finance-summary" onClick={() => setExpanded((value) => !value)}>
+        <span><small>ПОДДЕРЖКА</small><b>{tickets.filter((ticket) => !["resolved", "closed"].includes(ticket.status)).length} активных</b></span>
+        <i>{expanded ? "−" : "+"}</i>
+      </button>
+      {expanded && (
+        <div className="support-details">
+          {error && <LoadError message={error} />}
+          {tickets.map((ticket) => (
+            <article className="support-ticket" key={ticket.id}>
+              <header><b>{ticket.subject}</b><small>{ticket.status}</small></header>
+              {ticket.messages.map((item: any) => <p key={item.id}><b>{item.author.firstName}</b><span>{item.body}</span><small>{new Date(item.createdAt).toLocaleString("ru")}</small></p>)}
+              {!['resolved', 'closed'].includes(ticket.status) && <button disabled={busy} onClick={() => void reply(ticket)}>Ответить</button>}
+            </article>
+          ))}
+          <form className="support-form" onSubmit={create}>
+            <b>Новое обращение</b>
+            <input value={subject} maxLength={160} minLength={3} required placeholder="Тема" onChange={(event) => setSubject(event.target.value)} />
+            <textarea value={message} maxLength={5000} minLength={5} required rows={4} placeholder="Опишите вопрос" onChange={(event) => setMessage(event.target.value)} />
+            <button className="primary" disabled={busy}>{busy ? "Отправляем…" : "Отправить"}</button>
+          </form>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function PlatformSupportPanel() {
+  const [tickets, setTickets] = useState<any[]>([]);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState("");
+  const load = () => request("/platform/admin/support").then(setTickets);
+  useEffect(() => {
+    void load().catch((e) => setError(e.message));
+  }, []);
+  const update = async (ticket: any, status: string) => {
+    setBusy(ticket.id);
+    setError("");
+    try {
+      await request(`/platform/admin/support/${ticket.id}`, "PATCH", { status, assignToMe: true });
+      await load();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy("");
+    }
+  };
+  const reply = async (ticket: any) => {
+    const message = window.prompt("Ответ клиенту:");
+    if (!message) return;
+    setBusy(ticket.id);
+    try {
+      await request(`/platform/support/${ticket.id}/messages`, "POST", { message });
+      await update(ticket, "waiting_customer");
+    } catch (e: any) {
+      setError(e.message);
+      setBusy("");
+    }
+  };
+  return (
+    <section className="platform-admin platform-support">
+      <small>СЕРВИС</small><h2>Обращения клиентов</h2>
+      {error && <LoadError message={error} />}
+      {tickets.map((ticket) => (
+        <article className="staff-ticket" key={ticket.id}>
+          <header><span><b>{ticket.subject}</b><small>{ticket.organization.name} · {ticket.priority} · {ticket.status}</small></span></header>
+          <div>{ticket.messages.map((item: any) => !item.internal && <p key={item.id}><b>{item.author.firstName}</b><span>{item.body}</span></p>)}</div>
+          <footer><button disabled={busy === ticket.id} onClick={() => void update(ticket, "in_progress")}>Взять</button><button disabled={busy === ticket.id} onClick={() => void reply(ticket)}>Ответить</button><button disabled={busy === ticket.id} onClick={() => void update(ticket, "resolved")}>Решено</button></footer>
+        </article>
+      ))}
+      {!tickets.length && !error && <p className="muted">Обращений пока нет.</p>}
+    </section>
+  );
+}
+
+function PlatformStaffManagement({ canEdit }: { canEdit: boolean }) {
+  const [users, setUsers] = useState<any[]>([]);
+  const [audit, setAudit] = useState<any[]>([]);
+  const [search, setSearch] = useState("");
+  const [error, setError] = useState("");
+  const load = async (query = "") => {
+    const [userItems, auditItems] = await Promise.all([
+      request(`/platform/admin/users${query ? `?search=${encodeURIComponent(query)}` : ""}`),
+      request("/platform/admin/audit?limit=50"),
+    ]);
+    setUsers(userItems);
+    setAudit(auditItems);
+  };
+  useEffect(() => { void load().catch((e) => setError(e.message)); }, []);
+  const find = async (event: any) => { event.preventDefault(); setError(""); try { await load(search); } catch (e: any) { setError(e.message); } };
+  const changeRole = async (user: any, platformRole: string) => {
+    setError("");
+    try {
+      await request(`/platform/admin/users/${user.id}/role`, "PATCH", { platformRole });
+      await load(search);
+    } catch (e: any) { setError(e.message); }
+  };
+  return (
+    <>
+      <h3>Сотрудники платформы</h3>
+      <form className="staff-search" onSubmit={find}><input value={search} placeholder="Имя, @username или Telegram ID" onChange={(event) => setSearch(event.target.value)} /><button>Найти</button></form>
+      {error && <LoadError message={error} />}
+      <div className="staff-list">{users.map((user) => <div key={user.id}><span><b>{user.firstName} {user.lastName || ""}</b><small>@{user.username || "без username"} · {user.telegramUserId}</small></span><select disabled={!canEdit} value={user.platformRole} onChange={(event) => void changeRole(user, event.target.value)}><option value="user">Пользователь</option><option value="support">Поддержка</option><option value="finance">Финансы</option><option value="platform_admin">Админ</option><option value="platform_owner">Владелец</option></select></div>)}</div>
+      <h3>Глобальный журнал</h3>
+      <div className="global-audit">{audit.map((item) => <p key={item.id}><span><b>{item.action}</b><small>{item.actor?.firstName || "Система"} · {item.community?.name || item.scope}</small></span><time>{new Date(item.createdAt).toLocaleString("ru")}</time></p>)}</div>
+    </>
   );
 }
 
@@ -535,6 +714,10 @@ function PlatformOwnerPanel({ canEdit }: { canEdit: boolean }) {
     }
   };
   const toggleTenant = async (community: any) => {
+    if (community.deletionScheduledFor || community.deletionFinalizedAt) {
+      setMessage("Нельзя включить сообщество в процессе удаления");
+      return;
+    }
     const tenantStatus =
       community.tenantStatus === "active" ? "suspended" : "active";
     setMessage("");
@@ -547,6 +730,22 @@ function PlatformOwnerPanel({ canEdit }: { canEdit: boolean }) {
       await load();
     } catch (e: any) {
       setMessage(e.message);
+    }
+  };
+  const finalizeDeletion = async (community: any) => {
+    if (!canEdit) return;
+    const confirmation = window.prompt(`Необратимая финализация. Введите ID:\n${community.id}`);
+    if (confirmation !== community.id) return;
+    setBusy(true);
+    setMessage("");
+    try {
+      await request(`/platform/admin/communities/${community.id}/finalize-deletion`, "POST", { confirmation });
+      setMessage("✓ Персональные данные сообщества удалены, финансовый аудит сохранён");
+      await load();
+    } catch (e: any) {
+      setMessage(e.message);
+    } finally {
+      setBusy(false);
     }
   };
   if (!overview) return <section className="platform-admin"><p>Загружаем панель платформы…</p></section>;
@@ -609,13 +808,19 @@ function PlatformOwnerPanel({ canEdit }: { canEdit: boolean }) {
       <div className="platform-tenants">
         {communities.map((community) => (
           <div key={community.id}>
-            <span><b>{community.name}</b><small>{community.organization?.name} · {community._count.members} участников · {community._count.listings} объявлений</small></span>
-            <button className={community.tenantStatus === "active" ? "danger-soft" : "primary"} onClick={() => void toggleTenant(community)}>
-              {community.tenantStatus === "active" ? "Приостановить" : "Включить"}
-            </button>
+            <span><b>{community.name}</b><small>{community.organization?.name} · {community._count.members} участников · {community._count.listings} объявлений{community.deletionScheduledFor ? ` · удаление ${new Date(community.deletionScheduledFor).toLocaleDateString("ru")}` : ""}</small></span>
+            {community.deletionScheduledFor && !community.deletionFinalizedAt ? (
+              <button className="danger-soft" disabled={!canEdit || new Date(community.deletionScheduledFor) > new Date()} onClick={() => void finalizeDeletion(community)}>Финализировать</button>
+            ) : (
+              <button disabled={Boolean(community.deletionFinalizedAt)} className={community.tenantStatus === "active" ? "danger-soft" : "primary"} onClick={() => void toggleTenant(community)}>
+                {community.deletionFinalizedAt ? "Удалено" : community.tenantStatus === "active" ? "Приостановить" : "Включить"}
+              </button>
+            )}
           </div>
         ))}
       </div>
+      <PlatformStaffManagement canEdit={canEdit} />
+      <PlatformSupportPanel />
     </section>
   );
 }

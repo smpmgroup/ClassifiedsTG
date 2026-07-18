@@ -117,3 +117,16 @@
   owner becomes an administrator and cross-organisation group takeover is rejected.
 - Added onboarding enforcement that refuses to activate a group until the bot is an
   administrator.
+
+## Support, staff roles and safe deletion — session 8
+
+- Added organisation support tickets with customer/staff conversation history,
+  assignment, priorities and controlled lifecycle statuses.
+- Added dedicated support-agent workspace and platform-owner management for support,
+  finance, administrator and owner roles, including last-owner protection.
+- Added a global immutable audit view for platform operators.
+- Added export-gated deletion requests, a 30-day cancellation window and reconnect
+  protection while deletion is pending.
+- Added platform-owner-only finalization that removes tenant personal content and image
+  files while retaining pseudonymized payment, ledger and audit records required for
+  accounting, refunds and abuse investigations.
