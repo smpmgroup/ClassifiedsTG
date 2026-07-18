@@ -296,7 +296,7 @@ app.setErrorHandler((unknownError, req, reply) => {
   const err = unknownError as Error & { statusCode?: number };
   const status: number =
     err instanceof DomainError ? err.statusCode : (err.statusCode ?? 500);
-  if (status >= 500) req.log.error(err);
+  if (status >= 500 && !(err instanceof DomainError)) req.log.error(err);
   const code = err instanceof DomainError ? err.code : "REQUEST_FAILED";
   const details = err instanceof DomainError ? err.details : null;
   reply
