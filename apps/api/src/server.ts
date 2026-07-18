@@ -5,6 +5,7 @@ import rateLimit from "@fastify/rate-limit";
 import jwt from "@fastify/jwt";
 import multipart from "@fastify/multipart";
 import staticPlugin from "@fastify/static";
+import rawBody from "fastify-raw-body";
 import swagger from "@fastify/swagger";
 import swaggerUi from "@fastify/swagger-ui";
 import { Redis } from "ioredis";
@@ -12,6 +13,7 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import crypto from "node:crypto";
 import sharp from "sharp";
+import Stripe from "stripe";
 import { fileTypeFromBuffer } from "file-type";
 import {
   prisma,
@@ -30,6 +32,9 @@ import { loadConfig } from "./config.js";
 import { telegramMembership, validateInitData } from "./auth.js";
 
 const config = loadConfig();
+const stripe = config.STRIPE_SECRET_KEY
+  ? new Stripe(config.STRIPE_SECRET_KEY)
+  : null;
 const redis = new Redis(config.REDIS_URL, { maxRetriesPerRequest: 2 });
 const app = Fastify({
   logger: {
@@ -49,6 +54,12 @@ await app.register(cors, {
 });
 await app.register(rateLimit, { max: 100, timeWindow: "1 minute", redis });
 await app.register(jwt, { secret: config.ACCESS_TOKEN_SECRET });
+await app.register(rawBody, {
+  field: "rawBody",
+  global: false,
+  encoding: false,
+  runFirst: true,
+});
 await app.register(multipart, {
   limits: {
     fileSize: config.MAX_IMAGE_SIZE_MB * 1024 * 1024,
@@ -154,6 +165,132 @@ async function telegramBotApi<T>(method: string, body: Record<string, unknown>) 
       502,
     );
   return payload.result as T;
+}
+
+function requireStripe() {
+  if (!stripe)
+    throw new DomainError(
+      "STRIPE_NOT_CONFIGURED",
+      "Stripe ещё не подключён владельцем платформы",
+      503,
+    );
+  return stripe;
+}
+
+async function organizationPlatformMembership(
+  organizationId: string,
+  userId: string,
+  roles: string[] = ["owner", "administrator"],
+) {
+  const membership = await prisma.organizationMember.findUnique({
+    where: { organizationId_userId: { organizationId, userId } },
+    include: { organization: true },
+  });
+  if (!membership || !roles.includes(membership.role))
+    throw new DomainError("FORBIDDEN", "Недостаточно прав", 403);
+  return membership;
+}
+
+const stripeObjectId = (value: unknown) =>
+  typeof value === "string"
+    ? value
+    : value && typeof value === "object" && "id" in value
+      ? String((value as any).id)
+      : null;
+
+async function syncStripeSubscription(subscription: any) {
+  const customerId = stripeObjectId(subscription.customer);
+  const organizationId = String(subscription.metadata?.organizationId || "");
+  const organization = organizationId
+    ? await prisma.organization.findUnique({ where: { id: organizationId } })
+    : customerId
+      ? await prisma.organization.findUnique({
+          where: { stripeCustomerId: customerId },
+        })
+      : null;
+  if (!organization) return null;
+  const item = subscription.items?.data?.[0];
+  const priceId = stripeObjectId(item?.price);
+  const plan = priceId
+    ? await prisma.billingPlan.findUnique({ where: { stripePriceId: priceId } })
+    : null;
+  const periodEnd = Number(
+    subscription.current_period_end || item?.current_period_end || 0,
+  );
+  return prisma.organization.update({
+    where: { id: organization.id },
+    data: {
+      stripeCustomerId: customerId || organization.stripeCustomerId,
+      stripeSubscriptionId: subscription.id,
+      subscriptionStatus: subscription.status || "unknown",
+      subscriptionPlanKey:
+        plan?.key || subscription.metadata?.planKey || organization.subscriptionPlanKey,
+      subscriptionPriceId: priceId,
+      subscriptionCurrentPeriodEnd: periodEnd
+        ? new Date(periodEnd * 1000)
+        : null,
+      subscriptionCancelAtPeriodEnd: Boolean(subscription.cancel_at_period_end),
+      billingUpdatedAt: new Date(),
+    },
+  });
+}
+
+async function syncStripeInvoice(invoice: any) {
+  const customerId = stripeObjectId(invoice.customer);
+  if (!customerId) return null;
+  const organization = await prisma.organization.findUnique({
+    where: { stripeCustomerId: customerId },
+  });
+  if (!organization) return null;
+  const subscriptionId = stripeObjectId(
+    invoice.subscription || invoice.parent?.subscription_details?.subscription,
+  );
+  return prisma.stripeInvoiceRecord.upsert({
+    where: { id: invoice.id },
+    update: {
+      status: invoice.status || "unknown",
+      amountDue: Number(invoice.amount_due || 0),
+      amountPaid: Number(invoice.amount_paid || 0),
+      hostedInvoiceUrl: invoice.hosted_invoice_url || null,
+    },
+    create: {
+      id: invoice.id,
+      organizationId: organization.id,
+      subscriptionId,
+      status: invoice.status || "unknown",
+      currency: invoice.currency || "eur",
+      amountDue: Number(invoice.amount_due || 0),
+      amountPaid: Number(invoice.amount_paid || 0),
+      hostedInvoiceUrl: invoice.hosted_invoice_url || null,
+      periodStart: invoice.period_start
+        ? new Date(Number(invoice.period_start) * 1000)
+        : null,
+      periodEnd: invoice.period_end
+        ? new Date(Number(invoice.period_end) * 1000)
+        : null,
+      createdAt: new Date(Number(invoice.created) * 1000),
+    },
+  });
+}
+
+async function syncStripeConnectAccount(account: any) {
+  const organization = await prisma.organization.findUnique({
+    where: { stripeConnectAccountId: account.id },
+  });
+  if (!organization) return null;
+  return prisma.organization.update({
+    where: { id: organization.id },
+    data: {
+      connectDetailsSubmitted: Boolean(account.details_submitted),
+      connectChargesEnabled: Boolean(account.charges_enabled),
+      connectPayoutsEnabled: Boolean(account.payouts_enabled),
+      connectRequirementsDue: [
+        ...(account.requirements?.currently_due || []),
+        ...(account.requirements?.past_due || []),
+      ].filter((value, index, values) => values.indexOf(value) === index),
+      billingUpdatedAt: new Date(),
+    },
+  });
 }
 app.setErrorHandler((unknownError, req, reply) => {
   const err = unknownError as Error & { statusCode?: number };
@@ -272,6 +409,101 @@ app.get("/health", async () => {
   await Promise.all([prisma.$queryRaw`SELECT 1`, redis.ping()]);
   return { status: "ok" };
 });
+
+app.post(
+  "/api/webhooks/stripe",
+  { config: { rawBody: true } as any },
+  async (req: any, reply) => {
+    if (!stripe || !config.STRIPE_WEBHOOK_SECRET)
+      return reply
+        .status(503)
+        .send(error("STRIPE_NOT_CONFIGURED", "Stripe webhook is not configured"));
+    const signature = String(req.headers["stripe-signature"] || "");
+    if (!signature || !req.rawBody)
+      return reply
+        .status(400)
+        .send(error("STRIPE_SIGNATURE_REQUIRED", "Missing Stripe signature"));
+    let event: Stripe.Event;
+    try {
+      event = stripe.webhooks.constructEvent(
+        req.rawBody,
+        signature,
+        config.STRIPE_WEBHOOK_SECRET,
+      );
+    } catch (unknownError) {
+      return reply.status(400).send(
+        error(
+          "STRIPE_SIGNATURE_INVALID",
+          unknownError instanceof Error
+            ? unknownError.message
+            : "Invalid Stripe signature",
+        ),
+      );
+    }
+    let stored = await prisma.stripeWebhookEvent.findUnique({
+      where: { id: event.id },
+    });
+    if (stored?.status === "processed") return { received: true, duplicate: true };
+    if (stored)
+      stored = await prisma.stripeWebhookEvent.update({
+        where: { id: event.id },
+        data: { status: "processing", attempts: { increment: 1 }, lastError: null },
+      });
+    else
+      stored = await prisma.stripeWebhookEvent.create({
+        data: {
+          id: event.id,
+          type: event.type,
+          livemode: event.livemode,
+          payload: event as any,
+        },
+      });
+    try {
+      const object: any = event.data.object;
+      if (event.type === "checkout.session.completed") {
+        const organizationId = String(
+          object.metadata?.organizationId || object.client_reference_id || "",
+        );
+        if (organizationId)
+          await prisma.organization.update({
+            where: { id: organizationId },
+            data: {
+              stripeCustomerId: stripeObjectId(object.customer),
+              stripeSubscriptionId: stripeObjectId(object.subscription),
+              subscriptionPlanKey: object.metadata?.planKey || null,
+              billingUpdatedAt: new Date(),
+            },
+          });
+        const subscriptionId = stripeObjectId(object.subscription);
+        if (subscriptionId)
+          await syncStripeSubscription(
+            await stripe.subscriptions.retrieve(subscriptionId),
+          );
+      } else if (event.type.startsWith("customer.subscription.")) {
+        await syncStripeSubscription(object);
+      } else if (event.type.startsWith("invoice.")) {
+        await syncStripeInvoice(object);
+      } else if (event.type === "account.updated") {
+        await syncStripeConnectAccount(object);
+      }
+      await prisma.stripeWebhookEvent.update({
+        where: { id: event.id },
+        data: { status: "processed", processedAt: new Date(), lastError: null },
+      });
+      return { received: true };
+    } catch (unknownError) {
+      await prisma.stripeWebhookEvent.update({
+        where: { id: event.id },
+        data: {
+          status: "failed",
+          lastError:
+            unknownError instanceof Error ? unknownError.message.slice(0, 2000) : "unknown",
+        },
+      });
+      throw unknownError;
+    }
+  },
+);
 app.post(
   "/api/auth/telegram",
   { config: { rateLimit: { max: 10, timeWindow: "1 minute" } } },
@@ -1267,6 +1499,209 @@ app.post(
 );
 
 app.get(
+  "/api/platform/organizations/:id/billing",
+  { preHandler: platformAuth },
+  async (req: any) => {
+    const membership = await organizationPlatformMembership(
+      String(req.params.id),
+      req.platformIdentity.userId,
+    );
+    const plans = await prisma.billingPlan.findMany({
+      where: { active: true },
+      orderBy: { sortOrder: "asc" },
+    });
+    const invoices = await prisma.stripeInvoiceRecord.findMany({
+      where: { organizationId: membership.organizationId },
+      orderBy: { createdAt: "desc" },
+      take: 24,
+    });
+    const organization = membership.organization;
+    return {
+      configured: Boolean(stripe),
+      webhookConfigured: Boolean(config.STRIPE_WEBHOOK_SECRET),
+      plans: plans.map((plan) => ({
+        ...plan,
+        available: Boolean(stripe && plan.stripePriceId),
+        stripePriceId: undefined,
+      })),
+      subscription: {
+        status: organization.subscriptionStatus,
+        planKey: organization.subscriptionPlanKey,
+        currentPeriodEnd: organization.subscriptionCurrentPeriodEnd,
+        cancelAtPeriodEnd: organization.subscriptionCancelAtPeriodEnd,
+        customerReady: Boolean(organization.stripeCustomerId),
+      },
+      connect: {
+        accountCreated: Boolean(organization.stripeConnectAccountId),
+        detailsSubmitted: organization.connectDetailsSubmitted,
+        chargesEnabled: organization.connectChargesEnabled,
+        payoutsEnabled: organization.connectPayoutsEnabled,
+        requirementsDue: organization.connectRequirementsDue,
+      },
+      invoices,
+    };
+  },
+);
+
+app.post(
+  "/api/platform/organizations/:id/billing/checkout",
+  { preHandler: platformAuth },
+  async (req: any) => {
+    const stripeClient = requireStripe();
+    const membership = await organizationPlatformMembership(
+      String(req.params.id),
+      req.platformIdentity.userId,
+      ["owner"],
+    );
+    const organization = membership.organization;
+    if (["active", "trialing", "past_due", "incomplete"].includes(organization.subscriptionStatus))
+      throw new DomainError(
+        "SUBSCRIPTION_ALREADY_EXISTS",
+        "Управляйте текущей подпиской через Stripe Portal",
+        409,
+      );
+    const plan = await prisma.billingPlan.findFirst({
+      where: { key: String(req.body?.planKey || ""), active: true },
+    });
+    if (!plan?.stripePriceId)
+      throw new DomainError(
+        "BILLING_PLAN_UNAVAILABLE",
+        "Тариф ещё не связан со Stripe Price",
+        409,
+      );
+    let customerId = organization.stripeCustomerId;
+    if (!customerId) {
+      const customer = await stripeClient.customers.create({
+        name: organization.legalName || organization.name,
+        email: organization.billingEmail || undefined,
+        metadata: { organizationId: organization.id },
+      });
+      customerId = customer.id;
+      await prisma.organization.update({
+        where: { id: organization.id },
+        data: { stripeCustomerId: customerId, billingUpdatedAt: new Date() },
+      });
+    }
+    const session = await stripeClient.checkout.sessions.create({
+      mode: "subscription",
+      customer: customerId,
+      client_reference_id: organization.id,
+      line_items: [{ price: plan.stripePriceId, quantity: 1 }],
+      allow_promotion_codes: true,
+      success_url: `${config.APP_URL}/?mode=platform&billing=success&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${config.APP_URL}/?mode=platform&billing=cancelled`,
+      metadata: { organizationId: organization.id, planKey: plan.key },
+      subscription_data: {
+        metadata: { organizationId: organization.id, planKey: plan.key },
+        billing_mode: { type: "flexible" },
+      },
+    });
+    await prisma.auditEvent.create({
+      data: {
+        actorId: req.platformIdentity.userId,
+        scope: "stripe_billing",
+        action: "stripe_checkout_created",
+        targetType: "Organization",
+        targetId: organization.id,
+        metadata: { planKey: plan.key, sessionId: session.id },
+      },
+    });
+    return { url: session.url };
+  },
+);
+
+app.post(
+  "/api/platform/organizations/:id/billing/portal",
+  { preHandler: platformAuth },
+  async (req: any) => {
+    const stripeClient = requireStripe();
+    const membership = await organizationPlatformMembership(
+      String(req.params.id),
+      req.platformIdentity.userId,
+      ["owner"],
+    );
+    if (!membership.organization.stripeCustomerId)
+      throw new DomainError("STRIPE_CUSTOMER_MISSING", "Stripe Customer ещё не создан", 409);
+    const session = await stripeClient.billingPortal.sessions.create({
+      customer: membership.organization.stripeCustomerId,
+      return_url: `${config.APP_URL}/?mode=platform&billing=return`,
+    });
+    return { url: session.url };
+  },
+);
+
+app.post(
+  "/api/platform/organizations/:id/connect/onboarding",
+  { preHandler: platformAuth },
+  async (req: any) => {
+    const stripeClient = requireStripe();
+    const membership = await organizationPlatformMembership(
+      String(req.params.id),
+      req.platformIdentity.userId,
+      ["owner"],
+    );
+    const organization = membership.organization;
+    let accountId = organization.stripeConnectAccountId;
+    if (!accountId) {
+      const account = await stripeClient.accounts.create({
+        country: config.STRIPE_CONNECT_COUNTRY,
+        capabilities: { transfers: { requested: true } },
+        controller: {
+          fees: { payer: "application" },
+          losses: { payments: "application" },
+          requirement_collection: "stripe",
+          stripe_dashboard: { type: "express" },
+        },
+        business_profile: {
+          name: organization.legalName || organization.name,
+          url: config.APP_URL,
+        },
+        metadata: { organizationId: organization.id },
+      });
+      accountId = account.id;
+      await prisma.organization.update({
+        where: { id: organization.id },
+        data: { stripeConnectAccountId: accountId, billingUpdatedAt: new Date() },
+      });
+    }
+    const link = await stripeClient.accountLinks.create({
+      account: accountId,
+      type: "account_onboarding",
+      refresh_url: `${config.APP_URL}/?mode=platform&connect=refresh`,
+      return_url: `${config.APP_URL}/?mode=platform&connect=return`,
+      collection_options: { fields: "eventually_due", future_requirements: "include" },
+    });
+    await prisma.auditEvent.create({
+      data: {
+        actorId: req.platformIdentity.userId,
+        scope: "stripe_connect",
+        action: "stripe_connect_onboarding_created",
+        targetType: "Organization",
+        targetId: organization.id,
+        metadata: { accountId },
+      },
+    });
+    return { url: link.url };
+  },
+);
+
+app.post(
+  "/api/platform/organizations/:id/connect/refresh",
+  { preHandler: platformAuth },
+  async (req: any) => {
+    const stripeClient = requireStripe();
+    const membership = await organizationPlatformMembership(
+      String(req.params.id),
+      req.platformIdentity.userId,
+    );
+    const accountId = membership.organization.stripeConnectAccountId;
+    if (!accountId)
+      throw new DomainError("STRIPE_CONNECT_MISSING", "Stripe Connect ещё не создан", 409);
+    return syncStripeConnectAccount(await stripeClient.accounts.retrieve(accountId));
+  },
+);
+
+app.get(
   "/api/platform/admin/overview",
   { preHandler: requirePlatformRole(platformAdminRoles) },
   async () => {
@@ -1522,6 +1957,76 @@ app.get(
       include: { organization: { select: { id: true, name: true } } },
       orderBy: { deletionScheduledFor: "asc" },
     }),
+);
+
+app.get(
+  "/api/platform/admin/billing-plans",
+  { preHandler: requirePlatformRole(platformAdminRoles) },
+  async () => prisma.billingPlan.findMany({ orderBy: { sortOrder: "asc" } }),
+);
+
+app.patch(
+  "/api/platform/admin/billing-plans/:id",
+  { preHandler: requirePlatformRole(new Set(["platform_owner"])) },
+  async (req: any) => {
+    const plan = await prisma.billingPlan.findUnique({
+      where: { id: String(req.params.id) },
+    });
+    if (!plan)
+      throw new DomainError("BILLING_PLAN_NOT_FOUND", "Тариф не найден", 404);
+    const stripePriceId = String(req.body?.stripePriceId || "").trim() || null;
+    const unitAmount = Number(req.body?.unitAmount);
+    const active = Boolean(req.body?.active);
+    if (stripePriceId && !/^price_[A-Za-z0-9]+$/.test(stripePriceId))
+      throw new DomainError("STRIPE_PRICE_INVALID", "Stripe Price ID должен начинаться с price_");
+    if (!Number.isInteger(unitAmount) || unitAmount < 0 || unitAmount > 100000000)
+      throw new DomainError("BILLING_AMOUNT_INVALID", "Неверная сумма тарифа");
+    if (stripe && stripePriceId) {
+      const remotePrice = await stripe.prices.retrieve(stripePriceId);
+      if (!remotePrice.active || remotePrice.type !== "recurring")
+        throw new DomainError("STRIPE_PRICE_INVALID", "Stripe Price должен быть активным и рекуррентным");
+      if (remotePrice.currency !== plan.currency)
+        throw new DomainError("STRIPE_PRICE_CURRENCY", "Валюта Stripe Price не совпадает с тарифом");
+    }
+    const updated = await prisma.billingPlan.update({
+      where: { id: plan.id },
+      data: { stripePriceId, unitAmount, active },
+    });
+    await prisma.auditEvent.create({
+      data: {
+        actorId: req.platformIdentity.userId,
+        scope: "stripe_billing",
+        action: "billing_plan_updated",
+        targetType: "BillingPlan",
+        targetId: plan.id,
+        metadata: { stripePriceId, unitAmount, active },
+      },
+    });
+    return updated;
+  },
+);
+
+app.get(
+  "/api/platform/admin/stripe-events",
+  { preHandler: requirePlatformRole(platformFinanceRoles) },
+  async (req: any) => {
+    const status = String(req.query?.status || "").trim();
+    return prisma.stripeWebhookEvent.findMany({
+      where: status ? { status } : undefined,
+      select: {
+        id: true,
+        type: true,
+        livemode: true,
+        status: true,
+        attempts: true,
+        lastError: true,
+        processedAt: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: "desc" },
+      take: 200,
+    });
+  },
 );
 
 app.post(

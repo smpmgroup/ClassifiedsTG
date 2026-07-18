@@ -130,3 +130,17 @@
 - Added platform-owner-only finalization that removes tenant personal content and image
   files while retaining pseudonymized payment, ledger and audit records required for
   accounting, refunds and abuse investigations.
+
+## Stripe Billing and Connect foundation — sessions 11–12
+
+- Added database-managed SaaS plans and owner-only Stripe Checkout using allowlisted,
+  remotely validated recurring Price IDs.
+- Added Customer Portal sessions, subscription state and invoice reconciliation.
+- Added raw-body signature verification, durable webhook idempotency, retry diagnostics
+  and finance visibility for Stripe events.
+- Added Stripe-hosted Connect onboarding with controller properties, Express dashboard,
+  transfer capability and synchronized verification requirements.
+- Added customer billing/Connect UI, platform tariff controls and a dedicated finance
+  workspace.
+- Kept Telegram publication purchases separate from Stripe SaaS subscriptions and
+  documented the external approval/funding gates for owner payouts.

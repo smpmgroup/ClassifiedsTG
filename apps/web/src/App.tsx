@@ -265,6 +265,7 @@ function PlatformWorkspace() {
                 <p className="muted">Группы пока не подключены.</p>
               )}
             </div>
+            <OrganizationBilling organization={organization} />
             <OrganizationFinance organizationId={organization.id} />
             <OrganizationSupport organization={organization} />
             {organization.role === "owner" && (
@@ -325,7 +326,61 @@ function PlatformWorkspace() {
         data.user.platformRole,
       ) && <PlatformOwnerPanel canEdit={data.user.platformRole === "platform_owner"} />}
       {data.user.platformRole === "support" && <PlatformSupportPanel />}
+      {data.user.platformRole === "finance" && <PlatformFinancePanel />}
     </main>
+  );
+}
+
+function OrganizationBilling({ organization }: { organization: any }) {
+  const [billing, setBilling] = useState<any>();
+  const [expanded, setExpanded] = useState(false);
+  const [busy, setBusy] = useState("");
+  const [error, setError] = useState("");
+  const load = () =>
+    request(`/platform/organizations/${organization.id}/billing`).then(setBilling);
+  useEffect(() => { void load().catch((e) => setError(e.message)); }, [organization.id]);
+  const openExternal = (url: string) => {
+    if (window.Telegram?.WebApp.openLink) window.Telegram.WebApp.openLink(url);
+    else window.location.href = url;
+  };
+  const action = async (name: string, path: string, body: any = {}) => {
+    setBusy(name);
+    setError("");
+    try {
+      const result = await request(path, "POST", body);
+      if (result?.url) openExternal(result.url);
+      else await load();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy("");
+    }
+  };
+  if (!billing && !error) return null;
+  return (
+    <section className="organization-billing">
+      <button type="button" className="finance-summary" onClick={() => setExpanded((value) => !value)}>
+        <span><small>STRIPE BILLING</small><b>{billing?.subscription.status === "active" ? `Тариф ${billing.subscription.planKey || "active"}` : "Без подписки"}</b></span><i>{expanded ? "−" : "+"}</i>
+      </button>
+      {expanded && (
+        <div className="billing-details">
+          {error && <LoadError message={error} />}
+          {!billing?.configured && <div className="billing-unavailable"><b>Stripe готов к подключению</b><small>Владелец платформы должен добавить API ключи и Price ID.</small></div>}
+          {billing?.plans.map((plan: any) => (
+            <article className="billing-plan" key={plan.id}>
+              <span><b>{plan.name}</b><small>{plan.description}</small><strong>{(plan.unitAmount / 100).toLocaleString("ru", { style: "currency", currency: plan.currency.toUpperCase() })} / {plan.interval === "month" ? "месяц" : plan.interval}</strong></span>
+              <ul>{(plan.features || []).map((feature: string) => <li key={feature}>✓ {feature}</li>)}</ul>
+              {organization.role === "owner" && <button className="primary" disabled={Boolean(busy) || !plan.available || ["active", "trialing"].includes(billing.subscription.status)} onClick={() => void action(plan.key, `/platform/organizations/${organization.id}/billing/checkout`, { planKey: plan.key })}>{busy === plan.key ? "Открываем…" : "Выбрать"}</button>}
+            </article>
+          ))}
+          {organization.role === "owner" && billing?.subscription.customerReady && <button disabled={Boolean(busy)} onClick={() => void action("portal", `/platform/organizations/${organization.id}/billing/portal`)}>Управлять подпиской в Stripe</button>}
+          <div className="connect-status"><b>Выплаты сообществу</b><small>{billing?.connect.payoutsEnabled ? "✓ Stripe Connect готов к выплатам" : billing?.connect.detailsSubmitted ? "Stripe проверяет данные" : "Пройдите защищённую проверку Stripe"}</small>{billing?.connect.requirementsDue?.length > 0 && <small>Нужно заполнить: {billing.connect.requirementsDue.length}</small>}</div>
+          {organization.role === "owner" && <button className="primary" disabled={Boolean(busy) || !billing?.configured} onClick={() => void action("connect", `/platform/organizations/${organization.id}/connect/onboarding`)}>{billing?.connect.accountCreated ? "Продолжить проверку Stripe" : "Подключить Stripe Connect"}</button>}
+          {billing?.connect.accountCreated && <button disabled={Boolean(busy) || !billing?.configured} onClick={() => void action("refresh", `/platform/organizations/${organization.id}/connect/refresh`)}>Обновить статус</button>}
+          {billing?.invoices.length > 0 && <div className="billing-invoices"><b>Счета</b>{billing.invoices.map((invoice: any) => <p key={invoice.id}><span>{new Date(invoice.createdAt).toLocaleDateString("ru")} · {invoice.status}</span><b>{(invoice.amountPaid / 100).toLocaleString("ru", { style: "currency", currency: invoice.currency.toUpperCase() })}</b></p>)}</div>}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -602,6 +657,32 @@ function PlatformSupportPanel() {
   );
 }
 
+function PlatformFinancePanel() {
+  const [ledger, setLedger] = useState<any[]>([]);
+  const [events, setEvents] = useState<any[]>([]);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    Promise.all([
+      request("/platform/admin/ledger?limit=100"),
+      request("/platform/admin/stripe-events"),
+    ]).then(([ledgerItems, eventItems]) => {
+      setLedger(ledgerItems);
+      setEvents(eventItems);
+    }).catch((e) => setError(e.message));
+  }, []);
+  return (
+    <section className="platform-admin">
+      <small>ФИНАНСЫ</small><h2>Финансовый контроль</h2>
+      {error && <LoadError message={error} />}
+      <h3>Telegram Stars ledger</h3>
+      <div className="global-audit">{ledger.map((item) => <p key={item.id}><span><b>{item.type}</b><small>{item.organization?.name || "Платформа"} · {item.status}</small></span><time>{item.grossAmount} ⭐</time></p>)}</div>
+      <h3>Stripe webhooks</h3>
+      <div className="global-audit">{events.map((item) => <p key={item.id}><span><b>{item.type}</b><small>{item.status} · попыток {item.attempts}{item.lastError ? ` · ${item.lastError}` : ""}</small></span><time>{new Date(item.createdAt).toLocaleString("ru")}</time></p>)}</div>
+      {!ledger.length && !events.length && !error && <p className="muted">Финансовых событий пока нет.</p>}
+    </section>
+  );
+}
+
 function PlatformStaffManagement({ canEdit }: { canEdit: boolean }) {
   const [users, setUsers] = useState<any[]>([]);
   const [audit, setAudit] = useState<any[]>([]);
@@ -644,14 +725,16 @@ function PlatformOwnerPanel({ canEdit }: { canEdit: boolean }) {
   const [holdDays, setHoldDays] = useState(21);
   const [minimumPayout, setMinimumPayout] = useState(1000);
   const [ledger, setLedger] = useState<any[]>([]);
+  const [billingPlans, setBillingPlans] = useState<any[]>([]);
   const [reconciliation, setReconciliation] = useState<any>();
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const load = async () => {
-    const [summary, tenantItems, ledgerItems] = await Promise.all([
+    const [summary, tenantItems, ledgerItems, planItems] = await Promise.all([
       request("/platform/admin/overview"),
       request("/platform/admin/communities"),
       request("/platform/admin/ledger?limit=50"),
+      request("/platform/admin/billing-plans"),
     ]);
     setOverview(summary);
     setCommunities(tenantItems);
@@ -660,6 +743,7 @@ function PlatformOwnerPanel({ canEdit }: { canEdit: boolean }) {
     setHoldDays(summary.settings.starsHoldDays);
     setMinimumPayout(summary.settings.minimumPayoutStars);
     setLedger(ledgerItems);
+    setBillingPlans(planItems);
   };
   useEffect(() => {
     void load().catch((e) => setMessage(e.message));
@@ -706,6 +790,23 @@ function PlatformOwnerPanel({ canEdit }: { canEdit: boolean }) {
     try {
       await request(`/platform/admin/payments/${payment.id}/refund`, "POST", { reason });
       setMessage("✓ Stars возвращены, объявление скрыто");
+      await load();
+    } catch (e: any) {
+      setMessage(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const saveBillingPlan = async (plan: any) => {
+    setBusy(true);
+    setMessage("");
+    try {
+      await request(`/platform/admin/billing-plans/${plan.id}`, "PATCH", {
+        stripePriceId: plan.stripePriceId,
+        unitAmount: Number(plan.unitAmount),
+        active: Boolean(plan.active),
+      });
+      setMessage(`✓ Тариф ${plan.name} сохранён`);
       await load();
     } catch (e: any) {
       setMessage(e.message);
@@ -782,6 +883,18 @@ function PlatformOwnerPanel({ canEdit }: { canEdit: boolean }) {
         </form>
       )}
       {message && <p className="platform-message">{message}</p>}
+      <h3>Stripe Billing</h3>
+      <div className="billing-plan-admin">
+        {billingPlans.map((plan) => (
+          <div key={plan.id}>
+            <span><b>{plan.name}</b><small>{plan.key} · {plan.currency.toUpperCase()} / {plan.interval}</small></span>
+            <label>Цена в центах<input type="number" min="0" value={plan.unitAmount} disabled={!canEdit} onChange={(event) => setBillingPlans((current) => current.map((item) => item.id === plan.id ? { ...item, unitAmount: Number(event.target.value) } : item))} /></label>
+            <label>Stripe Price ID<input placeholder="price_..." value={plan.stripePriceId || ""} disabled={!canEdit} onChange={(event) => setBillingPlans((current) => current.map((item) => item.id === plan.id ? { ...item, stripePriceId: event.target.value } : item))} /></label>
+            <label className="check"><input type="checkbox" checked={plan.active} disabled={!canEdit} onChange={(event) => setBillingPlans((current) => current.map((item) => item.id === plan.id ? { ...item, active: event.target.checked } : item))} />Активен</label>
+            {canEdit && <button disabled={busy} onClick={() => void saveBillingPlan(plan)}>Сохранить тариф</button>}
+          </div>
+        ))}
+      </div>
       <div className="platform-stars-tools">
         <span>
           <b>Сверка Telegram Stars</b>

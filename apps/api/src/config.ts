@@ -10,6 +10,9 @@ const schema = z.object({
   REDIS_URL: z.string().url(), APP_URL: z.string().url(), UPLOAD_DIR: z.string().default('/app/uploads'),
   MAX_LISTING_IMAGES: z.coerce.number().int().min(1).max(20).default(10), MAX_IMAGE_SIZE_MB: z.coerce.number().positive().default(10),
   MAX_LISTING_TITLE_LENGTH: z.coerce.number().int().default(80), MAX_LISTING_DESCRIPTION_LENGTH: z.coerce.number().int().default(3000),
+  STRIPE_SECRET_KEY: z.preprocess((value) => value === "" || value == null ? undefined : value, z.string().startsWith("sk_").optional()),
+  STRIPE_WEBHOOK_SECRET: z.preprocess((value) => value === "" || value == null ? undefined : value, z.string().startsWith("whsec_").optional()),
+  STRIPE_CONNECT_COUNTRY: z.string().length(2).default("ES"),
 });
 export type Config = z.infer<typeof schema>;
 export function loadConfig(env = process.env): Config { const parsed=schema.safeParse(env); if(!parsed.success) throw new Error(`Invalid environment: ${parsed.error.issues.map(i=>`${i.path.join('.')}: ${i.message}`).join('; ')}`); return parsed.data; }

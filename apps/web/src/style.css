@@ -1113,6 +1113,102 @@ nav .active {
   border: 1px solid color-mix(in srgb, var(--tg-theme-button-color, #188b52) 18%, transparent);
   border-radius: 14px;
 }
+.organization-billing {
+  margin-bottom: 12px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, #635bff 22%, transparent);
+  border-radius: 14px;
+}
+.organization-billing .finance-summary {
+  background: color-mix(in srgb, #635bff 9%, var(--tg-theme-bg-color, #fff));
+}
+.organization-billing .finance-summary b {
+  color: #635bff;
+}
+.billing-details,
+.billing-plan,
+.billing-plan-admin,
+.billing-plan-admin > div {
+  display: grid;
+  gap: 10px;
+}
+.billing-details {
+  padding: 12px;
+}
+.billing-plan {
+  padding: 13px;
+  border: 1px solid color-mix(in srgb, #635bff 20%, transparent);
+  border-radius: 12px;
+}
+.billing-plan span,
+.billing-plan small,
+.billing-plan strong,
+.connect-status,
+.connect-status small {
+  display: block;
+}
+.billing-plan small,
+.connect-status small,
+.billing-unavailable small {
+  margin-top: 4px;
+  color: var(--tg-theme-hint-color, #748078);
+  line-height: 1.4;
+}
+.billing-plan strong {
+  margin-top: 7px;
+  color: #635bff;
+}
+.billing-plan ul {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+}
+.billing-details > button,
+.billing-plan button {
+  min-height: 42px;
+  border-radius: 10px;
+}
+.billing-unavailable,
+.connect-status {
+  padding: 11px;
+  border-radius: 10px;
+  background: var(--tg-theme-secondary-bg-color, #f3f6f4);
+}
+.billing-invoices {
+  display: grid;
+  gap: 5px;
+}
+.billing-invoices p {
+  display: flex;
+  justify-content: space-between;
+  margin: 0;
+  padding: 7px 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--tg-theme-hint-color, #748078) 14%, transparent);
+  font-size: 11px;
+}
+.billing-plan-admin > div {
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--tg-theme-secondary-bg-color, #f3f6f4);
+}
+.billing-plan-admin span,
+.billing-plan-admin small {
+  display: block;
+}
+.billing-plan-admin label {
+  display: grid;
+  gap: 4px;
+  font-size: 11px;
+}
+.billing-plan-admin input:not([type="checkbox"]) {
+  min-height: 40px;
+  padding: 8px;
+  border: 1px solid color-mix(in srgb, var(--tg-theme-hint-color, #748078) 24%, transparent);
+  border-radius: 9px;
+}
 .support-details,
 .support-form,
 .support-ticket,
