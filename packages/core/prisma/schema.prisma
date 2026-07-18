@@ -116,6 +116,7 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   lastSeenAt DateTime @default(now())
+  botStartedAt DateTime?
   members CommunityMember[]
   listings Listing[] @relation("ListingAuthor")
   moderatedListings Listing[] @relation("ListingModerator")

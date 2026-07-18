@@ -680,6 +680,15 @@ function Admin() {
             <small>
               @{member.user.username || "без username"} · {member.role}
             </small>
+            <small
+              className={
+                member.user.botStartedAt ? "bot-connected" : "bot-disconnected"
+              }
+            >
+              {member.user.botStartedAt
+                ? "✓ Личный чат с ботом подключён"
+                : "Нужно нажать /start в личном чате"}
+            </small>
           </div>
           <select
             value={member.role}

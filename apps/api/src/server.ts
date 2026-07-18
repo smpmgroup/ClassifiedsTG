@@ -1034,14 +1034,22 @@ app.post(
 app.get(
   "/api/admin/users",
   { preHandler: requireRole(privilegedRoles) },
-  async (req: any) =>
-    prisma.communityMember.findMany({
+  async (req: any) => {
+    const members = await prisma.communityMember.findMany({
       where: { communityId: req.identity.communityId },
       include: {
         user: { include: { _count: { select: { listings: true } } } },
       },
       orderBy: { user: { lastSeenAt: "desc" } },
-    }),
+    });
+    return members.map((member) => ({
+      ...member,
+      user: {
+        ...member.user,
+        telegramUserId: String(member.user.telegramUserId),
+      },
+    }));
+  },
 );
 app.patch(
   "/api/admin/users/:userId",
@@ -1134,8 +1142,21 @@ app.patch(
 app.get(
   "/api/admin/settings",
   { preHandler: requireRole(privilegedRoles) },
-  async (req: any) =>
-    prisma.community.findUnique({ where: { id: req.identity.communityId } }),
+  async (req: any) => {
+    const community = await prisma.community.findUnique({
+      where: { id: req.identity.communityId },
+    });
+    return community
+      ? {
+          ...community,
+          telegramChatId: String(community.telegramChatId),
+          publicationChatId:
+            community.publicationChatId === null
+              ? null
+              : String(community.publicationChatId),
+        }
+      : null;
+  },
 );
 app.patch(
   "/api/admin/settings",
@@ -1176,7 +1197,14 @@ app.patch(
         metadata: data,
       },
     });
-    return result;
+    return {
+      ...result,
+      telegramChatId: String(result.telegramChatId),
+      publicationChatId:
+        result.publicationChatId === null
+          ? null
+          : String(result.publicationChatId),
+    };
   },
 );
 app.get(

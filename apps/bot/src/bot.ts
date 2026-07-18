@@ -11,6 +11,7 @@ const token: string = tokenValue;
 const appUrl: string = appUrlValue;
 const botUsername: string = usernameValue;
 const bot = new Telegraf(token);
+const roles = new Set(["moderator", "admin", "owner"]);
 const privateBoard = () =>
   Markup.inlineKeyboard([Markup.button.webApp("Открыть доску", appUrl)]);
 const publicBoard = () =>
@@ -20,9 +21,25 @@ const publicBoard = () =>
       `https://t.me/${botUsername}?start=board`,
     ),
   ]);
-bot.start((ctx) =>
-  ctx.reply("Добро пожаловать на доску объявлений сообщества.", privateBoard()),
-);
+bot.start(async (ctx) => {
+  const user = await prisma.user.findUnique({
+    where: { telegramUserId: BigInt(ctx.from.id) },
+    include: { members: true },
+  });
+  if (ctx.chat.type === "private" && user) {
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { botStartedAt: new Date() } as any,
+    });
+  }
+  const privileged = user?.members.find((member) => roles.has(member.role));
+  await ctx.reply(
+    privileged
+      ? `Бот подключён. Ваша роль: ${privileged.role}. Карточки модерации будут приходить в этот чат.`
+      : "Добро пожаловать на доску объявлений сообщества.",
+    privateBoard(),
+  );
+});
 bot.command("board", (ctx) =>
   ctx.reply(
     "Открыть объявления:",
@@ -46,7 +63,6 @@ bot.command("myads", (ctx) =>
     ]),
   ),
 );
-const roles = new Set(["moderator", "admin", "owner"]);
 async function moderator(telegramId: number, communityId: string) {
   return prisma.communityMember.findFirst({
     where: {
