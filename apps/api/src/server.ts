@@ -20,6 +20,8 @@ import {
   adminRoles,
   assertListingTransition,
   expiresAt,
+  validateTaxonomyAttributes,
+  jsonStringify,
 } from "@board/core";
 import { loadConfig } from "./config.js";
 import { telegramMembership, validateInitData } from "./auth.js";
@@ -37,6 +39,7 @@ const app = Fastify({
   },
   bodyLimit: 1024 * 1024,
 });
+app.setReplySerializer(jsonStringify);
 await app.register(helmet);
 await app.register(cors, {
   origin: config.NODE_ENV === "production" ? config.APP_URL : true,
@@ -92,11 +95,18 @@ async function auth(req: any, reply: any) {
   try {
     const decoded = (await req.jwtVerify()) as Identity;
     req.identity = decoded;
-    const user = await prisma.user.findUnique({
-      where: { id: decoded.userId },
+    const member = await prisma.communityMember.findUnique({
+      where: {
+        communityId_userId: {
+          communityId: decoded.communityId,
+          userId: decoded.userId,
+        },
+      },
+      include: { user: true },
     });
-    if (!user || user.status !== "active")
+    if (!member || member.user.status !== "active")
       throw new DomainError("ACCESS_DENIED", "Доступ ограничен", 403);
+    req.identity = { ...decoded, role: member.role };
   } catch (e) {
     if (e instanceof DomainError) throw e;
     return reply
@@ -396,6 +406,15 @@ app.post(
         "VALIDATION_ERROR",
         "Категория и название обязательны",
       );
+    const category = await prisma.category.findFirst({
+      where: {
+        id: b.categoryId,
+        communityId: req.identity.communityId,
+        isActive: true,
+      },
+    });
+    if (!category)
+      throw new DomainError("CATEGORY_NOT_FOUND", "Категория не найдена", 404);
     return prisma.listing.create({
       data: {
         communityId: req.identity.communityId,
@@ -408,7 +427,9 @@ app.post(
         ),
         price: b.price,
         priceType: b.priceType || "fixed",
-        condition: b.condition || "good",
+        condition: (category as any).conditionEnabled
+          ? b.condition || "good"
+          : "not_applicable",
         currency: b.currency || "EUR",
         locationText: b.locationText,
         contactMode: b.contactMode || "telegram",
@@ -437,6 +458,18 @@ app.patch("/api/listings/:id", { preHandler: auth }, async (req: any) => {
   const data = Object.fromEntries(
     Object.entries(req.body || {}).filter(([k]) => allowed.includes(k)),
   );
+  if (data.categoryId) {
+    const category = await prisma.category.findFirst({
+      where: {
+        id: String(data.categoryId),
+        communityId: req.identity.communityId,
+        isActive: true,
+      },
+    });
+    if (!category)
+      throw new DomainError("CATEGORY_NOT_FOUND", "Категория не найдена", 404);
+    if (!(category as any).conditionEnabled) data.condition = "not_applicable";
+  }
   if (listing.status === "published")
     data.status = (
       await prisma.community.findUniqueOrThrow({
@@ -453,6 +486,7 @@ app.post(
   async (req: any) => {
     const listing = await prisma.listing.findUnique({
       where: { id: req.params.id },
+      include: { category: true, images: { select: { id: true } } },
     });
     if (!listing || listing.authorId !== req.identity.userId)
       throw new DomainError("LISTING_NOT_FOUND", "Объявление не найдено", 404);
@@ -473,6 +507,24 @@ app.post(
       );
     assertListingTransition(listing.status, to);
     if (to === "pending") {
+      const invalidFields = validateTaxonomyAttributes(
+        listing.category.fieldSchema,
+        listing.attributes,
+      );
+      const missing: string[] = [];
+      if (!listing.title.trim()) missing.push("Название");
+      if (!listing.description.trim()) missing.push("Описание");
+      if (!listing.locationText?.trim()) missing.push("Местоположение");
+      if (!listing.images.length) missing.push("Хотя бы одна фотография");
+      if (listing.priceType === "fixed" && listing.price === null)
+        missing.push("Цена");
+      if (invalidFields.length || missing.length)
+        throw new DomainError(
+          "LISTING_INCOMPLETE",
+          "Заполните обязательные поля",
+          400,
+          { fields: [...missing, ...invalidFields] },
+        );
       const active = await prisma.listing.count({
         where: {
           authorId: req.identity.userId,
@@ -741,7 +793,11 @@ app.post(
   { preHandler: auth },
   async (req: any) => {
     const listing = await prisma.listing.findFirst({
-      where: { id: req.params.id, status: "published" },
+      where: {
+        id: req.params.id,
+        status: "published",
+        communityId: req.identity.communityId,
+      },
       include: { author: true },
     });
     if (!listing || listing.authorId === req.identity.userId)
@@ -1009,8 +1065,16 @@ app.post(
   { preHandler: requireRole(privilegedRoles) },
   async (req: any) =>
     prisma.$transaction(async (tx) => {
+      const existing = await tx.report.findFirst({
+        where: {
+          id: req.params.id,
+          communityId: req.identity.communityId,
+        },
+      });
+      if (!existing)
+        throw new DomainError("REPORT_NOT_FOUND", "Жалоба не найдена", 404);
       const report = await tx.report.update({
-        where: { id: req.params.id },
+        where: { id: existing.id },
         data: {
           status: req.body?.status || "resolved",
           resolution: req.body?.resolution,
@@ -1035,20 +1099,37 @@ app.get(
   "/api/admin/users",
   { preHandler: requireRole(privilegedRoles) },
   async (req: any) => {
-    const members = await prisma.communityMember.findMany({
-      where: { communityId: req.identity.communityId },
-      include: {
-        user: { include: { _count: { select: { listings: true } } } },
-      },
-      orderBy: { user: { lastSeenAt: "desc" } },
-    });
-    return members.map((member) => ({
-      ...member,
-      user: {
-        ...member.user,
-        telegramUserId: String(member.user.telegramUserId),
-      },
-    }));
+    const search = String(req.query?.search || "").trim();
+    const where: any = {
+      communityId: req.identity.communityId,
+      ...(search
+        ? {
+            user: {
+              OR: [
+                { firstName: { contains: search, mode: "insensitive" } },
+                {
+                  username: {
+                    contains: search.replace(/^@/, ""),
+                    mode: "insensitive",
+                  },
+                },
+              ],
+            },
+          }
+        : {}),
+    };
+    const [members, total] = await prisma.$transaction([
+      prisma.communityMember.findMany({
+        where,
+        include: {
+          user: { include: { _count: { select: { listings: true } } } },
+        },
+        orderBy: { user: { lastSeenAt: "desc" } },
+        take: Math.min(Math.max(Number(req.query?.limit) || 50, 1), 100),
+      }),
+      prisma.communityMember.count({ where }),
+    ]);
+    return { items: members, total };
   },
 );
 app.patch(
@@ -1136,8 +1217,27 @@ app.post(
 app.patch(
   "/api/admin/categories/:id",
   { preHandler: requireRole(adminRoles) },
-  async (req: any) =>
-    prisma.category.update({ where: { id: req.params.id }, data: req.body }),
+  async (req: any) => {
+    const category = await prisma.category.findFirst({
+      where: { id: req.params.id, communityId: req.identity.communityId },
+    });
+    if (!category)
+      throw new DomainError("CATEGORY_NOT_FOUND", "Категория не найдена", 404);
+    const allowed = [
+      "name",
+      "slug",
+      "icon",
+      "parentId",
+      "sortOrder",
+      "isActive",
+      "fieldSchema",
+      "conditionEnabled",
+    ];
+    const data = Object.fromEntries(
+      Object.entries(req.body || {}).filter(([key]) => allowed.includes(key)),
+    );
+    return prisma.category.update({ where: { id: category.id }, data });
+  },
 );
 app.get(
   "/api/admin/settings",
@@ -1185,6 +1285,26 @@ app.patch(
     const data: any = Object.fromEntries(
       Object.entries(req.body || {}).filter(([key]) => allowed.includes(key)),
     );
+    if (
+      data.minMonthlyMessagesForFree !== undefined &&
+      (!Number.isInteger(data.minMonthlyMessagesForFree) ||
+        data.minMonthlyMessagesForFree < 0 ||
+        data.minMonthlyMessagesForFree > 10000)
+    )
+      throw new DomainError(
+        "SETTINGS_INVALID",
+        "Количество сообщений должно быть от 0 до 10000",
+      );
+    if (
+      data.publicationPriceStars !== undefined &&
+      (!Number.isInteger(data.publicationPriceStars) ||
+        data.publicationPriceStars < 1 ||
+        data.publicationPriceStars > 10000)
+    )
+      throw new DomainError(
+        "SETTINGS_INVALID",
+        "Цена должна быть от 1 до 10000 Stars",
+      );
     const result = await prisma.community.update({
       where: { id: req.identity.communityId },
       data,

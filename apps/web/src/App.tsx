@@ -5,6 +5,8 @@ import {
   Routes,
   useLocation,
   useNavigate,
+  useParams,
+  useSearchParams,
 } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { api, login, request } from "./api";
@@ -16,6 +18,8 @@ type Listing = {
   locationText?: string;
   condition: string;
   images: { url?: string }[];
+  priceType?: string;
+  category?: { name: string; icon?: string };
 };
 export function App() {
   const { t } = useTranslation();
@@ -84,8 +88,9 @@ export function App() {
         <Route path="/categories" element={<Categories />} />
         <Route path="/add" element={<Create />} />
         <Route path="/favorites" element={<Favorites />} />
+        <Route path="/listings/:id" element={<ListingDetail />} />
         <Route path="/profile" element={<Profile />} />
-        <Route path="/admin" element={<Admin />} />
+        <Route path="/admin/*" element={<Admin />} />
       </Routes>
       <nav>
         {[
@@ -137,16 +142,28 @@ function Skeleton() {
 }
 function Catalog() {
   const { t } = useTranslation();
+  const nav = useNavigate();
+  const [params] = useSearchParams();
   const [items, setItems] = useState<Listing[]>([]),
     [loading, setLoading] = useState(true),
     [search, setSearch] = useState("");
   const load = () => {
     setLoading(true);
-    request(`/listings?search=${encodeURIComponent(search)}`)
+    request(
+      `/listings?search=${encodeURIComponent(search)}&categoryId=${encodeURIComponent(params.get("categoryId") || "")}`,
+    )
       .then(setItems)
       .finally(() => setLoading(false));
   };
-  useEffect(load, []);
+  useEffect(load, [params]);
+  const toggleFavorite = async (event: any, id: string) => {
+    event.stopPropagation();
+    try {
+      await request(`/listings/${id}/favorite`, "POST");
+    } catch (error: any) {
+      window.Telegram?.WebApp.HapticFeedback?.notificationOccurred("error");
+    }
+  };
   return (
     <section className="page">
       <header>
@@ -175,21 +192,35 @@ function Catalog() {
       ) : items.length ? (
         <div className="grid">
           {items.map((item) => (
-            <article className="listing" key={item.id}>
+            <article
+              className="listing"
+              key={item.id}
+              onClick={() => nav(`/listings/${item.id}`)}
+            >
               <div
                 className="photo"
                 style={{ backgroundImage: `url(${item.images[0]?.url || ""})` }}
               >
-                <button>♡</button>
+                <button
+                  aria-label="Добавить в избранное"
+                  onClick={(event) => void toggleFavorite(event, item.id)}
+                >
+                  ♡
+                </button>
               </div>
               <h3>{item.title}</h3>
               <strong>
-                {item.price
-                  ? `${item.price} ${item.currency}`
-                  : "По договорённости"}
+                {item.priceType === "free"
+                  ? "Бесплатно"
+                  : item.price
+                    ? `${item.price} ${item.currency}`
+                    : "По договорённости"}
               </strong>
               <p>
-                {item.locationText || "Сообщество"} · {item.condition}
+                {item.locationText || "Сообщество"}
+                {item.condition !== "not_applicable"
+                  ? ` · ${conditionLabel(item.condition)}`
+                  : ""}
               </p>
             </article>
           ))}
@@ -205,6 +236,7 @@ function Catalog() {
 }
 function Categories() {
   const [data, setData] = useState<any[]>([]);
+  const nav = useNavigate();
   useEffect(() => {
     request("/categories").then(setData);
   }, []);
@@ -213,7 +245,7 @@ function Categories() {
       <h1>Категории</h1>
       <div className="category-list">
         {data.map((c) => (
-          <button key={c.id}>
+          <button key={c.id} onClick={() => nav(`/?categoryId=${c.id}`)}>
             <span>{c.icon || "◻"}</span>
             {c.name}
             <b>›</b>
@@ -223,23 +255,125 @@ function Categories() {
     </section>
   );
 }
+function conditionLabel(value: string) {
+  return (
+    (
+      {
+        new: "Новое",
+        like_new: "Как новое",
+        good: "Хорошее",
+        fair: "Удовлетворительное",
+        for_parts: "На запчасти",
+      } as Record<string, string>
+    )[value] || value
+  );
+}
+function ListingDetail() {
+  const { id } = useParams();
+  const nav = useNavigate();
+  const [item, setItem] = useState<any>();
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+  useEffect(() => {
+    request(`/listings/${id}`)
+      .then(setItem)
+      .catch((e) => setError(e.message));
+  }, [id]);
+  if (error)
+    return (
+      <section className="page">
+        <button className="back-link" onClick={() => nav(-1)}>
+          ← Назад
+        </button>
+        <LoadError message={error} />
+      </section>
+    );
+  if (!item)
+    return (
+      <section className="page">
+        <Skeleton />
+      </section>
+    );
+  const contact = async () => {
+    try {
+      const result = await request(`/listings/${id}/contact`, "POST");
+      if (result.url) window.location.href = result.url;
+      else setMessage(result.message);
+    } catch (e: any) {
+      setError(e.message);
+    }
+  };
+  return (
+    <section className="page listing-detail">
+      <button className="back-link" onClick={() => nav(-1)}>
+        ← Назад
+      </button>
+      {item.images?.length > 0 && (
+        <div className="detail-images">
+          {item.images.map((image: any) => (
+            <img key={image.id} src={image.url} alt={item.title} />
+          ))}
+        </div>
+      )}
+      <small>
+        {item.category?.icon} {item.category?.name}
+      </small>
+      <h1>{item.title}</h1>
+      <strong className="detail-price">
+        {item.priceType === "free"
+          ? "Бесплатно"
+          : item.price
+            ? `${item.price} ${item.currency}`
+            : "По договорённости"}
+      </strong>
+      <p>{item.description}</p>
+      <div className="detail-meta">
+        <span>📍 {item.locationText || "Не указано"}</span>
+        {item.condition !== "not_applicable" && (
+          <span>◇ {conditionLabel(item.condition)}</span>
+        )}
+        <span>👁 {item.viewCount}</span>
+      </div>
+      {message && <div className="save-success">{message}</div>}
+      <button className="primary contact-button" onClick={() => void contact()}>
+        Написать автору
+      </button>
+    </section>
+  );
+}
 function Create() {
   const { t } = useTranslation();
   const nav = useNavigate();
   const [step, setStep] = useState(0);
   const [categories, setCategories] = useState<any[]>([]);
-  const [data, setData] = useState<any>(() =>
-    JSON.parse(localStorage.getItem("draft") || "{}"),
-  );
+  const [data, setData] = useState<any>(() => {
+    try {
+      return JSON.parse(localStorage.getItem("draft") || "{}");
+    } catch {
+      localStorage.removeItem("draft");
+      return {};
+    }
+  });
   const [uploading, setUploading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [formError, setFormError] = useState("");
   const [photos, setPhotos] = useState<string[]>([]);
   useEffect(() => {
     request("/categories").then(setCategories);
   }, []);
+  useEffect(() => {
+    if (data.listingId && photos.length === 0)
+      request(`/listings/${data.listingId}`)
+        .then((listing) =>
+          setPhotos(listing.images?.map((image: any) => image.url) || []),
+        )
+        .catch(() => undefined);
+  }, [data.listingId]);
   useEffect(() => localStorage.setItem("draft", JSON.stringify(data)), [data]);
   const upload = async (files: FileList | null) => {
     if (!files?.length) return;
     setUploading(true);
+    setFormError("");
     try {
       let listingId = data.listingId;
       if (!listingId) {
@@ -254,6 +388,8 @@ function Create() {
         body: form,
       });
       setPhotos((current) => [...current, ...images.map((image) => image.url)]);
+    } catch (error: any) {
+      setFormError(error.message || "Не удалось загрузить фото");
     } finally {
       setUploading(false);
     }
@@ -264,6 +400,15 @@ function Create() {
   const fieldSchema = Array.isArray(selectedCategory?.fieldSchema)
     ? selectedCategory.fieldSchema
     : [];
+  const conditionEnabled = selectedCategory?.conditionEnabled !== false;
+  const requiredAttributesValid = fieldSchema
+    .filter((field: any) => field.required)
+    .every((field: any) => {
+      const value = data.attributes?.[field.key];
+      return (
+        value !== undefined && value !== null && String(value).trim() !== ""
+      );
+    });
   const setAttribute = (key: string, value: unknown) =>
     setData({
       ...data,
@@ -276,7 +421,19 @@ function Create() {
           type="button"
           key={c.id}
           className={data.categoryId === c.id ? "selected" : ""}
-          onClick={() => setData({ ...data, categoryId: c.id })}
+          onClick={() =>
+            setData({
+              ...data,
+              categoryId: c.id,
+              attributes: {},
+              condition:
+                c.conditionEnabled === false ? "not_applicable" : "good",
+              priceType:
+                c.name === "Отдам бесплатно"
+                  ? "free"
+                  : data.priceType || "fixed",
+            })
+          }
         >
           <span>{c.icon || "◻"}</span>
           <b>{c.name}</b>
@@ -310,77 +467,117 @@ function Create() {
         </div>
       )}
     </div>,
-    fieldSchema.length ? (
-      <div className="dynamic-fields">
-        {fieldSchema.map((field: any) => (
-          <label key={field.key}>
-            <span>
-              {field.label}
-              {field.required ? " *" : ""}
-            </span>
-            {field.type === "select" ? (
-              <select
-                value={data.attributes?.[field.key] || ""}
-                onChange={(event) =>
-                  setAttribute(field.key, event.target.value)
-                }
-              >
-                <option value="">Выберите</option>
-                {field.options?.map((option: string) => (
-                  <option key={option}>{option}</option>
-                ))}
-              </select>
-            ) : field.type === "boolean" ? (
-              <input
-                type="checkbox"
-                checked={Boolean(data.attributes?.[field.key])}
-                onChange={(event) =>
-                  setAttribute(field.key, event.target.checked)
-                }
-              />
-            ) : (
-              <input
-                type={field.type === "number" ? "number" : "text"}
-                value={data.attributes?.[field.key] || ""}
-                onChange={(event) =>
-                  setAttribute(field.key, event.target.value)
-                }
-              />
-            )}
-          </label>
-        ))}
-      </div>
-    ) : (
-      <select
-        value={data.condition || "good"}
-        onChange={(e) => setData({ ...data, condition: e.target.value })}
-      >
-        <option value="new">Новое</option>
-        <option value="like_new">Как новое</option>
-        <option value="good">Хорошее</option>
-        <option value="fair">Удовлетворительное</option>
-      </select>
-    ),
+    <div className="dynamic-fields">
+      {fieldSchema.length > 0 && (
+        <>
+          {fieldSchema.map((field: any) => (
+            <label key={field.key}>
+              <span>
+                {field.label}
+                {field.required ? " *" : ""}
+              </span>
+              {field.type === "select" ? (
+                <select
+                  value={data.attributes?.[field.key] || ""}
+                  onChange={(event) =>
+                    setAttribute(field.key, event.target.value)
+                  }
+                >
+                  <option value="">Выберите</option>
+                  {field.options?.map((option: string) => (
+                    <option key={option}>{option}</option>
+                  ))}
+                </select>
+              ) : field.type === "boolean" ? (
+                <input
+                  type="checkbox"
+                  checked={Boolean(data.attributes?.[field.key])}
+                  onChange={(event) =>
+                    setAttribute(field.key, event.target.checked)
+                  }
+                />
+              ) : (
+                <input
+                  type={field.type === "number" ? "number" : "text"}
+                  min={field.min}
+                  max={field.max}
+                  placeholder={field.placeholder}
+                  value={data.attributes?.[field.key] || ""}
+                  onChange={(event) =>
+                    setAttribute(field.key, event.target.value)
+                  }
+                />
+              )}
+            </label>
+          ))}
+        </>
+      )}
+      {conditionEnabled && (
+        <label>
+          <span>Состояние</span>
+          <select
+            value={data.condition || "good"}
+            onChange={(e) => setData({ ...data, condition: e.target.value })}
+          >
+            <option value="new">Новое</option>
+            <option value="like_new">Как новое</option>
+            <option value="good">Хорошее</option>
+            <option value="fair">Удовлетворительное</option>
+            <option value="for_parts">На запчасти</option>
+          </select>
+        </label>
+      )}
+      {!fieldSchema.length && !conditionEnabled && (
+        <p className="hint">
+          Для этой категории дополнительные характеристики не нужны.
+        </p>
+      )}
+    </div>,
     <textarea
       maxLength={3000}
       placeholder="Подробно опишите товар"
       value={data.description || ""}
       onChange={(e) => setData({ ...data, description: e.target.value })}
     />,
-    <input
-      type="number"
-      placeholder="Цена"
-      value={data.price || ""}
-      onChange={(e) => setData({ ...data, price: e.target.value })}
-    />,
+    <div className="price-fields">
+      <select
+        value={data.priceType || "fixed"}
+        onChange={(e) =>
+          setData({
+            ...data,
+            priceType: e.target.value,
+            price: e.target.value === "free" ? "" : data.price,
+          })
+        }
+      >
+        <option value="fixed">Фиксированная цена</option>
+        <option value="negotiable">Торг уместен</option>
+        <option value="free">Бесплатно</option>
+        <option value="exchange">Обмен</option>
+        <option value="contact">Цена по запросу</option>
+      </select>
+      {!["free", "exchange", "contact"].includes(data.priceType || "fixed") && (
+        <input
+          type="number"
+          min="0"
+          step="0.01"
+          placeholder="Цена, EUR"
+          value={data.price || ""}
+          onChange={(e) => setData({ ...data, price: e.target.value })}
+        />
+      )}
+    </div>,
     <input
       placeholder="Город или район"
       value={data.locationText || ""}
       onChange={(e) => setData({ ...data, locationText: e.target.value })}
     />,
-    <select>
-      <option>Написать в Telegram</option>
-      <option>Уведомить через бота</option>
+    <select
+      value={data.contactMode || "telegram"}
+      onChange={(e) => setData({ ...data, contactMode: e.target.value })}
+    >
+      <option value="telegram">Написать в Telegram</option>
+      <option value="bot">Уведомить через бота</option>
     </select>,
     <div className="preview">
       <h2>{data.title}</h2>
@@ -392,24 +589,36 @@ function Create() {
   const valid = [
     Boolean(data.categoryId),
     Boolean(data.title?.trim()),
-    !uploading,
-    true,
+    !uploading && photos.length > 0,
+    requiredAttributesValid,
     Boolean(data.description?.trim()),
-    Boolean(data.price),
+    ["free", "exchange", "contact"].includes(data.priceType) ||
+      Boolean(data.price),
     Boolean(data.locationText?.trim()),
     true,
     true,
   ][step];
   const done = async () => {
-    const listing = data.listingId
-      ? await request(`/listings/${data.listingId}`, "PATCH", data)
-      : await request("/listings", "POST", data);
+    setSubmitting(true);
+    setFormError("");
+    let listing: any;
     try {
+      listing = data.listingId
+        ? await request(`/listings/${data.listingId}`, "PATCH", data)
+        : await request("/listings", "POST", data);
       await request(`/listings/${listing.id}/transition`, "POST", {
         status: "pending",
       });
+      localStorage.removeItem("draft");
+      nav("/profile");
     } catch (error: any) {
-      if (error.code !== "PUBLICATION_PAYMENT_REQUIRED") throw error;
+      if (error.code !== "PUBLICATION_PAYMENT_REQUIRED") {
+        const fields = error.body?.error?.details?.fields;
+        setFormError(
+          fields?.length ? `Проверьте: ${fields.join(", ")}` : error.message,
+        );
+        return;
+      }
       const invoice = await request(
         `/listings/${listing.id}/payment-link`,
         "POST",
@@ -427,9 +636,11 @@ function Create() {
       await request(`/listings/${listing.id}/transition`, "POST", {
         status: "pending",
       });
+      localStorage.removeItem("draft");
+      nav("/profile");
+    } finally {
+      setSubmitting(false);
     }
-    localStorage.removeItem("draft");
-    nav("/profile");
   };
   return (
     <section className="page wizard">
@@ -443,7 +654,7 @@ function Create() {
             "Категория",
             "Название",
             "Фотографии",
-            fieldSchema.length ? "Характеристики" : "Состояние",
+            "Характеристики",
             "Описание",
             "Цена",
             "Местоположение",
@@ -452,6 +663,7 @@ function Create() {
           ][step]
         }
       </h1>
+      {formError && <div className="form-error">{formError}</div>}
       {fields[step]}
       <div className="wizard-actions">
         <button
@@ -463,11 +675,11 @@ function Create() {
         </button>
         <button
           type="button"
-          disabled={!valid}
+          disabled={!valid || submitting}
           className="primary"
           onClick={() => (step === 8 ? done() : setStep(step + 1))}
         >
-          {step === 8 ? t("submit") : t("next")}
+          {submitting ? "Отправка…" : step === 8 ? t("submit") : t("next")}
         </button>
       </div>
     </section>
@@ -618,24 +830,60 @@ function ProfileSection({
   );
 }
 function Admin() {
-  const [d, setD] = useState<any>();
-  const [q, setQ] = useState<any[]>([]);
-  const [users, setUsers] = useState<any[]>([]);
-  const [settings, setSettings] = useState<any>();
-  useEffect(() => {
-    request("/admin/dashboard").then(setD);
-    request("/admin/moderation").then(setQ);
-    request("/admin/users").then(setUsers);
-    request("/admin/settings").then(setSettings);
-  }, []);
-  const action = (id: string, status: string) =>
-    request(`/admin/listings/${id}/transition`, "POST", {
-      status,
-      reason: status === "published" ? undefined : "Решение модератора",
-    }).then(() => setQ(q.filter((x) => x.id !== id)));
+  const location = useLocation();
+  const view = location.pathname.split("/")[2] || "dashboard";
   return (
-    <section className="page">
-      <h1>Панель модератора</h1>
+    <section className="page admin-page">
+      <header className="admin-header">
+        <div>
+          <small>УПРАВЛЕНИЕ СООБЩЕСТВОМ</small>
+          <h1>Панель модератора</h1>
+        </div>
+      </header>
+      <div
+        className="admin-nav"
+        role="navigation"
+        aria-label="Разделы администрирования"
+      >
+        <NavLink end to="/admin">
+          🏠<span>Обзор</span>
+        </NavLink>
+        <NavLink to="/admin/moderation">
+          ✓<span>Модерация</span>
+        </NavLink>
+        <NavLink to="/admin/users">
+          👥<span>Люди</span>
+        </NavLink>
+        <NavLink to="/admin/settings">
+          ⚙<span>Настройки</span>
+        </NavLink>
+        <NavLink to="/admin/audit">
+          📋<span>Журнал</span>
+        </NavLink>
+      </div>
+      {view === "dashboard" && <AdminDashboard />}
+      {view === "moderation" && <AdminModeration />}
+      {view === "users" && <AdminUsers />}
+      {view === "settings" && <AdminSettings />}
+      {view === "audit" && <AdminAudit />}
+    </section>
+  );
+}
+function LoadError({ message }: { message: string }) {
+  return <div className="form-error">{message}</div>;
+}
+function AdminDashboard() {
+  const [d, setD] = useState<any>();
+  const [error, setError] = useState("");
+  useEffect(() => {
+    request("/admin/dashboard")
+      .then(setD)
+      .catch((e) => setError(e.message));
+  }, []);
+  return (
+    <div className="admin-view">
+      <h2>Сводка</h2>
+      {error && <LoadError message={error} />}
       <div className="stats">
         <b>
           {d?.pending || 0}
@@ -650,73 +898,229 @@ function Admin() {
           <small>За неделю</small>
         </b>
       </div>
-      {q.map((x) => (
-        <article className="moderate">
+      <div className="admin-actions-grid">
+        <NavLink to="/admin/moderation">
+          <b>{d?.pending || 0}</b>
+          <span>Очередь модерации</span>
+        </NavLink>
+        <NavLink to="/admin/users">
+          <b>👥</b>
+          <span>Роли и доступ</span>
+        </NavLink>
+        <NavLink to="/admin/settings">
+          <b>⚙</b>
+          <span>Активность и Stars</span>
+        </NavLink>
+        <NavLink to="/admin/audit">
+          <b>📋</b>
+          <span>Журнал действий</span>
+        </NavLink>
+      </div>
+    </div>
+  );
+}
+function AdminModeration() {
+  const [queue, setQueue] = useState<any[]>([]);
+  const [busy, setBusy] = useState("");
+  const [error, setError] = useState("");
+  useEffect(() => {
+    request("/admin/moderation")
+      .then(setQueue)
+      .catch((e) => setError(e.message));
+  }, []);
+  const action = async (id: string, status: string) => {
+    setBusy(id);
+    setError("");
+    try {
+      await request(`/admin/listings/${id}/transition`, "POST", {
+        status,
+        reason: status === "published" ? undefined : "Решение модератора",
+      });
+      setQueue((current) => current.filter((item) => item.id !== id));
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy("");
+    }
+  };
+  return (
+    <div className="admin-view">
+      <h2>Очередь модерации</h2>
+      {error && <LoadError message={error} />}
+      {!queue.length && !error && (
+        <div className="admin-empty">На проверке нет объявлений</div>
+      )}
+      {queue.map((x) => (
+        <article className="moderate" key={x.id}>
           <h3>{x.title}</h3>
+          <small>
+            {x.category?.icon} {x.category?.name} · {x.author?.firstName}
+          </small>
           <p>{x.description}</p>
           <div>
-            <button onClick={() => action(x.id, "changes_requested")}>
+            <button
+              disabled={busy === x.id}
+              onClick={() => action(x.id, "changes_requested")}
+            >
               Доработать
             </button>
-            <button onClick={() => action(x.id, "rejected")}>Отклонить</button>
             <button
+              disabled={busy === x.id}
+              onClick={() => action(x.id, "rejected")}
+            >
+              Отклонить
+            </button>
+            <button
+              disabled={busy === x.id}
               className="primary"
               onClick={() => action(x.id, "published")}
             >
-              Одобрить
+              {busy === x.id ? "Обработка…" : "Одобрить"}
             </button>
           </div>
         </article>
       ))}
-      <h2>Модераторы и администраторы</h2>
+    </div>
+  );
+}
+function AdminUsers() {
+  const [users, setUsers] = useState<any[]>([]);
+  const [total, setTotal] = useState(0);
+  const [search, setSearch] = useState("");
+  const [error, setError] = useState("");
+  const [saved, setSaved] = useState("");
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      request(`/admin/users?search=${encodeURIComponent(search)}&limit=50`)
+        .then((result) => {
+          setUsers(result.items);
+          setTotal(result.total);
+        })
+        .catch((e) => setError(e.message));
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [search]);
+  const filtered = users;
+  const changeRole = async (member: any, role: string) => {
+    setSaved("");
+    setError("");
+    try {
+      await request(`/admin/users/${member.userId}`, "PATCH", { role });
+      setUsers((current) =>
+        current.map((item) =>
+          item.id === member.id ? { ...item, role } : item,
+        ),
+      );
+      setSaved(`Роль ${member.user.firstName} сохранена`);
+    } catch (e: any) {
+      setError(e.message);
+    }
+  };
+  return (
+    <div className="admin-view">
+      <h2>Пользователи и роли</h2>
       <p className="hint">
-        Назначенный сотрудник должен один раз открыть личный чат с ботом, чтобы
-        получать карточки модерации.
+        Здесь показаны участники, которые хотя бы раз открывали доску.
       </p>
-      {users.map((member) => (
-        <div className="admin-user" key={member.id}>
-          <div>
-            <b>{member.user.firstName}</b>
-            <small>
-              @{member.user.username || "без username"} · {member.role}
-            </small>
-            <small
-              className={
-                member.user.botStartedAt ? "bot-connected" : "bot-disconnected"
-              }
+      <input
+        className="admin-search"
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        placeholder="Поиск по имени, @username или ID"
+      />
+      {error && <LoadError message={error} />}
+      {saved && <div className="save-success">{saved}</div>}
+      <div className="admin-user-list">
+        {filtered.map((member) => (
+          <div className="admin-user compact" key={member.id}>
+            <div className="admin-user-avatar">
+              {member.user.firstName?.[0] || "?"}
+            </div>
+            <div className="admin-user-info">
+              <b>{member.user.firstName}</b>
+              <small>
+                @{member.user.username || "без username"} ·{" "}
+                {member.user.telegramUserId}
+              </small>
+              <small
+                className={
+                  member.user.botStartedAt
+                    ? "bot-connected"
+                    : "bot-disconnected"
+                }
+              >
+                {member.user.botStartedAt
+                  ? "✓ Бот подключён"
+                  : "Бот не подключён"}
+              </small>
+            </div>
+            <select
+              aria-label={`Роль ${member.user.firstName}`}
+              value={member.role}
+              onChange={(event) => void changeRole(member, event.target.value)}
             >
-              {member.user.botStartedAt
-                ? "✓ Личный чат с ботом подключён"
-                : "Нужно нажать /start в личном чате"}
-            </small>
+              <option value="member">Участник</option>
+              <option value="moderator">Модератор</option>
+              <option value="admin">Админ</option>
+              <option value="owner">Владелец</option>
+            </select>
           </div>
-          <select
-            value={member.role}
-            onChange={async (event) => {
-              const role = event.target.value;
-              await request(`/admin/users/${member.userId}`, "PATCH", { role });
-              setUsers((current) =>
-                current.map((item) =>
-                  item.id === member.id ? { ...item, role } : item,
-                ),
-              );
-            }}
-          >
-            <option value="member">Участник</option>
-            <option value="moderator">Модератор</option>
-            <option value="admin">Администратор</option>
-            <option value="owner">Владелец</option>
-          </select>
-        </div>
-      ))}
-      {settings && (
+        ))}
+      </div>
+      <small>
+        Найдено: {total}
+        {total > users.length ? ` · показаны первые ${users.length}` : ""}
+      </small>
+    </div>
+  );
+}
+function AdminSettings() {
+  const [settings, setSettings] = useState<any>();
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+  useEffect(() => {
+    request("/admin/settings")
+      .then(setSettings)
+      .catch((e) => setError(e.message));
+  }, []);
+  const save = async () => {
+    setSaving(true);
+    setMessage("");
+    setError("");
+    try {
+      const result = await request("/admin/settings", "PATCH", {
+        minMonthlyMessagesForFree: settings.minMonthlyMessagesForFree,
+        publicationPriceStars: settings.publicationPriceStars,
+        allowPaidNonMembers: settings.allowPaidNonMembers,
+      });
+      setSettings(result);
+      setMessage("Настройки сохранены");
+      window.Telegram?.WebApp.HapticFeedback?.notificationOccurred("success");
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+  return (
+    <div className="admin-view">
+      <h2>Доступ и Telegram Stars</h2>
+      <p className="hint">
+        Активность считается по сообщениям в привязанной группе за текущий
+        календарный месяц.
+      </p>
+      {error && <LoadError message={error} />}
+      {message && <div className="save-success">{message}</div>}
+      {settings ? (
         <div className="admin-settings">
-          <h2>Доступ и Stars</h2>
           <label>
-            Сообщений за месяц для бесплатной публикации
+            <span>Сообщений в месяц для бесплатной публикации</span>
             <input
               type="number"
+              inputMode="numeric"
               min="0"
+              max="10000"
               value={settings.minMonthlyMessagesForFree}
               onChange={(event) =>
                 setSettings({
@@ -725,12 +1129,15 @@ function Admin() {
                 })
               }
             />
+            <small>0 — бесплатно для всех участников</small>
           </label>
           <label>
-            Цена публикации, Stars
+            <span>Цена одной публикации, Stars</span>
             <input
               type="number"
+              inputMode="numeric"
               min="1"
+              max="10000"
               value={settings.publicationPriceStars}
               onChange={(event) =>
                 setSettings({
@@ -750,23 +1157,50 @@ function Admin() {
                   allowPaidNonMembers: event.target.checked,
                 })
               }
-            />{" "}
-            Разрешить платную публикацию неучастникам
+            />
+            <span>Разрешить платную публикацию людям не из группы</span>
           </label>
           <button
-            className="primary save-settings"
-            onClick={() =>
-              request("/admin/settings", "PATCH", {
-                minMonthlyMessagesForFree: settings.minMonthlyMessagesForFree,
-                publicationPriceStars: settings.publicationPriceStars,
-                allowPaidNonMembers: settings.allowPaidNonMembers,
-              })
+            type="button"
+            disabled={
+              saving ||
+              settings.minMonthlyMessagesForFree < 0 ||
+              settings.publicationPriceStars < 1
             }
+            className="primary save-settings"
+            onClick={() => void save()}
           >
-            Сохранить настройки
+            {saving ? "Сохранение…" : "Сохранить настройки"}
           </button>
         </div>
+      ) : (
+        !error && <div className="skeleton hero" />
       )}
-    </section>
+    </div>
+  );
+}
+function AdminAudit() {
+  const [items, setItems] = useState<any[]>([]);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    request("/admin/audit-log")
+      .then(setItems)
+      .catch((e) => setError(e.message));
+  }, []);
+  return (
+    <div className="admin-view">
+      <h2>Журнал действий</h2>
+      {error && <LoadError message={error} />}
+      {items.map((item) => (
+        <div className="audit-row" key={item.id}>
+          <b>{item.action}</b>
+          <small>
+            {item.moderator?.firstName || "Система"} ·{" "}
+            {new Date(item.createdAt).toLocaleString("ru")}
+          </small>
+          {item.reason && <span>{item.reason}</span>}
+        </div>
+      ))}
+    </div>
   );
 }
