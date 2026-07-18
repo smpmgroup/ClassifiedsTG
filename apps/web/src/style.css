@@ -1007,6 +1007,103 @@ nav .active {
   min-height: 48px;
   border-radius: 14px;
 }
+.platform-admin {
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 1px solid color-mix(in srgb, var(--tg-theme-hint-color, #748078) 25%, transparent);
+}
+.platform-admin h2 {
+  margin: 5px 0 16px;
+}
+.platform-metrics {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 9px;
+}
+.platform-metrics div {
+  display: grid;
+  gap: 4px;
+  min-height: 86px;
+  padding: 14px;
+  border-radius: 16px;
+  background: var(--tg-theme-secondary-bg-color, #fff);
+}
+.platform-metrics b {
+  color: var(--tg-theme-button-color, #188b52);
+  font-size: 22px;
+}
+.platform-metrics span {
+  color: var(--tg-theme-hint-color, #748078);
+  font-size: 12px;
+}
+.platform-settings {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: 16px 0;
+  padding: 15px;
+  border-radius: 18px;
+  background: var(--tg-theme-secondary-bg-color, #fff);
+}
+.platform-settings label {
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 650;
+}
+.platform-settings input {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 11px;
+  border: 1px solid color-mix(in srgb, var(--tg-theme-hint-color, #748078) 28%, transparent);
+  border-radius: 12px;
+  background: var(--tg-theme-bg-color, #fff);
+  color: var(--tg-theme-text-color, #14231c);
+}
+.platform-settings button {
+  grid-column: 1 / -1;
+  min-height: 46px;
+  border: 0;
+  border-radius: 13px;
+}
+.platform-message {
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--tg-theme-secondary-bg-color, #fff);
+}
+.platform-tenants {
+  display: grid;
+  gap: 8px;
+}
+.platform-tenants > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 14px;
+  background: var(--tg-theme-secondary-bg-color, #fff);
+}
+.platform-tenants span,
+.platform-tenants small {
+  display: block;
+}
+.platform-tenants small {
+  margin-top: 3px;
+  color: var(--tg-theme-hint-color, #748078);
+  font-size: 11px;
+}
+.platform-tenants button {
+  flex: 0 0 auto;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 10px;
+  font-size: 11px;
+}
+.danger-soft {
+  background: #fee2e2;
+  color: #991b1b;
+}
 .connect-community,
 .create-organization button {
   border: 0;

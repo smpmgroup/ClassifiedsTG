@@ -294,7 +294,103 @@ function PlatformWorkspace() {
           </button>
         </form>
       )}
+      {["platform_admin", "platform_owner"].includes(
+        data.user.platformRole,
+      ) && <PlatformOwnerPanel canEdit={data.user.platformRole === "platform_owner"} />}
     </main>
+  );
+}
+
+function PlatformOwnerPanel({ canEdit }: { canEdit: boolean }) {
+  const [overview, setOverview] = useState<any>();
+  const [communities, setCommunities] = useState<any[]>([]);
+  const [minimumStars, setMinimumStars] = useState(10);
+  const [commissionPercent, setCommissionPercent] = useState(25);
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+  const load = async () => {
+    const [summary, tenantItems] = await Promise.all([
+      request("/platform/admin/overview"),
+      request("/platform/admin/communities"),
+    ]);
+    setOverview(summary);
+    setCommunities(tenantItems);
+    setMinimumStars(summary.settings.minimumPublicationStars);
+    setCommissionPercent(summary.settings.defaultCommissionBps / 100);
+  };
+  useEffect(() => {
+    void load().catch((e) => setMessage(e.message));
+  }, []);
+  const save = async (event: any) => {
+    event.preventDefault();
+    setBusy(true);
+    setMessage("");
+    try {
+      await request("/platform/admin/settings", "PATCH", {
+        minimumPublicationStars: Number(minimumStars),
+        defaultCommissionBps: Math.round(Number(commissionPercent) * 100),
+      });
+      setMessage("✓ Глобальные настройки сохранены");
+      await load();
+    } catch (e: any) {
+      setMessage(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const toggleTenant = async (community: any) => {
+    const tenantStatus =
+      community.tenantStatus === "active" ? "suspended" : "active";
+    setMessage("");
+    try {
+      await request(
+        `/platform/admin/communities/${community.id}/status`,
+        "PATCH",
+        { tenantStatus },
+      );
+      await load();
+    } catch (e: any) {
+      setMessage(e.message);
+    }
+  };
+  if (!overview) return <section className="platform-admin"><p>Загружаем панель платформы…</p></section>;
+  const metrics = overview.metrics;
+  return (
+    <section className="platform-admin">
+      <small>УПРАВЛЕНИЕ SAAS</small>
+      <h2>Панель владельца платформы</h2>
+      <div className="platform-metrics">
+        <div><b>{metrics.organizations}</b><span>Организаций</span></div>
+        <div><b>{metrics.activeCommunities}</b><span>Активных досок</span></div>
+        <div><b>{metrics.users}</b><span>Пользователей</span></div>
+        <div><b>{metrics.grossStars} ⭐</b><span>Валовый оборот</span></div>
+      </div>
+      {canEdit && (
+        <form className="platform-settings" onSubmit={save}>
+          <label>
+            Минимальная цена публикации, Stars
+            <input type="number" min="1" max="100000" value={minimumStars} onChange={(e) => setMinimumStars(Number(e.target.value))} />
+          </label>
+          <label>
+            Комиссия платформы, %
+            <input type="number" min="0" max="90" step="0.01" value={commissionPercent} onChange={(e) => setCommissionPercent(Number(e.target.value))} />
+          </label>
+          <button className="primary" disabled={busy}>{busy ? "Сохраняем…" : "Сохранить"}</button>
+        </form>
+      )}
+      {message && <p className="platform-message">{message}</p>}
+      <h3>Сообщества</h3>
+      <div className="platform-tenants">
+        {communities.map((community) => (
+          <div key={community.id}>
+            <span><b>{community.name}</b><small>{community.organization?.name} · {community._count.members} участников · {community._count.listings} объявлений</small></span>
+            <button className={community.tenantStatus === "active" ? "danger-soft" : "primary"} onClick={() => void toggleTenant(community)}>
+              {community.tenantStatus === "active" ? "Приостановить" : "Включить"}
+            </button>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 function ScrollToTop() {

@@ -108,6 +108,14 @@ async function platformAuth(req: any, reply: any) {
     return reply.status(401).send(error("UNAUTHORIZED", "Требуется вход"));
   }
 }
+const requirePlatformRole = (roles: Set<string>) =>
+  async (req: any, reply: any) => {
+    await platformAuth(req, reply);
+    if (reply.sent) return;
+    if (!roles.has(req.platformIdentity.platformRole))
+      return reply.status(403).send(error("FORBIDDEN", "Недостаточно прав"));
+  };
+const platformAdminRoles = new Set(["platform_admin", "platform_owner"]);
 const error = (code: string, message: string, details: unknown = null) => ({
   error: { code, message, details },
 });
@@ -615,6 +623,157 @@ app.post(
       expiresAt: intent.expiresAt,
       addBotUrl: `https://t.me/${config.TELEGRAM_BOT_USERNAME}?startgroup=connect_${rawToken}&admin=delete_messages+restrict_members+invite_users`,
     };
+  },
+);
+
+app.get(
+  "/api/platform/admin/overview",
+  { preHandler: requirePlatformRole(platformAdminRoles) },
+  async () => {
+    const [
+      settings,
+      organizations,
+      communities,
+      activeCommunities,
+      users,
+      listings,
+      payments,
+    ] = await prisma.$transaction([
+      prisma.platformSetting.upsert({
+        where: { id: "global" },
+        update: {},
+        create: { id: "global" },
+      }),
+      prisma.organization.count(),
+      prisma.community.count(),
+      prisma.community.count({ where: { tenantStatus: "active" } }),
+      prisma.user.count({ where: { status: "active" } }),
+      prisma.listing.count(),
+      prisma.publicationPayment.aggregate({
+        where: { status: "paid" },
+        _count: true,
+        _sum: { amountStars: true },
+      }),
+    ]);
+    return {
+      settings,
+      metrics: {
+        organizations,
+        communities,
+        activeCommunities,
+        users,
+        listings,
+        paidPublications: payments._count,
+        grossStars: payments._sum.amountStars || 0,
+      },
+    };
+  },
+);
+
+app.get(
+  "/api/platform/admin/communities",
+  { preHandler: requirePlatformRole(platformAdminRoles) },
+  async (req: any) => {
+    const search = String(req.query?.search || "").trim();
+    return prisma.community.findMany({
+      where: search
+        ? {
+            OR: [
+              { name: { contains: search, mode: "insensitive" } },
+              { slug: { contains: search, mode: "insensitive" } },
+              {
+                organization: {
+                  name: { contains: search, mode: "insensitive" },
+                },
+              },
+            ],
+          }
+        : undefined,
+      include: {
+        organization: { select: { id: true, name: true } },
+        _count: { select: { members: true, listings: true } },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 100,
+    });
+  },
+);
+
+app.patch(
+  "/api/platform/admin/settings",
+  { preHandler: requirePlatformRole(new Set(["platform_owner"])) },
+  async (req: any) => {
+    const minimumPublicationStars = Number(
+      req.body?.minimumPublicationStars,
+    );
+    const defaultCommissionBps = Number(req.body?.defaultCommissionBps);
+    if (
+      !Number.isInteger(minimumPublicationStars) ||
+      minimumPublicationStars < 1 ||
+      minimumPublicationStars > 100000
+    )
+      throw new DomainError(
+        "PLATFORM_SETTINGS_INVALID",
+        "Минимальная цена должна быть от 1 до 100000 Stars",
+      );
+    if (
+      !Number.isInteger(defaultCommissionBps) ||
+      defaultCommissionBps < 0 ||
+      defaultCommissionBps > 9000
+    )
+      throw new DomainError(
+        "PLATFORM_SETTINGS_INVALID",
+        "Комиссия должна быть от 0% до 90%",
+      );
+    const settings = await prisma.platformSetting.update({
+      where: { id: "global" },
+      data: { minimumPublicationStars, defaultCommissionBps },
+    });
+    await prisma.auditEvent.create({
+      data: {
+        actorId: req.platformIdentity.userId,
+        scope: "platform",
+        action: "platform_settings_updated",
+        targetType: "PlatformSetting",
+        targetId: settings.id,
+        metadata: { minimumPublicationStars, defaultCommissionBps },
+      },
+    });
+    return settings;
+  },
+);
+
+app.patch(
+  "/api/platform/admin/communities/:id/status",
+  { preHandler: requirePlatformRole(platformAdminRoles) },
+  async (req: any) => {
+    const tenantStatus = String(req.body?.tenantStatus || "");
+    if (!['active', 'suspended'].includes(tenantStatus))
+      throw new DomainError(
+        "TENANT_STATUS_INVALID",
+        "Допустимы статусы active и suspended",
+      );
+    const community = await prisma.community.update({
+      where: { id: req.params.id },
+      data: {
+        tenantStatus: tenantStatus as any,
+        suspendedAt: tenantStatus === "suspended" ? new Date() : null,
+      },
+    });
+    await prisma.auditEvent.create({
+      data: {
+        communityId: community.id,
+        actorId: req.platformIdentity.userId,
+        scope: "platform",
+        action:
+          tenantStatus === "suspended"
+            ? "community_suspended"
+            : "community_reactivated",
+        targetType: "Community",
+        targetId: community.id,
+      },
+    });
+    return community;
   },
 );
 
@@ -1805,6 +1964,19 @@ app.patch(
         "SETTINGS_INVALID",
         "Цена должна быть от 1 до 10000 Stars",
       );
+    if (data.publicationPriceStars !== undefined) {
+      const platformSettings = await prisma.platformSetting.findUnique({
+        where: { id: "global" },
+      });
+      if (
+        platformSettings &&
+        data.publicationPriceStars < platformSettings.minimumPublicationStars
+      )
+        throw new DomainError(
+          "PUBLICATION_PRICE_BELOW_PLATFORM_MINIMUM",
+          `Минимальная цена платформы — ${platformSettings.minimumPublicationStars} Stars`,
+        );
+    }
     const result = await prisma.community.update({
       where: { id: req.identity.communityId },
       data,
