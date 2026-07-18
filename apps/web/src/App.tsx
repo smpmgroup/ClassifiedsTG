@@ -344,9 +344,12 @@ function ListingDetail() {
 function Create() {
   const { t } = useTranslation();
   const nav = useNavigate();
+  const [query] = useSearchParams();
+  const editingId = query.get("listingId");
   const [step, setStep] = useState(0);
   const [categories, setCategories] = useState<any[]>([]);
   const [data, setData] = useState<any>(() => {
+    if (new URLSearchParams(window.location.search).get("listingId")) return {};
     try {
       return JSON.parse(localStorage.getItem("draft") || "{}");
     } catch {
@@ -361,6 +364,26 @@ function Create() {
   useEffect(() => {
     request("/categories").then(setCategories);
   }, []);
+  useEffect(() => {
+    if (!editingId) return;
+    request(`/listings/${editingId}`)
+      .then((listing) => {
+        setData({
+          listingId: listing.id,
+          categoryId: listing.categoryId,
+          title: listing.title,
+          description: listing.description,
+          price: listing.price || "",
+          priceType: listing.priceType,
+          condition: listing.condition,
+          locationText: listing.locationText || "",
+          contactMode: listing.contactMode,
+          attributes: listing.attributes || {},
+        });
+        setPhotos(listing.images?.map((image: any) => image.url) || []);
+      })
+      .catch((error) => setFormError(error.message));
+  }, [editingId]);
   useEffect(() => {
     if (data.listingId && photos.length === 0)
       request(`/listings/${data.listingId}`)
@@ -707,30 +730,73 @@ function Favorites() {
 function Profile() {
   const [me, setMe] = useState<any>();
   const [ads, setAds] = useState<any[]>([]);
-  const [section, setSection] = useState("all");
+  const [view, setView] = useState<"listings" | "rules" | "settings">(
+    "listings",
+  );
+  const [filter, setFilter] = useState("all");
+  const [error, setError] = useState("");
   useEffect(() => {
-    request("/me").then(setMe);
-    request("/my/listings").then(setAds);
+    request("/me")
+      .then(setMe)
+      .catch((e) => setError(e.message));
+    request("/my/listings")
+      .then(setAds)
+      .catch((e) => setError(e.message));
   }, []);
+  const roleLabels: Record<string, string> = {
+    member: "Участник",
+    moderator: "Модератор",
+    admin: "Администратор",
+    owner: "Владелец",
+  };
   return (
-    <section className="page">
-      <h1>Профиль</h1>
-      <div className="profile">
-        <div className="avatar">{me?.user?.firstName?.[0]}</div>
+    <section className="page profile-page">
+      <div className="profile profile-hero">
+        <div className="avatar profile-avatar">
+          {me?.user?.firstName?.[0] || "?"}
+        </div>
         <div>
-          <h2>{me?.user?.firstName}</h2>
-          <small>{me?.role}</small>
+          <small>МОЙ ПРОФИЛЬ</small>
+          <h1>{me?.user?.firstName || "Загрузка…"}</h1>
+          <span className="role-badge">{roleLabels[me?.role] || ""}</span>
         </div>
       </div>
+      {error && <LoadError message={error} />}
       {["moderator", "admin", "owner"].includes(me?.role) && (
         <NavLink className="admin admin-prominent" to="/admin">
           <span>
-            <b>Панель модератора</b>
-            <small>Объявления, админы и настройки</small>
+            <b>Панель администратора</b>
+            <small>Модерация, люди и настройки</small>
           </span>
           <b>›</b>
         </NavLink>
       )}
+      <div className="profile-shortcuts">
+        <button
+          className={view === "listings" ? "active" : ""}
+          onClick={() => setView("listings")}
+        >
+          <b>📦</b>
+          <span>Объявления</span>
+          <small>Мои публикации</small>
+        </button>
+        <button
+          className={view === "rules" ? "active" : ""}
+          onClick={() => setView("rules")}
+        >
+          <b>📖</b>
+          <span>Правила</span>
+          <small>Правила сообщества</small>
+        </button>
+        <button
+          className={view === "settings" ? "active" : ""}
+          onClick={() => setView("settings")}
+        >
+          <b>⚙</b>
+          <span>Мои настройки</span>
+          <small>Связь и уведомления</small>
+        </button>
+      </div>
       <div className="stats">
         <b>
           {ads.length}
@@ -740,71 +806,143 @@ function Profile() {
           {ads.filter((x) => x.status === "published").length}
           <small>Активных</small>
         </b>
+        <b>
+          {ads.filter((x) => x.status === "pending").length}
+          <small>На проверке</small>
+        </b>
       </div>
-      {[
-        ["all", "Мои объявления"],
-        ["draft", "Черновики"],
-        ["pending", "На проверке"],
-        ["changes_requested", "Требуют изменений"],
-        ["sold", "Проданные"],
-        ["archived", "Архив"],
-        ["settings", "Настройки"],
-        ["rules", "Правила"],
-      ].map(([key, label]) => (
-        <button
-          className={`row ${section === key ? "selected" : ""}`}
-          key={key}
-          onClick={() => setSection(key)}
-        >
-          {label}
-          <b>›</b>
-        </button>
-      ))}
-      <ProfileSection
-        section={section}
-        ads={ads}
-        privileged={["moderator", "admin", "owner"].includes(me?.role)}
-      />
-      {["moderator", "admin", "owner"].includes(me?.role) && (
-        <NavLink className="admin-floating" to="/admin">
-          ⚙ Панель модератора
-        </NavLink>
+      {view === "rules" ? (
+        <ProfileRules rules={me?.community?.rules} />
+      ) : view === "settings" ? (
+        <ProfileSettings me={me} setMe={setMe} />
+      ) : (
+        <ProfileListings
+          ads={ads}
+          setAds={setAds}
+          filter={filter}
+          setFilter={setFilter}
+        />
       )}
     </section>
   );
 }
-function ProfileSection({
-  section,
-  ads,
-  privileged,
+function ProfileRules({ rules }: { rules?: string }) {
+  return (
+    <div className="profile-panel rules-panel">
+      <div className="panel-title">
+        <span>📖</span>
+        <div>
+          <h2>Правила сообщества</h2>
+          <small>Актуальная редакция</small>
+        </div>
+      </div>
+      <div className="rules-text">
+        {rules?.trim() ||
+          "Администратор пока не опубликовал правила сообщества."}
+      </div>
+    </div>
+  );
+}
+function ProfileSettings({
+  me,
+  setMe,
 }: {
-  section: string;
-  ads: any[];
-  privileged: boolean;
+  me: any;
+  setMe: (value: any) => void;
 }) {
-  if (section === "settings")
-    return (
-      <div className="profile-panel">
-        <h3>Настройки</h3>
-        <p>
-          {privileged
-            ? "Настройки сообщества доступны в панели модератора."
-            : "Личные настройки будут добавлены здесь."}
-        </p>
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+  if (!me) return <div className="skeleton hero" />;
+  const toggle = (key: string) => setMe({ ...me, [key]: !me[key] });
+  const save = async () => {
+    setSaving(true);
+    setMessage("");
+    setError("");
+    try {
+      const updated = await request("/me/settings", "PATCH", {
+        notifyListingUpdates: me.notifyListingUpdates,
+        notifyBuyerInterest: me.notifyBuyerInterest,
+        allowDirectContact: me.allowDirectContact,
+      });
+      setMe({ ...me, ...updated });
+      setMessage("Личные настройки сохранены");
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+  return (
+    <div className="profile-panel preferences-panel">
+      <div className="panel-title">
+        <span>⚙</span>
+        <div>
+          <h2>Мои настройки</h2>
+          <small>Как с вами связываться</small>
+        </div>
       </div>
-    );
-  if (section === "rules")
-    return (
-      <div className="profile-panel">
-        <h3>Правила публикации</h3>
-        <p>
-          Объявление должно быть достоверным, относиться к выбранной категории и
-          не нарушать правила Telegram и сообщества.
-        </p>
-      </div>
-    );
+      {message && <div className="save-success">{message}</div>}
+      {error && <LoadError message={error} />}
+      <label className="preference-row">
+        <span>
+          <b>Статусы объявлений</b>
+          <small>Одобрение, отклонение и доработка</small>
+        </span>
+        <input
+          type="checkbox"
+          checked={me.notifyListingUpdates}
+          onChange={() => toggle("notifyListingUpdates")}
+        />
+      </label>
+      <label className="preference-row">
+        <span>
+          <b>Интерес к объявлению</b>
+          <small>Уведомлять через бота, если нет username</small>
+        </span>
+        <input
+          type="checkbox"
+          checked={me.notifyBuyerInterest}
+          onChange={() => toggle("notifyBuyerInterest")}
+        />
+      </label>
+      <label className="preference-row">
+        <span>
+          <b>Прямая связь</b>
+          <small>Показывать покупателям кнопку перехода в Telegram</small>
+        </span>
+        <input
+          type="checkbox"
+          checked={me.allowDirectContact}
+          onChange={() => toggle("allowDirectContact")}
+        />
+      </label>
+      <button
+        className="primary preferences-save"
+        disabled={saving}
+        onClick={() => void save()}
+      >
+        {saving ? "Сохранение…" : "Сохранить"}
+      </button>
+    </div>
+  );
+}
+function ProfileListings({
+  ads,
+  setAds,
+  filter,
+  setFilter,
+}: {
+  ads: any[];
+  setAds: (value: any[]) => void;
+  filter: string;
+  setFilter: (value: string) => void;
+}) {
+  const nav = useNavigate();
+  const [busy, setBusy] = useState("");
+  const [error, setError] = useState("");
   const visible =
-    section === "all" ? ads : ads.filter((ad) => ad.status === section);
+    filter === "all" ? ads : ads.filter((ad) => ad.status === filter);
   const statusLabels: Record<string, string> = {
     draft: "Черновик",
     pending: "На проверке",
@@ -812,19 +950,147 @@ function ProfileSection({
     published: "Опубликовано",
     sold: "Продано",
     archived: "В архиве",
+    rejected: "Отклонено",
+    expired: "Срок истёк",
   };
+  const transition = async (ad: any, status: string) => {
+    setBusy(ad.id);
+    setError("");
+    try {
+      const updated = await request(`/listings/${ad.id}/transition`, "POST", {
+        status,
+      });
+      setAds(
+        ads.map((item) => (item.id === ad.id ? { ...item, ...updated } : item)),
+      );
+      return true;
+    } catch (e: any) {
+      setError(e.message);
+      return false;
+    } finally {
+      setBusy("");
+    }
+  };
+  const edit = async (ad: any) => {
+    if (
+      ["rejected", "expired"].includes(ad.status) &&
+      !(await transition(ad, "draft"))
+    )
+      return;
+    nav(`/add?listingId=${ad.id}`);
+  };
+  const filters = [
+    ["all", "Все"],
+    ["published", "Активные"],
+    ["draft", "Черновики"],
+    ["pending", "На проверке"],
+    ["changes_requested", "Доработка"],
+    ["sold", "Проданные"],
+    ["archived", "Архив"],
+  ];
   return (
-    <div className="profile-panel">
-      <h3>Объявления</h3>
+    <div className="profile-listings-section">
+      <div className="profile-section-heading">
+        <div>
+          <h2>Мои объявления</h2>
+          <small>Управление публикациями</small>
+        </div>
+        <NavLink to="/add" className="profile-add">
+          + Новое
+        </NavLink>
+      </div>
+      <div className="listing-filters">
+        {filters.map(([key, label]) => (
+          <button
+            key={key}
+            className={filter === key ? "active" : ""}
+            onClick={() => setFilter(key)}
+          >
+            {label}
+            <small>
+              {key === "all"
+                ? ads.length
+                : ads.filter((ad) => ad.status === key).length}
+            </small>
+          </button>
+        ))}
+      </div>
+      {error && <LoadError message={error} />}
       {visible.length ? (
         visible.map((ad) => (
-          <div className="profile-listing" key={ad.id}>
-            <b>{ad.title || "Без названия"}</b>
-            <small>{statusLabels[ad.status] || ad.status}</small>
-          </div>
+          <article className="profile-listing-card" key={ad.id}>
+            <div
+              className="profile-listing-image"
+              style={{ backgroundImage: `url(${ad.images?.[0]?.url || ""})` }}
+            />
+            <div
+              className="profile-listing-body"
+              onClick={() => nav(`/listings/${ad.id}`)}
+            >
+              <b>{ad.title || "Без названия"}</b>
+              <span className={`status-badge status-${ad.status}`}>
+                {statusLabels[ad.status] || ad.status}
+              </span>
+              {ad.moderationComment && (
+                <small className="moderation-reason">
+                  {ad.moderationComment}
+                </small>
+              )}
+              <small>
+                {ad.updatedAt
+                  ? `Обновлено ${new Date(ad.updatedAt).toLocaleDateString("ru")}`
+                  : ""}
+              </small>
+            </div>
+            <div className="profile-listing-actions">
+              {["draft", "changes_requested", "rejected", "expired"].includes(
+                ad.status,
+              ) && (
+                <button disabled={busy === ad.id} onClick={() => void edit(ad)}>
+                  ✎ Изменить
+                </button>
+              )}
+              {ad.status === "published" && (
+                <>
+                  <button
+                    disabled={busy === ad.id}
+                    onClick={() => void transition(ad, "sold")}
+                  >
+                    ✓ Продано
+                  </button>
+                  <button
+                    disabled={busy === ad.id}
+                    onClick={() => void transition(ad, "archived")}
+                  >
+                    В архив
+                  </button>
+                </>
+              )}
+              {ad.status === "sold" && (
+                <>
+                  <button
+                    disabled={busy === ad.id}
+                    onClick={() => void transition(ad, "published")}
+                  >
+                    Вернуть
+                  </button>
+                  <button
+                    disabled={busy === ad.id}
+                    onClick={() => void transition(ad, "archived")}
+                  >
+                    В архив
+                  </button>
+                </>
+              )}
+            </div>
+          </article>
         ))
       ) : (
-        <p className="hint">В этом разделе пока нет объявлений.</p>
+        <div className="profile-empty">
+          <span>📦</span>
+          <b>Здесь пока пусто</b>
+          <small>Объявления с этим статусом не найдены</small>
+        </div>
       )}
     </div>
   );
@@ -837,7 +1103,7 @@ function Admin() {
       <header className="admin-header">
         <div>
           <small>УПРАВЛЕНИЕ СООБЩЕСТВОМ</small>
-          <h1>Панель модератора</h1>
+          <h1>Панель администратора</h1>
         </div>
       </header>
       <div
@@ -1093,6 +1359,7 @@ function AdminSettings() {
         minMonthlyMessagesForFree: settings.minMonthlyMessagesForFree,
         publicationPriceStars: settings.publicationPriceStars,
         allowPaidNonMembers: settings.allowPaidNonMembers,
+        rules: settings.rules,
       });
       setSettings(result);
       setMessage("Настройки сохранены");
@@ -1159,6 +1426,21 @@ function AdminSettings() {
               }
             />
             <span>Разрешить платную публикацию людям не из группы</span>
+          </label>
+          <label className="rules-editor">
+            <span>Правила сообщества</span>
+            <textarea
+              rows={12}
+              maxLength={10000}
+              value={settings.rules || ""}
+              onChange={(event) =>
+                setSettings({ ...settings, rules: event.target.value })
+              }
+            />
+            <small>
+              Этот текст сразу отображается в разделе «Правила» у всех
+              пользователей.
+            </small>
           </label>
           <button
             type="button"

@@ -221,12 +221,39 @@ async function poll() {
     try {
       if (n.type === "moderation_pending")
         await sendModerationCard((n.payload as any).listingId);
-      else if (n.user)
+      else if (n.user) {
+        const member = await prisma.communityMember.findUnique({
+          where: {
+            communityId_userId: {
+              communityId: n.communityId,
+              userId: n.user.id,
+            },
+          },
+        });
+        const disabled =
+          (n.type === "listing_interest" &&
+            !(member as any)?.notifyBuyerInterest) ||
+          (n.type.startsWith("listing_") &&
+            n.type !== "listing_interest" &&
+            !(member as any)?.notifyListingUpdates);
+        if (disabled) {
+          await prisma.notification.update({
+            where: { id: n.id },
+            data: {
+              status: "sent",
+              sentAt: new Date(),
+              attempts: { increment: 1 },
+              lastError: "Skipped by user preferences",
+            },
+          });
+          continue;
+        }
         await bot.telegram.sendMessage(
           n.user.telegramUserId.toString(),
           notificationText(n.type, n.payload as any),
           Markup.inlineKeyboard([Markup.button.webApp("Открыть", appUrl)]),
         );
+      }
       await prisma.notification.update({
         where: { id: n.id },
         data: {

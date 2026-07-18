@@ -27,3 +27,12 @@
 - Added working category filters, catalog-to-detail navigation, favorite actions, listing detail/contact view and visible form/upload errors.
 - Scoped report resolution, category updates and listing contact to the authenticated community.
 - Isolated unit tests from Prisma native-engine startup and added BigInt/taxonomy validation coverage.
+
+## Profile and community rules follow-up
+
+- Rebuilt the profile around three working areas: listings, community rules and personal preferences.
+- Removed the duplicate fixed moderator button and renamed the privileged area to "Панель администратора".
+- Added compact listing status filters, moderation reasons, edit/resubmit flows, sold/archive actions and an empty-state/new-listing action.
+- Added persisted member preferences for listing-status notifications, buyer-interest notifications and direct Telegram contact.
+- Made the bot and contact API enforce those personal preferences.
+- Added one shared community-rules document, an administrator editor and a default initial policy shown verbatim to all users.

@@ -140,6 +140,9 @@ model CommunityMember {
   membershipCheckedAt DateTime?
   isMuted Boolean @default(false)
   mutedUntil DateTime?
+  notifyListingUpdates Boolean @default(true)
+  notifyBuyerInterest Boolean @default(true)
+  allowDirectContact Boolean @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   community Community @relation(fields: [communityId], references: [id], onDelete: Cascade)

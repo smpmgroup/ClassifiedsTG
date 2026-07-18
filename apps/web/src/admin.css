@@ -142,6 +142,16 @@
   background: var(--tg-theme-bg-color, #fff);
   color: var(--tg-theme-text-color, #14231c);
 }
+.admin-settings textarea {
+  width: 100%;
+  padding: 13px;
+  border: 1px solid #ccd5cf;
+  border-radius: 10px;
+  background: var(--tg-theme-bg-color, #fff);
+  color: var(--tg-theme-text-color, #14231c);
+  line-height: 1.5;
+  resize: vertical;
+}
 .admin-settings .check {
   display: grid;
   grid-template-columns: auto 1fr;

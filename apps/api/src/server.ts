@@ -285,6 +285,29 @@ app.get("/api/me", { preHandler: auth }, async (req: any) => {
     },
   };
 });
+app.patch("/api/me/settings", { preHandler: auth }, async (req: any) => {
+  const allowed = [
+    "notifyListingUpdates",
+    "notifyBuyerInterest",
+    "allowDirectContact",
+  ];
+  const data = Object.fromEntries(
+    Object.entries(req.body || {}).filter(
+      ([key, value]) => allowed.includes(key) && typeof value === "boolean",
+    ),
+  );
+  if (!Object.keys(data).length)
+    throw new DomainError("SETTINGS_INVALID", "Нет допустимых настроек");
+  return prisma.communityMember.update({
+    where: {
+      communityId_userId: {
+        communityId: req.identity.communityId,
+        userId: req.identity.userId,
+      },
+    },
+    data,
+  });
+});
 app.delete("/api/me", { preHandler: auth }, async (req: any) => {
   await refreshMembership(req.identity);
   await prisma.$transaction([
@@ -444,6 +467,20 @@ app.patch("/api/listings/:id", { preHandler: auth }, async (req: any) => {
   });
   if (!listing)
     throw new DomainError("LISTING_NOT_FOUND", "Объявление не найдено", 404);
+  if (
+    ![
+      "draft",
+      "changes_requested",
+      "rejected",
+      "expired",
+      "published",
+    ].includes(listing.status)
+  )
+    throw new DomainError(
+      "LISTING_NOT_EDITABLE",
+      "Объявление в этом статусе нельзя изменить",
+      409,
+    );
   const allowed = [
     "title",
     "description",
@@ -798,15 +835,34 @@ app.post(
         status: "published",
         communityId: req.identity.communityId,
       },
-      include: { author: true },
+      include: {
+        author: {
+          include: {
+            members: { where: { communityId: req.identity.communityId } },
+          },
+        },
+      },
     });
     if (!listing || listing.authorId === req.identity.userId)
       throw new DomainError("CONTACT_NOT_ALLOWED", "Связь недоступна", 409);
-    if (listing.author.username)
+    const preferences = listing.author.members[0] as any;
+    if (!preferences?.allowDirectContact && !preferences?.notifyBuyerInterest)
+      throw new DomainError(
+        "CONTACT_DISABLED",
+        "Автор отключил связь по объявлениям",
+        409,
+      );
+    if (listing.author.username && preferences?.allowDirectContact)
       return {
         mode: "username",
         url: `https://t.me/${listing.author.username}`,
       };
+    if (!preferences?.notifyBuyerInterest)
+      throw new DomainError(
+        "CONTACT_DISABLED",
+        "Автор отключил уведомления об интересе",
+        409,
+      );
     await prisma.notification.create({
       data: {
         communityId: req.identity.communityId,
@@ -1285,6 +1341,7 @@ app.patch(
     const data: any = Object.fromEntries(
       Object.entries(req.body || {}).filter(([key]) => allowed.includes(key)),
     );
+    if (typeof data.rules === "string") data.rules = data.rules.slice(0, 10000);
     if (
       data.minMonthlyMessagesForFree !== undefined &&
       (!Number.isInteger(data.minMonthlyMessagesForFree) ||
