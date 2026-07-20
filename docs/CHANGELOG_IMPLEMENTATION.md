@@ -1,5 +1,15 @@
 # Implementation changelog
 
+## 2026-07-20 — Closed-beta tenant isolation audit
+
+- Closed a cross-community authorization gap for users who belong to more than one
+  tenant: listing edits, transitions, Stars invoices and image mutations now require
+  the token community as well as author ownership.
+- Scoped personal listing and favorite feeds to the current community.
+- Added a self-cleaning production acceptance runner covering two temporary tenants,
+  shared users, member/moderator roles, finance boundaries, suspensions and local bans.
+- Bound the diagnostic HTTP port to loopback so public traffic cannot bypass Caddy TLS.
+
 ## 2026-07-19 — Tenant-scoped abuse and risk controls
 
 - Counted only useful, non-duplicate group messages toward free publication while

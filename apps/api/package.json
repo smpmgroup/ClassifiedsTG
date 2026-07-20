@@ -8,6 +8,7 @@
     "start": "node dist/server.js",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "beta:audit": "node dist/beta-acceptance.js",
     "lint": "eslint src",
     "migrate:couchdb:dry": "tsx src/migrate-couchdb.ts --dry-run",
     "migrate:couchdb": "tsx src/migrate-couchdb.ts"

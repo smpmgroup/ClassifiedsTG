@@ -3117,7 +3117,11 @@ app.post(
 );
 app.patch("/api/listings/:id", { preHandler: auth }, async (req: any) => {
   const listing = await prisma.listing.findFirst({
-    where: { id: req.params.id, authorId: req.identity.userId },
+    where: {
+      id: req.params.id,
+      communityId: req.identity.communityId,
+      authorId: req.identity.userId,
+    },
   });
   if (!listing)
     throw new DomainError("LISTING_NOT_FOUND", "Объявление не найдено", 404);
@@ -3175,8 +3179,8 @@ app.post(
   "/api/listings/:id/transition",
   { preHandler: auth },
   async (req: any) => {
-    const listing = await prisma.listing.findUnique({
-      where: { id: req.params.id },
+    const listing = await prisma.listing.findFirst({
+      where: { id: req.params.id, communityId: req.identity.communityId },
       include: { category: true, images: { select: { id: true } }, author: { select: { createdAt: true } } },
     });
     if (!listing || listing.authorId !== req.identity.userId)
@@ -3336,6 +3340,7 @@ app.post(
     const listing = await prisma.listing.findFirst({
       where: {
         id: req.params.id,
+        communityId: req.identity.communityId,
         authorId: req.identity.userId,
         status: "draft",
       },
@@ -3455,14 +3460,24 @@ app.post(
 );
 app.get("/api/my/listings", { preHandler: auth }, async (req: any) =>
   prisma.listing.findMany({
-    where: { authorId: req.identity.userId, status: req.query?.status },
+    where: {
+      communityId: req.identity.communityId,
+      authorId: req.identity.userId,
+      status: req.query?.status,
+    },
     include: { images: { take: 1 } },
     orderBy: { updatedAt: "desc" },
   }),
 );
 app.get("/api/my/favorites", { preHandler: auth }, async (req: any) =>
   prisma.favorite.findMany({
-    where: { userId: req.identity.userId, listing: { status: "published" } },
+    where: {
+      userId: req.identity.userId,
+      listing: {
+        communityId: req.identity.communityId,
+        status: "published",
+      },
+    },
     include: { listing: { include: { images: { take: 1 }, category: true } } },
   }),
 );
@@ -3643,6 +3658,7 @@ app.post(
     const listing = await prisma.listing.findFirst({
       where: {
         id: req.params.id,
+        communityId: req.identity.communityId,
         authorId: req.identity.userId,
         status: { in: ["draft", "changes_requested"] },
       },
@@ -3715,6 +3731,7 @@ app.delete(
         id: req.params.imageId,
         listing: {
           id: req.params.id,
+          communityId: req.identity.communityId,
           authorId: req.identity.userId,
           status: { in: ["draft", "changes_requested"] },
         },
