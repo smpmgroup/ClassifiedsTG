@@ -6,7 +6,7 @@
 - Public port `8080` is bound to loopback and is unreachable from outside the VPS.
 - PostgreSQL contains 16 completed migrations, one current real community and three current real users.
 - Bot identity is `@ITTarragonaadsbot`, it can join groups, and all eight Compose services are running; backend, frontend, Nginx, PostgreSQL, Redis and worker health checks are green.
-- The self-cleaning closed-beta runner passed 23 API checks with two temporary tenants and a user belonging to both. It verified listing/favourite/moderation isolation, cross-tenant mutation denial, role boundaries, finance isolation, suspension and tenant-local enforcement. Cleanup returned the database to one community and three users.
+- The self-cleaning closed-beta runner passed 27 API checks with two temporary tenants and a user belonging to both. It verified listing/favourite/moderation isolation, cross-tenant mutation denial, role boundaries, finance isolation, suspension, tenant-local enforcement and protected media delivery. Cleanup returned the database to one community and three users.
 - Root, API and worker builds passed; 17 unit tests and the GitHub Actions workflow passed for commits `d8d7487` and `fb00987`.
 - Load smoke passed twice with 300 requests and concurrency 30: public landing p95 552 ms, health p95 822 ms, zero failed requests.
 - A new daily backup was checksummed and restored into an isolated PostgreSQL 17 container: 16 migrations, one community and three users. Scheduled backup, retention and weekly restore tasks are installed; a simulated failure opened a critical alert and a successful restore resolved it.
@@ -19,6 +19,7 @@
 3. Port 8080 exposed the internal HTTP proxy publicly. It now listens only on `127.0.0.1`.
 4. The restore drill could mistake PostgreSQL's temporary initialization server for final readiness. It now requires two consecutive readiness checks.
 5. Scheduled backup/restore failures previously existed only in a log. They now create deduplicated critical platform alerts and resolve them after recovery.
+6. Local listing images were exposed as durable public `/uploads/*` URLs. API responses and moderator cards now receive one-hour signed media URLs, sensitive storage metadata is removed from API payloads, forged tokens are rejected and the legacy public route returns 404.
 
 ## Gates that are intentionally not claimed complete
 
