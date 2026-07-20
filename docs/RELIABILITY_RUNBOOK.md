@@ -12,7 +12,7 @@
 
 Run `scripts/backup.sh /absolute/backup/path`, copy the completed directory to encrypted off-host storage, then execute `scripts/restore-drill.sh /absolute/backup/path`. A backup is accepted only after checksum, archive, database restore and migration checks pass.
 
-Recommended schedule: daily backup at 03:15 UTC, rotation after successful off-host copy, weekly isolated restore drill, and 14 days of local retention. Never restore over a non-empty production database.
+Production invokes `scripts/scheduled-ops.sh`: daily backup at 03:15 UTC, retention rotation at 04:45 UTC and an isolated restore drill every Sunday at 05:15 UTC. Failures create a deduplicated critical `SystemAlert` visible in the platform console; a later successful run resolves it. Local retention is 14 days. Never restore over a non-empty production database.
 
 ## Incident triage
 

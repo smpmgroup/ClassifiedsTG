@@ -10,8 +10,14 @@ cleanup() { docker rm -f "$drill_id" >/dev/null 2>&1 || true; }
 trap cleanup EXIT INT TERM
 docker run -d --name "$drill_id" -e POSTGRES_PASSWORD=restore_drill -e POSTGRES_DB=restore_drill postgres:17-alpine >/dev/null
 attempt=0
-until docker exec "$drill_id" pg_isready -U postgres -d restore_drill >/dev/null 2>&1; do
-  attempt=$((attempt + 1)); [ "$attempt" -lt 30 ] || { printf '%s\n' 'Restore database did not start'; exit 3; }
+ready=0
+while [ "$ready" -lt 2 ]; do
+  attempt=$((attempt + 1)); [ "$attempt" -lt 60 ] || { printf '%s\n' 'Restore database did not become stable'; exit 3; }
+  if docker exec "$drill_id" pg_isready -U postgres -d restore_drill >/dev/null 2>&1; then
+    ready=$((ready + 1))
+  else
+    ready=0
+  fi
   sleep 1
 done
 docker exec -i "$drill_id" pg_restore -U postgres -d restore_drill --no-owner --no-privileges < "$backup_dir/postgres.dump"
