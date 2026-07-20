@@ -1,4 +1,6 @@
 import crypto from "node:crypto";
+import fs from "node:fs/promises";
+import path from "node:path";
 import { prisma } from "@board/core";
 
 const baseUrl = process.env.BETA_AUDIT_BASE_URL || "http://127.0.0.1:3001";
@@ -9,6 +11,7 @@ const stamp = `${Date.now()}-${crypto.randomBytes(3).toString("hex")}`;
 const communityIds: string[] = [];
 const organizationIds: string[] = [];
 const userIds: string[] = [];
+const uploadKeys: string[] = [];
 const checks: string[] = [];
 
 function token(payload: Record<string, unknown>) {
@@ -37,6 +40,7 @@ function expectStatus(name: string, actual: number, expected: number | number[])
 }
 
 async function cleanup() {
+  await Promise.all(uploadKeys.map((key) => fs.unlink(path.join(process.env.UPLOAD_DIR || "/app/uploads", path.basename(key))).catch(() => undefined)));
   if (communityIds.length) {
     const where = { communityId: { in: communityIds } };
     await prisma.$transaction([
@@ -98,9 +102,16 @@ try {
     prisma.listing.create({ data: { ...listingData, title: `Published B ${stamp}`, communityId: communityB.id, authorId: seller.id, categoryId: categoryB.id, status: "published", publishedAt: new Date() } }),
     prisma.listing.create({ data: { ...listingData, title: `Pending B ${stamp}`, communityId: communityB.id, authorId: seller.id, categoryId: categoryB.id, status: "pending" } }),
   ]);
+  const fileA = `beta-${stamp}-a.webp`;
+  const fileB = `beta-${stamp}-b.webp`;
+  uploadKeys.push(fileA, fileB);
+  await Promise.all([
+    fs.writeFile(path.join(process.env.UPLOAD_DIR || "/app/uploads", fileA), Buffer.from("beta-a")),
+    fs.writeFile(path.join(process.env.UPLOAD_DIR || "/app/uploads", fileB), Buffer.from("beta-b")),
+  ]);
   const [imageA, imageB] = await Promise.all([
-    prisma.listingImage.create({ data: { listingId: draftA.id, storageProvider: "beta", url: "/beta-a.webp" } }),
-    prisma.listingImage.create({ data: { listingId: draftB.id, storageProvider: "beta", url: "/beta-b.webp" } }),
+    prisma.listingImage.create({ data: { listingId: draftA.id, storageProvider: "local", storageKey: fileA, url: `/uploads/${fileA}` } }),
+    prisma.listingImage.create({ data: { listingId: draftB.id, storageProvider: "local", storageKey: fileB, url: `/uploads/${fileB}` } }),
   ]);
   await prisma.favorite.createMany({ data: [
     { userId: shared.id, listingId: publishedA.id },
@@ -120,6 +131,18 @@ try {
   expectStatus("tenant A favorites request", favorites.status, 200);
   if (favorites.body.length !== 1 || favorites.body[0].listing.id !== publishedA.id) throw new Error("favorites crossed tenant boundary");
   checks.push("favorites are tenant isolated");
+  const detail = await request(`/api/listings/${draftA.id}`, memberA);
+  expectStatus("authorized listing media metadata", detail.status, 200);
+  const protectedUrl = detail.body.images?.[0]?.url;
+  if (typeof protectedUrl !== "string" || !protectedUrl.startsWith(`/api/media/${imageA.id}?token=`) || "storageKey" in detail.body.images[0])
+    throw new Error("listing image did not receive a sanitized signed URL");
+  expectStatus("signed image delivery", (await request(protectedUrl, memberA)).status, 200);
+  const tampered = new URL(protectedUrl, baseUrl);
+  const signedValue = tampered.searchParams.get("token") || "";
+  tampered.searchParams.set("token", `${signedValue.slice(0, -1)}${signedValue.endsWith("a") ? "b" : "a"}`);
+  const tamperedResponse = await fetch(tampered);
+  expectStatus("tampered image token denied", tamperedResponse.status, 401);
+  expectStatus("legacy upload path denied", (await fetch(`${baseUrl}/uploads/${fileA}`)).status, 404);
 
   expectStatus("cross-tenant edit denied", (await request(`/api/listings/${draftB.id}`, memberA, { method: "PATCH", body: JSON.stringify({ title: "MUTATED" }) })).status, 404);
   expectStatus("cross-tenant transition denied", (await request(`/api/listings/${draftB.id}/transition`, memberA, { method: "POST", body: JSON.stringify({ status: "pending" }) })).status, 404);

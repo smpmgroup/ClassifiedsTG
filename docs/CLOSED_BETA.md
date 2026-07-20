@@ -8,7 +8,7 @@ The API image contains a self-cleaning acceptance runner:
 docker compose exec -T backend node apps/api/dist/beta-acceptance.js
 ```
 
-It creates two temporary organisations and communities, uses a user who belongs to both tenants, and verifies board/listing/favourite/moderation isolation, cross-tenant mutation denial, member/admin boundaries, organisation finance isolation, tenant suspension and tenant-local enforcement. The probe deletes all temporary rows in a `finally` block. A successful run prints one JSON object with `ok: true` and the number of checks.
+It creates two temporary organisations and communities, uses a user who belongs to both tenants, and verifies board/listing/favourite/moderation isolation, cross-tenant mutation denial, signed media delivery and tamper rejection, member/admin boundaries, organisation finance isolation, tenant suspension and tenant-local enforcement. The probe deletes all temporary rows and temporary media in a `finally` block. A successful run prints one JSON object with `ok: true` and the number of checks.
 
 Run it after every production migration and before inviting another beta community. The audit complements, but does not replace, onboarding with actual Telegram groups because Telegram administrator permissions and real member status can only be proven against real chats.
 

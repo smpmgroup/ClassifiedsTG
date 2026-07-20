@@ -10,14 +10,24 @@ import {
 const tokenValue = process.env.TELEGRAM_BOT_TOKEN;
 const appUrlValue = process.env.TELEGRAM_MINI_APP_URL;
 const usernameValue = process.env.TELEGRAM_BOT_USERNAME;
-if (!tokenValue || !appUrlValue || !usernameValue)
+const accessTokenSecret = process.env.ACCESS_TOKEN_SECRET || "";
+if (!tokenValue || !appUrlValue || !usernameValue || !accessTokenSecret)
   throw new Error(
-    "TELEGRAM_BOT_TOKEN, TELEGRAM_BOT_USERNAME and TELEGRAM_MINI_APP_URL are required",
+    "TELEGRAM_BOT_TOKEN, TELEGRAM_BOT_USERNAME, TELEGRAM_MINI_APP_URL and ACCESS_TOKEN_SECRET are required",
   );
 const token: string = tokenValue;
 const appUrl: string = appUrlValue;
 const botUsername: string = usernameValue;
 const bot = new Telegraf(token);
+const mediaUrl = (imageId: string) => {
+  const now = Math.floor(Date.now() / 1000);
+  const encode = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url");
+  const body = `${encode({ alg: "HS256", typ: "JWT" })}.${encode({ scope: "media", imageId, iat: now, exp: now + 3600 })}`;
+  const signature = crypto.createHmac("sha256", accessTokenSecret).update(body).digest("base64url");
+  const url = new URL(`/api/media/${imageId}`, appUrl);
+  url.searchParams.set("token", `${body}.${signature}`);
+  return url.toString();
+};
 const roles = new Set(["moderator", "admin", "owner"]);
 const boardUrl = (communitySlug?: string, screen?: string) => {
   const url = new URL(appUrl);
@@ -634,10 +644,10 @@ async function sendModerationCard(listingId: string) {
   for (const member of moderators) {
     try {
       const chatId = member.user.telegramUserId.toString();
-      if (listing.images[0]?.url)
+      if (listing.images[0])
         await bot.telegram.sendPhoto(
           chatId,
-          new URL(listing.images[0].url, appUrl).toString(),
+          mediaUrl(listing.images[0].id),
           { caption: text, ...keyboard.reply_markup },
         );
       else await bot.telegram.sendMessage(chatId, text, keyboard);

@@ -1,5 +1,14 @@
 # Implementation changelog
 
+## 2026-07-20 — Tenant-protected media delivery
+
+- Removed public static access to the upload volume and denied legacy `/uploads/*` paths.
+- Added short-lived image-bound media tokens; API payloads expose signed URLs while
+  stripping storage keys and Telegram file identifiers.
+- Updated private Telegram moderation cards to use the same signed media route.
+- Extended the production beta runner with signed delivery, token-tampering and legacy
+  path denial checks.
+
 ## 2026-07-20 — Closed-beta tenant isolation audit
 
 - Closed a cross-community authorization gap for users who belong to more than one

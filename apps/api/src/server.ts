@@ -4,7 +4,6 @@ import cors from "@fastify/cors";
 import rateLimit from "@fastify/rate-limit";
 import jwt from "@fastify/jwt";
 import multipart from "@fastify/multipart";
-import staticPlugin from "@fastify/static";
 import rawBody from "fastify-raw-body";
 import swagger from "@fastify/swagger";
 import swaggerUi from "@fastify/swagger-ui";
@@ -60,6 +59,24 @@ await app.register(cors, {
 });
 await app.register(rateLimit, { max: 100, timeWindow: "1 minute", redis });
 await app.register(jwt, { secret: config.ACCESS_TOKEN_SECRET });
+function protectImageUrls(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(protectImageUrls);
+  if (!value || typeof value !== "object" || Object.getPrototypeOf(value) !== Object.prototype)
+    return value;
+  const item = value as Record<string, unknown>;
+  const output: Record<string, unknown> = {};
+  for (const [key, child] of Object.entries(item)) {
+    if (["storageKey", "telegramFileId", "telegramFileUniqueId"].includes(key) && "storageProvider" in item && "listingId" in item)
+      continue;
+    output[key] = protectImageUrls(child);
+  }
+  if ("storageProvider" in item && "listingId" in item && typeof item.id === "string") {
+    const mediaToken = app.jwt.sign({ scope: "media", imageId: item.id }, { expiresIn: 3600 });
+    output.url = `/api/media/${item.id}?token=${encodeURIComponent(mediaToken)}`;
+  }
+  return output;
+}
+app.addHook("preSerialization", async (_req, _reply, payload) => protectImageUrls(payload));
 await app.register(rawBody, {
   field: "rawBody",
   global: false,
@@ -77,11 +94,6 @@ await app.register(swagger, {
 });
 await app.register(swaggerUi, { routePrefix: "/docs" });
 await fs.mkdir(config.UPLOAD_DIR, { recursive: true });
-await app.register(staticPlugin, {
-  root: config.UPLOAD_DIR,
-  prefix: "/uploads/",
-  decorateReply: false,
-});
 
 type Identity = {
   userId: string;
@@ -417,6 +429,37 @@ app.get("/health", { config: { rateLimit: false } }, async () => {
   await Promise.all([prisma.$queryRaw`SELECT 1`, redis.ping()]);
   return { status: "ok" };
 });
+
+app.get(
+  "/api/media/:imageId",
+  { config: { rateLimit: { max: 300, timeWindow: "1 minute" } } },
+  async (req: any, reply) => {
+    const mediaToken = String(req.query?.token || "");
+    let verified: { scope?: string; imageId?: string };
+    try {
+      verified = app.jwt.verify(mediaToken) as { scope?: string; imageId?: string };
+    } catch {
+      throw new DomainError("MEDIA_TOKEN_INVALID", "Ссылка на изображение недействительна", 401);
+    }
+    if (verified.scope !== "media" || verified.imageId !== String(req.params.imageId))
+      throw new DomainError("MEDIA_TOKEN_INVALID", "Ссылка на изображение недействительна", 401);
+    const image = await prisma.listingImage.findUnique({
+      where: { id: String(req.params.imageId) },
+      select: { storageProvider: true, storageKey: true },
+    });
+    if (!image?.storageKey || image.storageProvider !== "local")
+      throw new DomainError("MEDIA_NOT_FOUND", "Изображение не найдено", 404);
+    const file = await fs
+      .readFile(path.join(config.UPLOAD_DIR, path.basename(image.storageKey)))
+      .catch(() => null);
+    if (!file) throw new DomainError("MEDIA_NOT_FOUND", "Изображение не найдено", 404);
+    return reply
+      .type("image/webp")
+      .header("cache-control", "private, max-age=3600")
+      .header("x-content-type-options", "nosniff")
+      .send(file);
+  },
+);
 
 app.get("/api/public/site", async () => {
   const [plans, documents, settings] = await prisma.$transaction([
