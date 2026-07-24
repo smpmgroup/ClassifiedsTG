@@ -4,9 +4,9 @@
 
 - Production origin: `https://93-93-116-147.nip.io`; HTTP redirects to HTTPS, HSTS and a Telegram-compatible CSP are active.
 - Public port `8080` is bound to loopback and is unreachable from outside the VPS.
-- PostgreSQL contains 17 completed migrations, one current real community and three current real users.
+- PostgreSQL contains 18 completed migrations, one current real community and three current real users.
 - Bot identity is `@ITTarragonaadsbot`, it can join groups, and all eight Compose services are running; backend, frontend, Nginx, PostgreSQL, Redis and worker health checks are green.
-- The self-cleaning closed-beta runner passed 37 API checks with two temporary tenants and a user belonging to both. It verified listing/favourite/moderation isolation, cross-tenant mutation denial, role boundaries, finance and support isolation, suspension, tenant-local enforcement, protected media delivery and platform-staff MFA. Cleanup returned the database to one community and three users.
+- The self-cleaning closed-beta runner passed 47 API checks with two temporary tenants and a user belonging to both. It verified listing/favourite/moderation isolation, cross-tenant mutation denial, role boundaries, finance and support isolation, suspension, tenant-local enforcement, protected media delivery, platform-staff MFA and website-originated Telegram registration. Cleanup returned the database to one community and three users.
 - Root, API and worker builds passed; 17 unit tests and the GitHub Actions workflow passed for commits `d8d7487` and `fb00987`.
 - Load smoke passed twice with 300 requests and concurrency 30: public landing p95 552 ms, health p95 822 ms, zero failed requests.
 - A new daily backup was checksummed and restored into an isolated PostgreSQL 17 container: 16 migrations, one community and three users. Scheduled backup, retention and weekly restore tasks are installed; a simulated failure opened a critical alert and a successful restore resolved it.
@@ -22,6 +22,7 @@
 6. Local listing images were exposed as durable public `/uploads/*` URLs. API responses and moderator cards now receive one-hour signed media URLs, sensitive storage metadata is removed from API payloads, forged tokens are rejected and the legacy public route returns 404.
 7. Privileged platform sessions previously relied on Telegram login alone. Support, finance, platform administrator and platform owner APIs now require a TOTP-verified session. Secrets are encrypted with an independent key, recovery codes are one-time keyed hashes, and TOTP steps and login challenges reject replay.
 8. The mixed customer/staff support-message route had derived staff bypass from the database role without checking MFA. Unverified staff sessions can no longer cross the organization boundary or create internal messages.
+9. The public site previously sent every owner into a Mini App deep link and had no native website registration lifecycle. `/login` now creates a hashed ten-minute intent, Telegram atomically claims it, the browser performs a retry-safe one-time exchange and privileged users continue through TOTP into `/dashboard`.
 
 ## Gates that are intentionally not claimed complete
 
