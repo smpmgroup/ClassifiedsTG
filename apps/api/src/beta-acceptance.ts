@@ -130,7 +130,12 @@ try {
 
   const webStart = await request("/api/auth/platform/web/start", "", { method: "POST", body: "{}" });
   expectStatus("website starts Telegram registration", webStart.status, 200);
-  if (!/^[A-Za-z0-9_-]{43}$/.test(webStart.body.token) || !String(webStart.body.botUrl).includes(`?start=login_${webStart.body.token}`))
+  if (
+    !/^[A-Za-z0-9_-]{43}$/.test(webStart.body.token) ||
+    !String(webStart.body.botUrl).includes(`?start=login_${webStart.body.token}`) ||
+    !String(webStart.body.telegramAppUrl).includes(`&start=login_${webStart.body.token}`) ||
+    !String(webStart.body.botUrl).startsWith(`https://t.me/${webStart.body.botUsername}?`)
+  )
     throw new Error("web login did not return a valid bot confirmation link");
   checks.push("website login returns a ten-minute Telegram deep link");
   const webTokenHash = crypto.createHash("sha256").update(webStart.body.token).digest("hex");

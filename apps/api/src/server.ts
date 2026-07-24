@@ -831,7 +831,9 @@ app.post(
     return {
       token: rawToken,
       expiresAt,
+      botUsername: config.TELEGRAM_BOT_USERNAME,
       botUrl: `https://t.me/${config.TELEGRAM_BOT_USERNAME}?start=login_${rawToken}`,
+      telegramAppUrl: `tg://resolve?domain=${config.TELEGRAM_BOT_USERNAME}&start=login_${rawToken}`,
     };
   },
 );

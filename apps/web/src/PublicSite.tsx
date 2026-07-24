@@ -102,7 +102,14 @@ function WebLogin() {
   }, [intent, state]);
   const start = async () => {
     setBusy(true); setError("");
-    try { setIntent(await startPlatformWebLogin()); setState("waiting"); void track("web_login_started"); }
+    const telegramWindow = window.open("", "_blank");
+    try {
+      const nextIntent = await startPlatformWebLogin();
+      setIntent(nextIntent);
+      setState("waiting");
+      void track("web_login_started");
+      if (telegramWindow) telegramWindow.location.href = nextIntent.telegramAppUrl || nextIntent.botUrl;
+    }
     catch (e: any) { setError(e.message); setState("error"); }
     finally { setBusy(false); }
   };
@@ -112,7 +119,7 @@ function WebLogin() {
     catch (e: any) { setError(e.message); }
     finally { setBusy(false); }
   };
-  return <main className="web-login"><section><small>ЗАКРЫТЫЙ КАБИНЕТ</small><h1>{state === "two_factor" ? "Подтвердите второй фактор" : "Вход и регистрация через Telegram"}</h1>{state === "intro" && <><p>Telegram подтвердит вашу личность. Мы не просим номер телефона, пароль или токен собственного бота.</p><ol><li>Нажмите кнопку ниже.</li><li>Подтвердите вход в личном чате с ботом.</li><li>Вернитесь на эту вкладку — кабинет откроется автоматически.</li></ol><button className="public-primary" disabled={busy} onClick={() => void start()}>{busy ? "Создаём вход…" : "Начать регистрацию"}<span>→</span></button></>}{state === "waiting" && <><div className="login-waiting"><span>1</span><div><b>Подтвердите вход в Telegram</b><p>Ссылка действует 10 минут. После подтверждения вернитесь сюда.</p></div></div><a className="public-primary" href={intent.botUrl} target="_blank" rel="noreferrer">Открыть Telegram <span>↗</span></a><div className="login-pulse"><i/>Ожидаем подтверждение…</div></>}{state === "two_factor" && <form onSubmit={finishTwoFactor}><p>Для служебной роли требуется код приложения-аутентификатора или recovery-код.</p><input autoFocus value={code} onChange={(event) => setCode(event.target.value.trim())} autoComplete="one-time-code" placeholder="000000" minLength={6} maxLength={12} required/><button className="public-primary" disabled={busy}>{busy ? "Проверяем…" : "Войти"}</button></form>}{state === "error" && <><p className="login-error">{error}</p><button onClick={() => { setState("intro"); setIntent(undefined); }}>Начать заново</button></>}<aside><b>После регистрации</b><span>Организация → группа → права бота → правила и цена → запуск</span></aside></section></main>;
+  return <main className="web-login"><section><small>ЗАКРЫТЫЙ КАБИНЕТ</small><h1>{state === "two_factor" ? "Подтвердите второй фактор" : "Вход и регистрация через Telegram"}</h1>{state === "intro" && <><p>Telegram подтвердит вашу личность. Мы не просим номер телефона, пароль или токен собственного бота.</p><ol><li>Нажмите кнопку — откроется личный чат с <b>@ITTarragonaadsbot</b>.</li><li>Нажмите «Запустить» или подтвердите вход в сообщении бота.</li><li>Вернитесь на эту вкладку — кабинет откроется автоматически.</li></ol><button className="public-primary" disabled={busy} onClick={() => void start()}>{busy ? "Открываем бота…" : "Открыть бота и зарегистрироваться"}<span>↗</span></button></>}{state === "waiting" && <><div className="login-waiting"><span>1</span><div><b>Личный чат с @{intent.botUsername}</b><p>Не группа и не доска объявлений. Ссылка действует 10 минут.</p></div></div><a className="public-primary" href={intent.telegramAppUrl || intent.botUrl}>Открыть личный чат в Telegram <span>↗</span></a><a href={intent.botUrl} target="_blank" rel="noreferrer">Если приложение не открылось — открыть через t.me</a><div className="login-pulse"><i/>Ожидаем подтверждение…</div></>}{state === "two_factor" && <form onSubmit={finishTwoFactor}><p>Для служебной роли требуется код приложения-аутентификатора или recovery-код.</p><input autoFocus value={code} onChange={(event) => setCode(event.target.value.trim())} autoComplete="one-time-code" placeholder="000000" minLength={6} maxLength={12} required/><button className="public-primary" disabled={busy}>{busy ? "Проверяем…" : "Войти"}</button></form>}{state === "error" && <><p className="login-error">{error}</p><button onClick={() => { setState("intro"); setIntent(undefined); }}>Начать заново</button></>}<aside><b>После регистрации</b><span>Организация → группа → права бота → правила и цена → запуск</span></aside></section></main>;
 }
 
 function Legal({ document }: { document?: SiteData["documents"][number] }) {
