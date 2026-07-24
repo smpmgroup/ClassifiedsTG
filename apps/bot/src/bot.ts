@@ -39,6 +39,15 @@ const privateBoard = (communitySlug?: string, screen?: string) =>
   Markup.inlineKeyboard([
     Markup.button.webApp("Открыть доску", boardUrl(communitySlug, screen)),
   ]);
+const platformUrl = () => {
+  const url = new URL(appUrl);
+  url.searchParams.set("mode", "platform");
+  return url.toString();
+};
+const platformBoard = () =>
+  Markup.inlineKeyboard([
+    Markup.button.webApp("Кабинет владельца", platformUrl()),
+  ]);
 const publicBoard = (communitySlug: string) =>
   Markup.inlineKeyboard([
     Markup.button.url(
@@ -246,6 +255,14 @@ bot.start(async (ctx) => {
     await claimCommunityConnection(ctx, ctx.startPayload.slice(8));
     return;
   }
+  if (ctx.startPayload === "platform") {
+    if (ctx.chat.type !== "private")
+      return ctx.reply("Откройте личный чат с ботом, чтобы войти в кабинет.");
+    return ctx.reply(
+      "Откройте кабинет владельца, чтобы создать организацию и подключить Telegram-группу.",
+      platformBoard(),
+    );
+  }
   const user = await prisma.user.findUnique({
     where: { telegramUserId: BigInt(ctx.from.id) },
     include: { members: true },
@@ -343,9 +360,7 @@ bot.command("connect", (ctx) => {
     return ctx.reply("Откройте личный чат с ботом и отправьте /connect.");
   return ctx.reply(
     "Откройте кабинет, чтобы подключить свою Telegram-группу.",
-    Markup.inlineKeyboard([
-      Markup.button.webApp("Кабинет владельца", boardUrl(undefined, undefined) + (appUrl.includes("?") ? "&" : "?") + "mode=platform"),
-    ]),
+    platformBoard(),
   );
 });
 bot.command("rules", async (ctx) => {
