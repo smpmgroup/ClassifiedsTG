@@ -1850,7 +1850,9 @@ app.post(
         },
       },
     });
-    const isStaff = platformSupportRoles.has(req.platformIdentity.platformRole);
+    const isStaff =
+      req.platformIdentity.mfa &&
+      platformSupportRoles.has(req.platformIdentity.platformRole);
     if (!membership && !isStaff)
       throw new DomainError("FORBIDDEN", "Недостаточно прав", 403);
     const body = String(req.body?.message || "").trim().slice(0, 5000);

@@ -11,6 +11,7 @@
 - Enabled and verified an `sshd` Fail2ban jail while preserving the temporary root recovery channel; UFW remains limited to ports 22, 80 and 443.
 - Added verified, client-side encrypted Restic replication for S3-compatible storage with retention, optional data sampling, scheduled-alert integration and an off-site restore acceptance procedure.
 - Fixed the public SaaS conversion path: the landing page's `start=platform` deep link now opens the owner workspace instead of being parsed as a community slug.
+- Closed the mixed customer/staff support endpoint so its cross-tenant staff bypass is active only for an MFA-verified session.
 
 ## 2026-07-20 — Tenant-protected media delivery
 

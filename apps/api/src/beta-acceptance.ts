@@ -172,7 +172,12 @@ try {
   expectStatus("organization finance denied across tenant", (await request(`/api/platform/organizations/${orgB.id}/finance`, platformA)).status, 403);
   expectStatus("ordinary platform user denied owner console", (await request("/api/platform/admin/reliability", platformA)).status, 403);
 
+  const supportTicket = await prisma.supportTicket.create({ data: {
+    organizationId: orgA.id, communityId: communityA.id, createdById: moderator.id,
+    subject: `Beta protected support ${stamp}`,
+  }});
   expectStatus("privileged platform session requires 2FA setup", (await request("/api/platform/admin/reliability", platformStaffUnverified)).status, 428);
+  expectStatus("unverified platform staff cannot bypass tenant support", (await request(`/api/platform/support/${supportTicket.id}/messages`, platformStaffUnverified, { method: "POST", body: JSON.stringify({ message: "must not be written", internal: true }) })).status, 403);
   const twoFactorSetup = await request("/api/platform/security/two-factor/setup", platformStaffUnverified, { method: "POST", body: "{}" });
   expectStatus("privileged user starts encrypted 2FA setup", twoFactorSetup.status, 200);
   const setupCode = totpAt(twoFactorSetup.body.secret);
@@ -181,6 +186,7 @@ try {
   if (!Array.isArray(twoFactorConfirm.body.backupCodes) || twoFactorConfirm.body.backupCodes.length !== 10) throw new Error("2FA backup codes were not issued exactly once");
   checks.push("2FA issued ten one-time backup codes");
   expectStatus("MFA-verified platform session reaches owner console", (await request("/api/platform/admin/reliability", twoFactorConfirm.body.accessToken)).status, 200);
+  expectStatus("MFA-verified support bypass succeeds", (await request(`/api/platform/support/${supportTicket.id}/messages`, twoFactorConfirm.body.accessToken, { method: "POST", body: JSON.stringify({ message: "verified internal note", internal: true }) })).status, 200);
   const challenge = token({ scope: "platform_2fa", userId: platformStaff.id, nonce: `beta-${stamp}` });
   expectStatus("used TOTP step cannot be replayed", (await request("/api/auth/platform/two-factor", platformStaffUnverified, { method: "POST", body: JSON.stringify({ challengeToken: challenge, code: setupCode }) })).status, 401);
   const backupChallenge = token({ scope: "platform_2fa", userId: platformStaff.id, nonce: `beta-backup-${stamp}` });
