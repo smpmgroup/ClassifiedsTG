@@ -35,6 +35,15 @@ import {
 } from "@board/core";
 import { loadConfig } from "./config.js";
 import { telegramMembership, validateInitData } from "./auth.js";
+import {
+  decryptTotpSecret,
+  encryptTotpSecret,
+  generateBackupCodes,
+  generateTotpSecret,
+  hashBackupCode,
+  verifyBackupCode,
+  verifyTotp,
+} from "./two-factor.js";
 
 const config = loadConfig();
 const stripe = config.STRIPE_SECRET_KEY
@@ -105,6 +114,8 @@ type PlatformIdentity = {
   userId: string;
   telegramUserId: string;
   platformRole: "user" | "support" | "finance" | "platform_admin" | "platform_owner";
+  mfa: boolean;
+  totpEnabled: boolean;
 };
 declare module "fastify" {
   interface FastifyRequest {
@@ -126,6 +137,7 @@ async function platformAuth(req: any, reply: any) {
         telegramUserId: true,
         status: true,
         platformRole: true,
+        totpEnabledAt: true,
       },
     });
     if (!user || user.status !== "active")
@@ -134,6 +146,8 @@ async function platformAuth(req: any, reply: any) {
       userId: user.id,
       telegramUserId: String(user.telegramUserId),
       platformRole: user.platformRole,
+      mfa: decoded.mfa === true,
+      totpEnabled: Boolean(user.totpEnabledAt),
     };
   } catch (e) {
     if (e instanceof DomainError) throw e;
@@ -146,6 +160,11 @@ const requirePlatformRole = (roles: Set<string>) =>
     if (reply.sent) return;
     if (!roles.has(req.platformIdentity.platformRole))
       return reply.status(403).send(error("FORBIDDEN", "Недостаточно прав"));
+    if (req.platformIdentity.platformRole !== "user" && !req.platformIdentity.mfa)
+      return reply.status(428).send(error(
+        req.platformIdentity.totpEnabled ? "TWO_FACTOR_REQUIRED" : "TWO_FACTOR_SETUP_REQUIRED",
+        req.platformIdentity.totpEnabled ? "Введите код второго фактора" : "Настройте двухфакторную защиту",
+      ));
   };
 const platformAdminRoles = new Set(["platform_admin", "platform_owner"]);
 const platformFinanceRoles = new Set([
@@ -785,6 +804,46 @@ app.post(
   },
 );
 
+const platformSessionPayload = (user: { id: string; telegramUserId: bigint; platformRole: string }, mfa: boolean) => ({
+  scope: "platform",
+  userId: user.id,
+  telegramUserId: String(user.telegramUserId),
+  platformRole: user.platformRole,
+  mfa,
+});
+
+async function consumeSecondFactor(user: {
+  id: string;
+  totpSecretEncrypted: string | null;
+  totpLastUsedStep: bigint | null;
+  backupCodeHashes: string[];
+}, code: string) {
+  const value = String(code || "").trim();
+  if (user.totpSecretEncrypted && /^\d{6}$/.test(value)) {
+    const secret = decryptTotpSecret(user.totpSecretEncrypted, config.TOTP_ENCRYPTION_KEY);
+    const step = verifyTotp(secret, value);
+    if (step == null) return null;
+    const stepValue = BigInt(step);
+    const updated = await prisma.user.updateMany({
+      where: {
+        id: user.id,
+        OR: [{ totpLastUsedStep: null }, { totpLastUsedStep: { lt: stepValue } }],
+      },
+      data: { totpLastUsedStep: stepValue },
+    });
+    return updated.count === 1 ? "totp" : null;
+  }
+  const index = verifyBackupCode(value, user.backupCodeHashes, config.TOTP_ENCRYPTION_KEY);
+  if (index < 0) return null;
+  const hash = user.backupCodeHashes[index];
+  const consumed = await prisma.$executeRaw`
+    UPDATE "User"
+    SET "backupCodeHashes" = array_remove("backupCodeHashes", ${hash}), "updatedAt" = now()
+    WHERE "id" = ${user.id} AND ${hash} = ANY("backupCodeHashes")
+  `;
+  return consumed === 1 ? "backup" : null;
+}
+
 app.post(
   "/api/auth/platform/telegram",
   { config: { rateLimit: { max: 10, timeWindow: "1 minute" } } },
@@ -838,15 +897,21 @@ app.post(
       "EX",
       config.TELEGRAM_INIT_DATA_MAX_AGE_SECONDS,
     );
-    const accessToken = await reply.jwtSign(
-      {
-        scope: "platform",
-        userId: user.id,
-        telegramUserId: String(user.telegramUserId),
-        platformRole: user.platformRole,
-      },
-      { expiresIn: config.ACCESS_TOKEN_TTL_SECONDS },
-    );
+    if (user.platformRole !== "user" && user.totpEnabledAt) {
+      const challengeToken = await reply.jwtSign(
+        { scope: "platform_2fa", userId: user.id, nonce: crypto.randomUUID() },
+        { expiresIn: 300 },
+      );
+      return {
+        requiresTwoFactor: true,
+        challengeToken,
+        expiresIn: 300,
+        user: { id: user.id, firstName: user.firstName, username: user.username, platformRole: user.platformRole },
+      };
+    }
+    const accessToken = await reply.jwtSign(platformSessionPayload(user, false), {
+      expiresIn: config.ACCESS_TOKEN_TTL_SECONDS,
+    });
     return {
       accessToken,
       expiresIn: config.ACCESS_TOKEN_TTL_SECONDS,
@@ -857,6 +922,125 @@ app.post(
         platformRole: user.platformRole,
       },
     };
+  },
+);
+
+app.post(
+  "/api/auth/platform/two-factor",
+  { config: { rateLimit: { max: 5, timeWindow: "5 minutes" } } },
+  async (req: any, reply) => {
+    let challenge: any;
+    try {
+      challenge = app.jwt.verify(String(req.body?.challengeToken || ""));
+    } catch {
+      throw new DomainError("TWO_FACTOR_CHALLENGE_INVALID", "Запрос второго фактора истёк", 401);
+    }
+    if (challenge.scope !== "platform_2fa" || !challenge.userId)
+      throw new DomainError("TWO_FACTOR_CHALLENGE_INVALID", "Некорректный запрос второго фактора", 401);
+    const replayKey = `platform-2fa:${challenge.nonce}`;
+    if (!challenge.nonce || await redis.get(replayKey))
+      throw new DomainError("TWO_FACTOR_CHALLENGE_REPLAYED", "Этот запрос уже использован", 401);
+    const user = await prisma.user.findUnique({ where: { id: challenge.userId } });
+    if (!user || user.status !== "active" || user.platformRole === "user" || !user.totpEnabledAt)
+      throw new DomainError("ACCESS_DENIED", "Доступ ограничен", 403);
+    const method = await consumeSecondFactor(user, req.body?.code);
+    if (!method)
+      throw new DomainError("TWO_FACTOR_CODE_INVALID", "Неверный или уже использованный код", 401);
+    await redis.set(replayKey, "1", "EX", 300);
+    await prisma.auditEvent.create({ data: {
+      actorId: user.id, scope: "platform_security", action: "two_factor_login",
+      targetType: "User", targetId: user.id, metadata: { method },
+    }});
+    const accessToken = await reply.jwtSign(platformSessionPayload(user, true), {
+      expiresIn: config.ACCESS_TOKEN_TTL_SECONDS,
+    });
+    return { accessToken, expiresIn: config.ACCESS_TOKEN_TTL_SECONDS };
+  },
+);
+
+app.get("/api/platform/security/two-factor", { preHandler: platformAuth }, async (req: any) => {
+  const user = await prisma.user.findUniqueOrThrow({
+    where: { id: req.platformIdentity.userId },
+    select: { totpEnabledAt: true, backupCodeHashes: true },
+  });
+  return {
+    enabled: Boolean(user.totpEnabledAt),
+    enabledAt: user.totpEnabledAt,
+    backupCodesRemaining: user.backupCodeHashes.length,
+    required: req.platformIdentity.platformRole !== "user",
+    sessionVerified: req.platformIdentity.mfa,
+  };
+});
+
+app.post(
+  "/api/platform/security/two-factor/setup",
+  { preHandler: platformAuth, config: { rateLimit: { max: 3, timeWindow: "10 minutes" } } },
+  async (req: any) => {
+    const user = await prisma.user.findUniqueOrThrow({ where: { id: req.platformIdentity.userId } });
+    if (user.totpEnabledAt)
+      throw new DomainError("TWO_FACTOR_ALREADY_ENABLED", "Двухфакторная защита уже включена", 409);
+    const secret = generateTotpSecret();
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { totpSecretEncrypted: encryptTotpSecret(secret, config.TOTP_ENCRYPTION_KEY), totpLastUsedStep: null, backupCodeHashes: [] },
+    });
+    const label = `${config.TELEGRAM_BOT_USERNAME}:${user.username || user.telegramUserId}`;
+    const otpauthUrl = `otpauth://totp/${encodeURIComponent(label)}?secret=${secret}&issuer=${encodeURIComponent(config.TELEGRAM_BOT_USERNAME)}&algorithm=SHA1&digits=6&period=30`;
+    return { secret, otpauthUrl };
+  },
+);
+
+app.post(
+  "/api/platform/security/two-factor/confirm",
+  { preHandler: platformAuth, config: { rateLimit: { max: 5, timeWindow: "10 minutes" } } },
+  async (req: any, reply) => {
+    const user = await prisma.user.findUniqueOrThrow({ where: { id: req.platformIdentity.userId } });
+    if (!user.totpSecretEncrypted || user.totpEnabledAt)
+      throw new DomainError("TWO_FACTOR_SETUP_REQUIRED", "Сначала начните настройку второго фактора", 409);
+    const secret = decryptTotpSecret(user.totpSecretEncrypted, config.TOTP_ENCRYPTION_KEY);
+    const step = verifyTotp(secret, String(req.body?.code || ""));
+    if (step == null)
+      throw new DomainError("TWO_FACTOR_CODE_INVALID", "Неверный код приложения-аутентификатора", 401);
+    const backupCodes = generateBackupCodes();
+    const enabledAt = new Date();
+    const updated = await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        totpEnabledAt: enabledAt,
+        totpLastUsedStep: BigInt(step),
+        backupCodeHashes: backupCodes.map((code) => hashBackupCode(code, config.TOTP_ENCRYPTION_KEY)),
+      },
+    });
+    await prisma.auditEvent.create({ data: {
+      actorId: user.id, scope: "platform_security", action: "two_factor_enabled",
+      targetType: "User", targetId: user.id, metadata: { backupCodeCount: backupCodes.length },
+    }});
+    const accessToken = await reply.jwtSign(platformSessionPayload(updated, true), {
+      expiresIn: config.ACCESS_TOKEN_TTL_SECONDS,
+    });
+    return { enabled: true, enabledAt, backupCodes, accessToken };
+  },
+);
+
+app.post(
+  "/api/platform/security/two-factor/backup-codes",
+  { preHandler: platformAuth, config: { rateLimit: { max: 3, timeWindow: "1 hour" } } },
+  async (req: any) => {
+    const user = await prisma.user.findUniqueOrThrow({ where: { id: req.platformIdentity.userId } });
+    if (!user.totpEnabledAt || !req.platformIdentity.mfa)
+      throw new DomainError("TWO_FACTOR_REQUIRED", "Сначала подтвердите второй фактор", 428);
+    const secret = decryptTotpSecret(user.totpSecretEncrypted!, config.TOTP_ENCRYPTION_KEY);
+    if (verifyTotp(secret, String(req.body?.code || "")) == null)
+      throw new DomainError("TWO_FACTOR_CODE_INVALID", "Неверный код приложения-аутентификатора", 401);
+    const backupCodes = generateBackupCodes();
+    await prisma.user.update({ where: { id: user.id }, data: {
+      backupCodeHashes: backupCodes.map((code) => hashBackupCode(code, config.TOTP_ENCRYPTION_KEY)),
+    }});
+    await prisma.auditEvent.create({ data: {
+      actorId: user.id, scope: "platform_security", action: "two_factor_backup_codes_regenerated",
+      targetType: "User", targetId: user.id, metadata: { backupCodeCount: backupCodes.length },
+    }});
+    return { backupCodes };
   },
 );
 
@@ -925,6 +1109,12 @@ app.get("/api/platform/me", { preHandler: platformAuth }, async (req: any) => {
       lastName: user.lastName,
       username: user.username,
       platformRole: user.platformRole,
+      twoFactor: {
+        enabled: Boolean(user.totpEnabledAt),
+        required: user.platformRole !== "user",
+        sessionVerified: req.platformIdentity.mfa,
+        backupCodesRemaining: user.backupCodeHashes.length,
+      },
     },
     organizations: user.organizations.map((membership) => ({
       ...membership.organization,

@@ -16,7 +16,9 @@ import {
   apiBlob,
   login,
   platformLogin,
+  completePlatformTwoFactor,
   request,
+  setPlatformToken,
 } from "./api";
 type Listing = {
   id: string;
@@ -51,10 +53,11 @@ export function App() {
   const publicPath = ["/pricing", "/docs", "/terms", "/privacy", "/prohibited", "/support"].includes(pathName) ||
     (pathName === "/" && !platformMode && !new URLSearchParams(window.location.search).get("community") && !window.Telegram?.WebApp.initData);
   const [state, setState] = useState<
-    "loading" | "ready" | "outside" | "denied" | "select" | "error"
+    "loading" | "ready" | "outside" | "denied" | "select" | "twoFactor" | "error"
   >(activateSession(platformMode ? "platform" : "tenant") ? "ready" : "loading");
   const [invite, setInvite] = useState("");
   const [communityChoices, setCommunityChoices] = useState<any[]>([]);
+  const [twoFactorChallenge, setTwoFactorChallenge] = useState("");
   const boot = async () => {
     const init =
       window.Telegram?.WebApp.initData ||
@@ -68,7 +71,14 @@ export function App() {
       return;
     }
     try {
-      if (platformMode) await platformLogin(init);
+      if (platformMode) {
+        const result = await platformLogin(init);
+        if (result.requiresTwoFactor) {
+          setTwoFactorChallenge(result.challengeToken);
+          setState("twoFactor");
+          return;
+        }
+      }
       else
         await login(
           init,
@@ -136,6 +146,8 @@ export function App() {
         }
       />
     );
+  if (state === "twoFactor")
+    return <TwoFactorLogin challengeToken={twoFactorChallenge} onComplete={() => setState("ready")} onRestart={() => { setState("loading"); void boot(); }} />;
   if (state === "error")
     return (
       <Message
@@ -172,6 +184,34 @@ export function App() {
       </nav>
     </Shell>
   );
+}
+
+function TwoFactorLogin({ challengeToken, onComplete, onRestart }: { challengeToken: string; onComplete: () => void; onRestart: () => void }) {
+  const [code, setCode] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  return <main className="two-factor-page"><form onSubmit={async (event) => { event.preventDefault(); setBusy(true); setError(""); try { await completePlatformTwoFactor(challengeToken, code); onComplete(); } catch (e: any) { setError(e.message); } finally { setBusy(false); } }}><small>ЗАЩИЩЁННЫЙ ВХОД</small><h1>Подтвердите вход</h1><p>Введите шестизначный код приложения-аутентификатора или один резервный код.</p><input autoFocus autoComplete="one-time-code" inputMode="numeric" value={code} onChange={(event) => setCode(event.target.value.trim())} placeholder="000000" minLength={6} maxLength={12} required />{error && <LoadError message={error}/>}<button className="primary" disabled={busy}>{busy ? "Проверяем…" : "Продолжить"}</button><button type="button" onClick={onRestart}>Начать вход заново</button></form></main>;
+}
+
+function PlatformTwoFactorSecurity({ security, onChanged }: { security: any; onChanged: () => Promise<any> }) {
+  const [setup, setSetup] = useState<any>();
+  const [code, setCode] = useState("");
+  const [backupCodes, setBackupCodes] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const regenerate = async () => {
+    const currentCode = window.prompt("Введите текущий шестизначный код приложения-аутентификатора:");
+    if (!currentCode) return;
+    setBusy(true); setError("");
+    try { const result = await request("/platform/security/two-factor/backup-codes", "POST", { code: currentCode }); setBackupCodes(result.backupCodes); }
+    catch (e: any) { setError(e.message); }
+    finally { setBusy(false); }
+  };
+  if (security.enabled && !backupCodes.length)
+    return <section className="two-factor-security ready"><div><small>БЕЗОПАСНОСТЬ</small><h2>Двухфакторная защита включена</h2><p>Сессия подтверждена: {security.sessionVerified ? "да" : "нет"}. Резервных кодов: {security.backupCodesRemaining}.</p></div>{security.sessionVerified && <button disabled={busy} onClick={() => void regenerate()}>{busy ? "Создаём…" : "Заменить резервные коды"}</button>}{error && <LoadError message={error}/>}</section>;
+  const start = async () => { setBusy(true); setError(""); try { setSetup(await request("/platform/security/two-factor/setup", "POST", {})); } catch (e: any) { setError(e.message); } finally { setBusy(false); } };
+  const confirm = async (event: any) => { event.preventDefault(); setBusy(true); setError(""); try { const result = await request("/platform/security/two-factor/confirm", "POST", { code }); setPlatformToken(result.accessToken); setBackupCodes(result.backupCodes); setSetup(null); setCode(""); await onChanged(); } catch (e: any) { setError(e.message); } finally { setBusy(false); } };
+  return <section className="two-factor-security"><small>{security.required ? "ТРЕБУЕТСЯ ДЛЯ ДОСТУПА" : "РЕКОМЕНДУЕТСЯ"}</small><h2>{backupCodes.length ? "Сохраните резервные коды" : "Защитите кабинет вторым фактором"}</h2>{backupCodes.length ? <><p>Каждый код работает только один раз. Сохраните их вне Telegram — после закрытия они больше не показываются.</p><pre>{backupCodes.join("\n")}</pre><button className="primary" onClick={() => { setBackupCodes([]); void onChanged(); }}>Я надёжно сохранил коды</button></> : !setup ? <><p>Для служебных ролей вход без TOTP запрещён. Подойдёт Google Authenticator, 1Password, Microsoft Authenticator или аналог.</p><button className="primary" disabled={busy} onClick={() => void start()}>{busy ? "Создаём…" : "Настроить 2FA"}</button></> : <form onSubmit={confirm}><p>Откройте ссылку в приложении-аутентификаторе или добавьте ключ вручную.</p><a className="primary" href={setup.otpauthUrl}>Открыть в аутентификаторе</a><label>Ключ для ручного ввода<input readOnly value={setup.secret} onFocus={(event) => event.currentTarget.select()} /></label><label>Код из приложения<input autoFocus inputMode="numeric" autoComplete="one-time-code" value={code} onChange={(event) => setCode(event.target.value)} placeholder="000000" minLength={6} maxLength={6} required /></label><button className="primary" disabled={busy}>{busy ? "Проверяем…" : "Подтвердить и включить"}</button></form>}{error && <LoadError message={error}/>}</section>;
 }
 
 function PlatformWorkspace() {
@@ -248,6 +288,7 @@ function PlatformWorkspace() {
           </p>
         </div>
       </section>
+      <PlatformTwoFactorSecurity security={data.user.twoFactor} onChanged={load} />
       {error && <LoadError message={error} />}
       <div className="organization-list">
         {data.organizations.map((organization: any) => (
@@ -330,11 +371,11 @@ function PlatformWorkspace() {
           </button>
         </form>
       )}
-      {["platform_admin", "platform_owner"].includes(
+      {data.user.twoFactor.sessionVerified && ["platform_admin", "platform_owner"].includes(
         data.user.platformRole,
       ) && <PlatformOwnerPanel canEdit={data.user.platformRole === "platform_owner"} />}
-      {data.user.platformRole === "support" && <PlatformSupportPanel />}
-      {data.user.platformRole === "finance" && <PlatformFinancePanel />}
+      {data.user.twoFactor.sessionVerified && data.user.platformRole === "support" && <PlatformSupportPanel />}
+      {data.user.twoFactor.sessionVerified && data.user.platformRole === "finance" && <PlatformFinancePanel />}
     </main>
   );
 }

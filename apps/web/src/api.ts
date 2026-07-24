@@ -56,8 +56,21 @@ export async function platformLogin(initData: string) {
     method: "POST",
     body: JSON.stringify({ initData }),
   });
-  token = result.accessToken;
-  sessionStorage.setItem("platformToken", token!);
+  if (result.accessToken) setPlatformToken(result.accessToken);
+  return result;
+}
+
+export function setPlatformToken(value: string) {
+  token = value;
+  sessionStorage.setItem("platformToken", value);
+}
+
+export async function completePlatformTwoFactor(challengeToken: string, code: string) {
+  const result = await api<any>("/auth/platform/two-factor", {
+    method: "POST",
+    body: JSON.stringify({ challengeToken, code }),
+  });
+  setPlatformToken(result.accessToken);
   return result;
 }
 

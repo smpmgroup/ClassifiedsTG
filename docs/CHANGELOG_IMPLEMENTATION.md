@@ -1,5 +1,13 @@
 # Implementation changelog
 
+## 2026-07-24 — mandatory platform staff 2FA and dependency hardening
+
+- Added encrypted TOTP enrollment and challenge-based login for support, finance, platform administrator and platform owner roles.
+- Added ten one-time recovery codes, atomic consumption, TOTP-step replay prevention, short-lived challenge replay prevention and immutable security audit events.
+- Privileged APIs now fail closed until the current session has completed MFA; the owner workspace includes guided authenticator setup and one-time recovery-code handoff.
+- Extended the self-cleaning production beta audit with setup, verified access, TOTP replay rejection, backup login and challenge replay rejection.
+- Updated vulnerable routing, URL parsing and Sharp/libvips dependencies; production dependency audit returns zero known vulnerabilities.
+
 ## 2026-07-20 — Tenant-protected media delivery
 
 - Removed public static access to the upload volume and denied legacy `/uploads/*` paths.

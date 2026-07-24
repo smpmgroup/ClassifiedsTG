@@ -1439,6 +1439,63 @@ nav .active {
 .platform-admin h2 {
   margin: 5px 0 16px;
 }
+
+.two-factor-page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: radial-gradient(circle at top, #173c35, #101a1d 62%);
+}
+.two-factor-page form, .two-factor-security {
+  width: min(100%, 560px);
+  padding: 28px;
+  border: 1px solid rgba(91, 214, 190, .28);
+  border-radius: 22px;
+  background: #172428;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, .32);
+}
+.two-factor-page form { display: grid; gap: 14px; }
+.two-factor-page h1, .two-factor-security h2 { margin: 0; }
+.two-factor-page p, .two-factor-security p { margin: 0; color: #b7c7c8; line-height: 1.5; }
+.two-factor-page input, .two-factor-security input {
+  width: 100%;
+  padding: 14px 16px;
+  border: 1px solid #476064;
+  border-radius: 12px;
+  background: #0f191c;
+  color: #f4ffff;
+  font: inherit;
+  font-size: 18px;
+  caret-color: #45d2ba;
+}
+.two-factor-security {
+  width: auto;
+  margin: 18px 0;
+  display: grid;
+  gap: 14px;
+}
+.two-factor-security.ready { border-color: rgba(76, 200, 137, .4); background: #142a24; }
+.two-factor-security form { display: grid; gap: 14px; }
+.two-factor-security label { display: grid; gap: 7px; color: #d9e7e7; }
+.two-factor-security a.primary { display: inline-flex; justify-content: center; text-decoration: none; }
+.two-factor-security pre {
+  margin: 0;
+  padding: 18px;
+  border-radius: 14px;
+  background: #0b1518;
+  color: #eafff9;
+  font-size: 16px;
+  line-height: 1.65;
+  letter-spacing: .08em;
+  column-count: 2;
+  user-select: all;
+}
+@media (max-width: 520px) {
+  .two-factor-page { padding: 12px; }
+  .two-factor-page form, .two-factor-security { padding: 20px; }
+  .two-factor-security pre { column-count: 1; }
+}
 .platform-metrics {
   display: grid;
   grid-template-columns: 1fr 1fr;

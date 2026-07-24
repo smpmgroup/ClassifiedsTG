@@ -161,6 +161,10 @@ model User {
   photoUrl String?
   status UserStatus @default(active)
   platformRole PlatformRole @default(user)
+  totpSecretEncrypted String?
+  totpEnabledAt DateTime?
+  totpLastUsedStep BigInt?
+  backupCodeHashes String[] @default([])
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   lastSeenAt DateTime @default(now())

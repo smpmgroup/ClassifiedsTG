@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { prisma } from "@board/core";
+import { totpAt } from "./two-factor.js";
 
 const baseUrl = process.env.BETA_AUDIT_BASE_URL || "http://127.0.0.1:3001";
 const secret = process.env.ACCESS_TOKEN_SECRET || "";
@@ -64,13 +65,14 @@ async function cleanup() {
 
 try {
   const telegramBase = BigInt(`8${String(Date.now()).slice(-12)}`);
-  const [shared, moderator, seller, ownerB] = await Promise.all([
+  const [shared, moderator, seller, ownerB, platformStaff] = await Promise.all([
     prisma.user.create({ data: { telegramUserId: telegramBase, firstName: `Beta shared ${stamp}` } }),
     prisma.user.create({ data: { telegramUserId: telegramBase + 1n, firstName: `Beta moderator ${stamp}` } }),
     prisma.user.create({ data: { telegramUserId: telegramBase + 2n, firstName: `Beta seller ${stamp}` } }),
     prisma.user.create({ data: { telegramUserId: telegramBase + 3n, firstName: `Beta owner B ${stamp}` } }),
+    prisma.user.create({ data: { telegramUserId: telegramBase + 4n, firstName: `Beta platform staff ${stamp}`, platformRole: "platform_admin" } }),
   ]);
-  userIds.push(shared.id, moderator.id, seller.id, ownerB.id);
+  userIds.push(shared.id, moderator.id, seller.id, ownerB.id, platformStaff.id);
   const [orgA, orgB] = await Promise.all([
     prisma.organization.create({ data: { name: `Beta A ${stamp}`, slug: `beta-a-${stamp}`, members: { create: { userId: moderator.id, role: "owner" } } } }),
     prisma.organization.create({ data: { name: `Beta B ${stamp}`, slug: `beta-b-${stamp}`, members: { create: { userId: ownerB.id, role: "owner" } } } }),
@@ -122,6 +124,7 @@ try {
   const memberB = token({ userId: shared.id, communityId: communityB.id, role: "member", telegramUserId: String(shared.telegramUserId) });
   const moderatorA = token({ userId: moderator.id, communityId: communityA.id, role: "owner", telegramUserId: String(moderator.telegramUserId) });
   const platformA = token({ scope: "platform", userId: moderator.id, telegramUserId: String(moderator.telegramUserId), platformRole: "user" });
+  const platformStaffUnverified = token({ scope: "platform", userId: platformStaff.id, telegramUserId: String(platformStaff.telegramUserId), platformRole: "platform_admin", mfa: false });
 
   const own = await request("/api/my/listings", memberA);
   expectStatus("tenant A own-listings request", own.status, 200);
@@ -168,6 +171,22 @@ try {
 
   expectStatus("organization finance denied across tenant", (await request(`/api/platform/organizations/${orgB.id}/finance`, platformA)).status, 403);
   expectStatus("ordinary platform user denied owner console", (await request("/api/platform/admin/reliability", platformA)).status, 403);
+
+  expectStatus("privileged platform session requires 2FA setup", (await request("/api/platform/admin/reliability", platformStaffUnverified)).status, 428);
+  const twoFactorSetup = await request("/api/platform/security/two-factor/setup", platformStaffUnverified, { method: "POST", body: "{}" });
+  expectStatus("privileged user starts encrypted 2FA setup", twoFactorSetup.status, 200);
+  const setupCode = totpAt(twoFactorSetup.body.secret);
+  const twoFactorConfirm = await request("/api/platform/security/two-factor/confirm", platformStaffUnverified, { method: "POST", body: JSON.stringify({ code: setupCode }) });
+  expectStatus("privileged user confirms TOTP", twoFactorConfirm.status, 200);
+  if (!Array.isArray(twoFactorConfirm.body.backupCodes) || twoFactorConfirm.body.backupCodes.length !== 10) throw new Error("2FA backup codes were not issued exactly once");
+  checks.push("2FA issued ten one-time backup codes");
+  expectStatus("MFA-verified platform session reaches owner console", (await request("/api/platform/admin/reliability", twoFactorConfirm.body.accessToken)).status, 200);
+  const challenge = token({ scope: "platform_2fa", userId: platformStaff.id, nonce: `beta-${stamp}` });
+  expectStatus("used TOTP step cannot be replayed", (await request("/api/auth/platform/two-factor", platformStaffUnverified, { method: "POST", body: JSON.stringify({ challengeToken: challenge, code: setupCode }) })).status, 401);
+  const backupChallenge = token({ scope: "platform_2fa", userId: platformStaff.id, nonce: `beta-backup-${stamp}` });
+  const backupLogin = await request("/api/auth/platform/two-factor", platformStaffUnverified, { method: "POST", body: JSON.stringify({ challengeToken: backupChallenge, code: twoFactorConfirm.body.backupCodes[0] }) });
+  expectStatus("backup code completes privileged login", backupLogin.status, 200);
+  expectStatus("2FA challenge cannot be replayed", (await request("/api/auth/platform/two-factor", platformStaffUnverified, { method: "POST", body: JSON.stringify({ challengeToken: backupChallenge, code: twoFactorConfirm.body.backupCodes[0] }) })).status, 401);
 
   await prisma.community.update({ where: { id: communityB.id }, data: { tenantStatus: "suspended" } });
   expectStatus("suspended tenant denied", (await request("/api/me", memberB)).status, 403);
