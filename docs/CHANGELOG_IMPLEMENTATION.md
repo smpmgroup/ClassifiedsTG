@@ -9,6 +9,7 @@
 - Updated vulnerable routing, URL parsing and Sharp/libvips dependencies; production dependency audit returns zero known vulnerabilities.
 - Provisioned and independently verified a dedicated key-only `deploy` account; documented the rescue-console and fresh-session checks required before password/root SSH is disabled.
 - Enabled and verified an `sshd` Fail2ban jail while preserving the temporary root recovery channel; UFW remains limited to ports 22, 80 and 443.
+- Added verified, client-side encrypted Restic replication for S3-compatible storage with retention, optional data sampling, scheduled-alert integration and an off-site restore acceptance procedure.
 
 ## 2026-07-20 — Tenant-protected media delivery
 

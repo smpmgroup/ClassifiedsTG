@@ -14,6 +14,13 @@ Run `scripts/backup.sh /absolute/backup/path`, copy the completed directory to e
 
 Production invokes `scripts/scheduled-ops.sh`: daily backup at 03:15 UTC, retention rotation at 04:45 UTC and an isolated restore drill every Sunday at 05:15 UTC. Failures create a deduplicated critical `SystemAlert` visible in the platform console; a later successful run resolves it. Local retention is 14 days. Never restore over a non-empty production database.
 
+After S3 credentials are provisioned, schedule `scripts/scheduled-ops.sh
+offsite` after the daily local backup. Restic encrypts before upload and keeps
+7 daily, 5 weekly and 12 monthly snapshots by default. The Restic password is a
+separate recovery secret. Quarterly, restore the newest off-site snapshot to a
+temporary directory and run both checksum validation and the isolated database
+restore drill.
+
 ## Incident triage
 
 1. Record time, affected tenant and request ID; do not delete logs or financial rows.

@@ -3,8 +3,8 @@ set -u
 task=${1:-}
 root=${BACKUP_ROOT:-/opt/classifiedstg/backups}
 case "$task" in
-  daily|retention|restore) ;;
-  *) printf '%s\n' 'Usage: scripts/scheduled-ops.sh daily|retention|restore'; exit 2 ;;
+  daily|retention|restore|offsite) ;;
+  *) printf '%s\n' 'Usage: scripts/scheduled-ops.sh daily|retention|restore|offsite'; exit 2 ;;
 esac
 cd /opt/classifiedstg || exit 2
 
@@ -31,6 +31,11 @@ run_task() {
       latest=$(find "$root" -mindepth 1 -maxdepth 1 -type d -name 'daily-*' -printf '%T@ %p\n' | sort -nr | sed -n '1s/^[^ ]* //p')
       [ -n "$latest" ] || { printf '%s\n' 'No daily backup available for restore drill'; return 1; }
       ./scripts/restore-drill.sh "$latest"
+      ;;
+    offsite)
+      latest=$(find "$root" -mindepth 1 -maxdepth 1 -type d -name 'daily-*' -printf '%T@ %p\n' | sort -nr | sed -n '1s/^[^ ]* //p')
+      [ -n "$latest" ] || { printf '%s\n' 'No daily backup available for off-site replication'; return 1; }
+      ./scripts/offsite-backup.sh "$latest"
       ;;
   esac
 }
