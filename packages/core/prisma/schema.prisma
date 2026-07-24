@@ -191,6 +191,21 @@ model User {
   payoutReviews PayoutRequest[] @relation("PayoutReviewer")
   legalAcceptances LegalAcceptance[]
   abuseEvents AbuseEvent[]
+  webLoginIntents WebLoginIntent[]
+}
+
+model WebLoginIntent {
+  id String @id @default(cuid())
+  tokenHash String @unique
+  status String @default("pending")
+  userId String?
+  expiresAt DateTime
+  claimedAt DateTime?
+  consumedAt DateTime?
+  createdAt DateTime @default(now())
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([status, expiresAt])
+  @@index([userId, createdAt])
 }
 
 model Organization {

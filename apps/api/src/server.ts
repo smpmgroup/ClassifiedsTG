@@ -57,6 +57,9 @@ const app = Fastify({
       "req.headers.authorization",
       "req.headers.cookie",
       "body.initData",
+      "body.token",
+      "body.challengeToken",
+      "body.code",
     ],
   },
   bodyLimit: 1024 * 1024,
@@ -811,6 +814,92 @@ const platformSessionPayload = (user: { id: string; telegramUserId: bigint; plat
   platformRole: user.platformRole,
   mfa,
 });
+
+app.post(
+  "/api/auth/platform/web/start",
+  { config: { rateLimit: { max: 5, timeWindow: "10 minutes" } } },
+  async () => {
+    const rawToken = crypto.randomBytes(32).toString("base64url");
+    const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+    const expiresAt = new Date(Date.now() + 10 * 60_000);
+    await prisma.$transaction([
+      prisma.webLoginIntent.deleteMany({
+        where: { expiresAt: { lt: new Date(Date.now() - 60 * 60_000) } },
+      }),
+      prisma.webLoginIntent.create({ data: { tokenHash, expiresAt } }),
+    ]);
+    return {
+      token: rawToken,
+      expiresAt,
+      botUrl: `https://t.me/${config.TELEGRAM_BOT_USERNAME}?start=login_${rawToken}`,
+    };
+  },
+);
+
+app.post(
+  "/api/auth/platform/web/status",
+  { config: { rateLimit: { max: 40, timeWindow: "10 minutes" } } },
+  async (req: any, reply) => {
+    const rawToken = String(req.body?.token || "");
+    if (!/^[A-Za-z0-9_-]{43}$/.test(rawToken))
+      throw new DomainError("WEB_LOGIN_INVALID", "Некорректный запрос входа", 400);
+    const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+    const cacheKey = `web-login-result:${tokenHash}`;
+    const cached = await redis.get(cacheKey);
+    if (cached) return JSON.parse(cached);
+    const intent = await prisma.webLoginIntent.findUnique({ where: { tokenHash } });
+    if (!intent)
+      throw new DomainError("WEB_LOGIN_INVALID", "Запрос входа не найден", 404);
+    if (intent.expiresAt <= new Date())
+      throw new DomainError("WEB_LOGIN_EXPIRED", "Время подтверждения истекло", 410);
+    if (intent.status === "pending") return { status: "pending", expiresAt: intent.expiresAt };
+    if (intent.status !== "claimed" || !intent.userId)
+      throw new DomainError("WEB_LOGIN_CONSUMED", "Запрос входа уже использован", 409);
+    const claimed = await prisma.webLoginIntent.updateMany({
+      where: { id: intent.id, status: "claimed", expiresAt: { gt: new Date() } },
+      data: { status: "consumed", consumedAt: new Date() },
+    });
+    if (claimed.count !== 1) {
+      const raced = await redis.get(cacheKey);
+      if (raced) return JSON.parse(raced);
+      throw new DomainError("WEB_LOGIN_CONSUMED", "Запрос входа уже использован", 409);
+    }
+    const user = await prisma.user.findUniqueOrThrow({ where: { id: intent.userId } });
+    if (user.status !== "active")
+      throw new DomainError("ACCESS_DENIED", "Доступ ограничен", 403);
+    let result: Record<string, unknown>;
+    if (user.platformRole !== "user" && user.totpEnabledAt) {
+      result = {
+        status: "two_factor",
+        requiresTwoFactor: true,
+        challengeToken: await reply.jwtSign(
+          { scope: "platform_2fa", userId: user.id, nonce: crypto.randomUUID() },
+          { expiresIn: 300 },
+        ),
+        expiresIn: 300,
+      };
+    } else {
+      result = {
+        status: "complete",
+        accessToken: await reply.jwtSign(platformSessionPayload(user, false), {
+          expiresIn: config.ACCESS_TOKEN_TTL_SECONDS,
+        }),
+        expiresIn: config.ACCESS_TOKEN_TTL_SECONDS,
+      };
+    }
+    await Promise.all([
+      redis.set(cacheKey, JSON.stringify(result), "EX", 90),
+      prisma.auditEvent.create({ data: {
+        actorId: user.id,
+        scope: "platform_security",
+        action: "web_telegram_login_completed",
+        targetType: "WebLoginIntent",
+        targetId: intent.id,
+      }}),
+    ]);
+    return result;
+  },
+);
 
 async function consumeSecondFactor(user: {
   id: string;

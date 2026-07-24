@@ -255,6 +255,52 @@ bot.start(async (ctx) => {
     await claimCommunityConnection(ctx, ctx.startPayload.slice(8));
     return;
   }
+  if (ctx.startPayload?.startsWith("login_")) {
+    if (ctx.chat.type !== "private")
+      return ctx.reply("Подтвердить вход можно только в личном чате с ботом.");
+    const rawToken = ctx.startPayload.slice(6);
+    if (!/^[A-Za-z0-9_-]{43}$/.test(rawToken))
+      return ctx.reply("Ссылка входа повреждена. Начните вход заново на сайте.");
+    const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+    const intent = await prisma.webLoginIntent.findUnique({ where: { tokenHash } });
+    if (!intent || intent.status !== "pending" || intent.expiresAt <= new Date())
+      return ctx.reply("Ссылка входа уже использована или истекла. Начните вход заново на сайте.");
+    const user = await prisma.user.upsert({
+      where: { telegramUserId: BigInt(ctx.from.id) },
+      update: {
+        username: ctx.from.username,
+        firstName: ctx.from.first_name,
+        lastName: ctx.from.last_name,
+        languageCode: ctx.from.language_code,
+        botStartedAt: new Date(),
+        lastSeenAt: new Date(),
+      },
+      create: {
+        telegramUserId: BigInt(ctx.from.id),
+        username: ctx.from.username,
+        firstName: ctx.from.first_name,
+        lastName: ctx.from.last_name,
+        languageCode: ctx.from.language_code,
+        botStartedAt: new Date(),
+      },
+    });
+    const claimed = await prisma.webLoginIntent.updateMany({
+      where: { id: intent.id, status: "pending", expiresAt: { gt: new Date() } },
+      data: { status: "claimed", userId: user.id, claimedAt: new Date() },
+    });
+    if (claimed.count !== 1)
+      return ctx.reply("Ссылка входа уже подтверждена. Вернитесь на сайт.");
+    await prisma.auditEvent.create({ data: {
+      actorId: user.id,
+      scope: "platform_security",
+      action: "web_telegram_login_confirmed",
+      targetType: "WebLoginIntent",
+      targetId: intent.id,
+    }});
+    return ctx.reply(
+      "✅ Вход подтверждён. Вернитесь на страницу сайта — кабинет откроется автоматически.",
+    );
+  }
   if (ctx.startPayload === "platform") {
     if (ctx.chat.type !== "private")
       return ctx.reply("Откройте личный чат с ботом, чтобы войти в кабинет.");

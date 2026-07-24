@@ -65,6 +65,11 @@ export function setPlatformToken(value: string) {
   sessionStorage.setItem("platformToken", value);
 }
 
+export function clearPlatformSession() {
+  token = null;
+  sessionStorage.removeItem("platformToken");
+}
+
 export async function completePlatformTwoFactor(challengeToken: string, code: string) {
   const result = await api<any>("/auth/platform/two-factor", {
     method: "POST",
@@ -72,6 +77,17 @@ export async function completePlatformTwoFactor(challengeToken: string, code: st
   });
   setPlatformToken(result.accessToken);
   return result;
+}
+
+export async function startPlatformWebLogin() {
+  return api<any>("/auth/platform/web/start", { method: "POST", body: "{}" });
+}
+
+export async function pollPlatformWebLogin(loginToken: string) {
+  return api<any>("/auth/platform/web/status", {
+    method: "POST",
+    body: JSON.stringify({ token: loginToken }),
+  });
 }
 
 export const request = (path: string, method = "GET", body?: unknown) =>

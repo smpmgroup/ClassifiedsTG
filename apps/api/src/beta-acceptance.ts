@@ -12,6 +12,7 @@ const stamp = `${Date.now()}-${crypto.randomBytes(3).toString("hex")}`;
 const communityIds: string[] = [];
 const organizationIds: string[] = [];
 const userIds: string[] = [];
+const webLoginIntentIds: string[] = [];
 const uploadKeys: string[] = [];
 const checks: string[] = [];
 
@@ -60,6 +61,7 @@ async function cleanup() {
     await prisma.organizationMember.deleteMany({ where: { organizationId: { in: organizationIds } } });
     await prisma.organization.deleteMany({ where: { id: { in: organizationIds } } });
   }
+  if (webLoginIntentIds.length) await prisma.webLoginIntent.deleteMany({ where: { id: { in: webLoginIntentIds } } });
   if (userIds.length) await prisma.user.deleteMany({ where: { id: { in: userIds } } });
 }
 
@@ -126,6 +128,34 @@ try {
   const platformA = token({ scope: "platform", userId: moderator.id, telegramUserId: String(moderator.telegramUserId), platformRole: "user" });
   const platformStaffUnverified = token({ scope: "platform", userId: platformStaff.id, telegramUserId: String(platformStaff.telegramUserId), platformRole: "platform_admin", mfa: false });
 
+  const webStart = await request("/api/auth/platform/web/start", "", { method: "POST", body: "{}" });
+  expectStatus("website starts Telegram registration", webStart.status, 200);
+  if (!/^[A-Za-z0-9_-]{43}$/.test(webStart.body.token) || !String(webStart.body.botUrl).includes(`?start=login_${webStart.body.token}`))
+    throw new Error("web login did not return a valid bot confirmation link");
+  checks.push("website login returns a ten-minute Telegram deep link");
+  const webTokenHash = crypto.createHash("sha256").update(webStart.body.token).digest("hex");
+  const webIntent = await prisma.webLoginIntent.findUniqueOrThrow({ where: { tokenHash: webTokenHash } });
+  webLoginIntentIds.push(webIntent.id);
+  const claimedWebLogin = await prisma.webLoginIntent.updateMany({
+    where: { id: webIntent.id, status: "pending", expiresAt: { gt: new Date() } },
+    data: { status: "claimed", userId: moderator.id, claimedAt: new Date() },
+  });
+  if (claimedWebLogin.count !== 1) throw new Error("web login could not be claimed");
+  const duplicateClaim = await prisma.webLoginIntent.updateMany({
+    where: { id: webIntent.id, status: "pending", expiresAt: { gt: new Date() } },
+    data: { status: "claimed", userId: ownerB.id, claimedAt: new Date() },
+  });
+  if (duplicateClaim.count !== 0) throw new Error("web login could be claimed by a second user");
+  checks.push("Telegram confirmation is atomically single-claim");
+  const webComplete = await request("/api/auth/platform/web/status", "", { method: "POST", body: JSON.stringify({ token: webStart.body.token }) });
+  expectStatus("website exchanges Telegram confirmation", webComplete.status, 200);
+  if (webComplete.body.status !== "complete" || !webComplete.body.accessToken) throw new Error("website login did not issue a platform session");
+  expectStatus("website session opens owner dashboard", (await request("/api/platform/me", webComplete.body.accessToken)).status, 200);
+  const webRetry = await request("/api/auth/platform/web/status", "", { method: "POST", body: JSON.stringify({ token: webStart.body.token }) });
+  expectStatus("website exchange tolerates response retry", webRetry.status, 200);
+  if (webRetry.body.accessToken !== webComplete.body.accessToken) throw new Error("web login retry was not idempotent");
+  checks.push("website login retry returns the same short-lived session");
+
   const own = await request("/api/my/listings", memberA);
   expectStatus("tenant A own-listings request", own.status, 200);
   if (!own.body.some((item: any) => item.id === draftA.id) || own.body.some((item: any) => item.id === draftB.id)) throw new Error("own listings crossed tenant boundary");
@@ -187,6 +217,23 @@ try {
   checks.push("2FA issued ten one-time backup codes");
   expectStatus("MFA-verified platform session reaches owner console", (await request("/api/platform/admin/reliability", twoFactorConfirm.body.accessToken)).status, 200);
   expectStatus("MFA-verified support bypass succeeds", (await request(`/api/platform/support/${supportTicket.id}/messages`, twoFactorConfirm.body.accessToken, { method: "POST", body: JSON.stringify({ message: "verified internal note", internal: true }) })).status, 200);
+  const staffWebStart = await request("/api/auth/platform/web/start", "", { method: "POST", body: "{}" });
+  expectStatus("privileged website login starts", staffWebStart.status, 200);
+  const staffWebIntent = await prisma.webLoginIntent.findUniqueOrThrow({
+    where: { tokenHash: crypto.createHash("sha256").update(staffWebStart.body.token).digest("hex") },
+  });
+  webLoginIntentIds.push(staffWebIntent.id);
+  await prisma.webLoginIntent.update({ where: { id: staffWebIntent.id }, data: {
+    status: "claimed", userId: platformStaff.id, claimedAt: new Date(),
+  }});
+  const staffWebStatus = await request("/api/auth/platform/web/status", "", { method: "POST", body: JSON.stringify({ token: staffWebStart.body.token }) });
+  expectStatus("privileged website login requests second factor", staffWebStatus.status, 200);
+  if (!staffWebStatus.body.requiresTwoFactor || !staffWebStatus.body.challengeToken) throw new Error("privileged web login bypassed 2FA");
+  const staffWebMfa = await request("/api/auth/platform/two-factor", "", { method: "POST", body: JSON.stringify({
+    challengeToken: staffWebStatus.body.challengeToken,
+    code: twoFactorConfirm.body.backupCodes[1],
+  }) });
+  expectStatus("privileged website login completes with recovery code", staffWebMfa.status, 200);
   const challenge = token({ scope: "platform_2fa", userId: platformStaff.id, nonce: `beta-${stamp}` });
   expectStatus("used TOTP step cannot be replayed", (await request("/api/auth/platform/two-factor", platformStaffUnverified, { method: "POST", body: JSON.stringify({ challengeToken: challenge, code: setupCode }) })).status, 401);
   const backupChallenge = token({ scope: "platform_2fa", userId: platformStaff.id, nonce: `beta-backup-${stamp}` });

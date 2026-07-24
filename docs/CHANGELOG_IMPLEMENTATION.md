@@ -1,5 +1,13 @@
 # Implementation changelog
 
+## 2026-07-24 — website registration and owner onboarding
+
+- Added a dedicated `/login` website flow: the browser creates a ten-minute one-time request, Telegram confirms identity in the platform bot, and the original page opens `/dashboard` automatically.
+- Login tokens are random, hashed at rest, atomically single-claim/single-consume, retry-safe for transient response loss, rate-limited and redacted from logs.
+- Privileged website sessions continue through mandatory TOTP before the dashboard opens.
+- Reworked the landing and detailed setup guide around the real SaaS journey: registration, organization, shared-bot installation, permission check, community policy, embedded board, subscription and payouts.
+- Kept the platform-owned shared bot as the default architecture; owners never paste bot tokens into the service, preserving centralized Stars reconciliation and platform commission.
+
 ## 2026-07-24 — mandatory platform staff 2FA and dependency hardening
 
 - Added encrypted TOTP enrollment and challenge-based login for support, finance, platform administrator and platform owner roles.

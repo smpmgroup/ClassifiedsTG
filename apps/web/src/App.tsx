@@ -17,6 +17,7 @@ import {
   login,
   platformLogin,
   completePlatformTwoFactor,
+  clearPlatformSession,
   request,
   setPlatformToken,
 } from "./api";
@@ -49,8 +50,9 @@ export function App() {
   const { t } = useTranslation();
   const pathName = window.location.pathname.replace(/\/$/, "") || "/";
   const platformMode =
+    pathName === "/dashboard" ||
     new URLSearchParams(window.location.search).get("mode") === "platform";
-  const publicPath = ["/pricing", "/docs", "/terms", "/privacy", "/prohibited", "/support"].includes(pathName) ||
+  const publicPath = ["/login", "/pricing", "/docs", "/terms", "/privacy", "/prohibited", "/support"].includes(pathName) ||
     (pathName === "/" && !platformMode && !new URLSearchParams(window.location.search).get("community") && !window.Telegram?.WebApp.initData);
   const [state, setState] = useState<
     "loading" | "ready" | "outside" | "denied" | "select" | "twoFactor" | "error"
@@ -63,6 +65,10 @@ export function App() {
       window.Telegram?.WebApp.initData ||
       import.meta.env.VITE_TELEGRAM_INIT_DATA;
     if (!init && import.meta.env.PROD) {
+      if (platformMode) {
+        window.location.replace("/login");
+        return;
+      }
       setState("outside");
       return;
     }
@@ -265,6 +271,10 @@ function PlatformWorkspace() {
     return <LegalAcceptance documents={missingLegal} onAccepted={load} />;
   return (
     <main className="platform-workspace">
+      <nav className="dashboard-nav">
+        <a href="/"><span>CB</span><b>Community Board</b></a>
+        <div><a href="/docs">Инструкция</a><a href="/support">Поддержка</a><button onClick={() => { clearPlatformSession(); window.location.assign("/login"); }}>Выйти</button></div>
+      </nav>
       <header className="platform-header">
         <div>
           <small>COMMUNITY BOARD SAAS</small>
