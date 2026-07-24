@@ -4,9 +4,9 @@
 
 - Production origin: `https://93-93-116-147.nip.io`; HTTP redirects to HTTPS, HSTS and a Telegram-compatible CSP are active.
 - Public port `8080` is bound to loopback and is unreachable from outside the VPS.
-- PostgreSQL contains 16 completed migrations, one current real community and three current real users.
+- PostgreSQL contains 17 completed migrations, one current real community and three current real users.
 - Bot identity is `@ITTarragonaadsbot`, it can join groups, and all eight Compose services are running; backend, frontend, Nginx, PostgreSQL, Redis and worker health checks are green.
-- The self-cleaning closed-beta runner passed 27 API checks with two temporary tenants and a user belonging to both. It verified listing/favourite/moderation isolation, cross-tenant mutation denial, role boundaries, finance isolation, suspension, tenant-local enforcement and protected media delivery. Cleanup returned the database to one community and three users.
+- The self-cleaning closed-beta runner passed 35 API checks with two temporary tenants and a user belonging to both. It verified listing/favourite/moderation isolation, cross-tenant mutation denial, role boundaries, finance isolation, suspension, tenant-local enforcement, protected media delivery and platform-staff MFA. Cleanup returned the database to one community and three users.
 - Root, API and worker builds passed; 17 unit tests and the GitHub Actions workflow passed for commits `d8d7487` and `fb00987`.
 - Load smoke passed twice with 300 requests and concurrency 30: public landing p95 552 ms, health p95 822 ms, zero failed requests.
 - A new daily backup was checksummed and restored into an isolated PostgreSQL 17 container: 16 migrations, one community and three users. Scheduled backup, retention and weekly restore tasks are installed; a simulated failure opened a critical alert and a successful restore resolved it.
@@ -20,6 +20,7 @@
 4. The restore drill could mistake PostgreSQL's temporary initialization server for final readiness. It now requires two consecutive readiness checks.
 5. Scheduled backup/restore failures previously existed only in a log. They now create deduplicated critical platform alerts and resolve them after recovery.
 6. Local listing images were exposed as durable public `/uploads/*` URLs. API responses and moderator cards now receive one-hour signed media URLs, sensitive storage metadata is removed from API payloads, forged tokens are rejected and the legacy public route returns 404.
+7. Privileged platform sessions previously relied on Telegram login alone. Support, finance, platform administrator and platform owner APIs now require a TOTP-verified session. Secrets are encrypted with an independent key, recovery codes are one-time keyed hashes, and TOTP steps and login challenges reject replay.
 
 ## Gates that are intentionally not claimed complete
 
@@ -29,4 +30,5 @@
 - The Telegram bot token was shared during setup and must be rotated in BotFather before inviting external beta users. The replacement must be updated on the VPS without committing it.
 - Backups are verified but still stored on the same VPS. Encrypted off-host replication needs an S3-compatible bucket or another owner-approved destination.
 - SSH still permits root password authentication. A deploy account/key and recovery procedure should be confirmed before password login is disabled.
+- The current platform owner must complete the guided authenticator enrollment and store the one-time recovery codes before the 2FA launch gate is operationally accepted.
 - The final product domain and BotFather Web App/Login domain remain deliberately deferred until the final launch stage.
