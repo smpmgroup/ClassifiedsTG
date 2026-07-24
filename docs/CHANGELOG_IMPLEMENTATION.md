@@ -7,6 +7,8 @@
 - Privileged APIs now fail closed until the current session has completed MFA; the owner workspace includes guided authenticator setup and one-time recovery-code handoff.
 - Extended the self-cleaning production beta audit with setup, verified access, TOTP replay rejection, backup login and challenge replay rejection.
 - Updated vulnerable routing, URL parsing and Sharp/libvips dependencies; production dependency audit returns zero known vulnerabilities.
+- Provisioned and independently verified a dedicated key-only `deploy` account; documented the rescue-console and fresh-session checks required before password/root SSH is disabled.
+- Enabled and verified an `sshd` Fail2ban jail while preserving the temporary root recovery channel; UFW remains limited to ports 22, 80 and 443.
 
 ## 2026-07-20 — Tenant-protected media delivery
 
