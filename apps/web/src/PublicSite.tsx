@@ -69,7 +69,8 @@ function Docs({ data }: { data: SiteData }) {
 }
 
 function WebLogin({ platformOwner = false }: { platformOwner?: boolean }) {
-  const hashToken = new URLSearchParams(window.location.hash.replace(/^#/, "")).get("token");
+  const urlToken = new URLSearchParams(window.location.search).get("token") ||
+    new URLSearchParams(window.location.hash.replace(/^#/, "")).get("token");
   const savedIntent = (() => {
     try {
       return JSON.parse(localStorage.getItem("platformWebLoginIntent") || "null");
@@ -77,7 +78,7 @@ function WebLogin({ platformOwner = false }: { platformOwner?: boolean }) {
       return null;
     }
   })();
-  const initialIntent = hashToken ? { ...savedIntent, token: hashToken } : savedIntent;
+  const initialIntent = urlToken ? { ...savedIntent, token: urlToken } : savedIntent;
   const nextPath =
     platformOwner || initialIntent?.nextPath === "/platform-owner"
       ? "/platform-owner"
@@ -88,6 +89,10 @@ function WebLogin({ platformOwner = false }: { platformOwner?: boolean }) {
   const [code, setCode] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (!urlToken) return;
+    window.history.replaceState({}, "", platformOwner ? "/platform-login" : "/login");
+  }, []);
   useEffect(() => {
     if (!intent || state !== "waiting") return;
     let active = true;
@@ -102,7 +107,8 @@ function WebLogin({ platformOwner = false }: { platformOwner?: boolean }) {
         }
         setPlatformToken(result.accessToken);
         localStorage.removeItem("platformWebLoginIntent");
-        if (window.location.hash) window.history.replaceState({}, "", "/login");
+        if (window.location.hash || window.location.search)
+          window.history.replaceState({}, "", platformOwner ? "/platform-login" : "/login");
         void track("web_login_complete");
         window.location.assign(nextPath);
       } catch (e: any) {
@@ -156,7 +162,7 @@ export function PublicSite() {
   useEffect(() => { fetch("/api/public/site").then((response) => response.json()).then(setData); if (path === "/") void track("landing_view"); }, [path]);
   const legalType = useMemo(() => path.slice(1), [path]);
   if (!data) return <div className="public-loading">Community Board</div>;
-  if (path === "/platform-login") return <WebLogin platformOwner/>;
+  if (path === "/platform-login") return <div className="public-site service-login"><WebLogin platformOwner/></div>;
   let content = <Landing data={data}/>;
   if (path === "/pricing") content = <Pricing data={data}/>;
   if (path === "/login") content = <WebLogin/>;

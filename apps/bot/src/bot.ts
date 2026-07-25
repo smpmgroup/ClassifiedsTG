@@ -51,7 +51,10 @@ const platformBoard = () =>
   ]);
 const confirmedWebLogin = (rawToken: string, platformOwner = false) => {
   const url = new URL(platformOwner ? "/platform-login" : "/login", appUrl);
-  url.hash = new URLSearchParams({ token: rawToken }).toString();
+  // Telegram clients may discard URL fragments when they hand an external
+  // browser off. The token is one-time, short-lived and removed from the
+  // address bar immediately after the page reads it.
+  url.searchParams.set("token", rawToken);
   return Markup.inlineKeyboard([
     Markup.button.url(platformOwner ? "Продолжить вход" : "Открыть кабинет владельца", url.toString()),
   ]);
