@@ -638,8 +638,8 @@ async function poll() {
             n.type !== "listing_interest" &&
             !(member as any)?.notifyListingUpdates);
         if (disabled) {
-          await prisma.notification.update({
-            where: { id: n.id },
+          await prisma.notification.updateMany({
+            where: { id: n.id, status: "processing" },
             data: {
               status: "sent",
               sentAt: new Date(),
@@ -655,8 +655,8 @@ async function poll() {
           Markup.inlineKeyboard([Markup.button.webApp("Открыть", appUrl)]),
         );
       }
-      await prisma.notification.update({
-        where: { id: n.id },
+      await prisma.notification.updateMany({
+        where: { id: n.id, status: "processing" },
         data: {
           status: "sent",
           sentAt: new Date(),
@@ -664,8 +664,8 @@ async function poll() {
         },
       });
     } catch (e) {
-      await prisma.notification.update({
-        where: { id: n.id },
+      await prisma.notification.updateMany({
+        where: { id: n.id, status: "processing" },
         data: {
           status: "failed",
           attempts: { increment: 1 },
