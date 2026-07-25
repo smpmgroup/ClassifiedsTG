@@ -17,7 +17,7 @@ import {
   login,
   platformLogin,
   completePlatformTwoFactor,
-  clearPlatformSession,
+  logoutPlatformSession,
   request,
   setPlatformToken,
 } from "./api";
@@ -286,7 +286,7 @@ function PlatformWorkspace({ platformAdminOnly = false }: { platformAdminOnly?: 
     <main className="platform-workspace">
       <nav className="dashboard-nav">
         <a href="/"><span>CB</span><b>Community Board</b></a>
-        <div>{platformAdminOnly && <a href="/owner">Кабинет сообщества</a>}<a href="/docs">Инструкция</a><a href="/support">Поддержка</a><button onClick={() => { clearPlatformSession(); window.location.assign(platformAdminOnly ? "/platform-login" : "/login"); }}>Выйти</button></div>
+        <div>{platformAdminOnly && <a href="/owner">Кабинет сообщества</a>}<a href="/docs">Инструкция</a><a href="/support">Поддержка</a><button onClick={() => { void logoutPlatformSession().finally(() => window.location.assign(platformAdminOnly ? "/platform-login" : "/login")); }}>Выйти</button></div>
       </nav>
       <header className="platform-header">
         <div>

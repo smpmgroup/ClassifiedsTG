@@ -53,7 +53,9 @@ const confirmedWebLogin = (rawToken: string, platformOwner = false) => {
   // Keep the one-time token in the path: some Telegram → external-browser
   // handoffs discard both fragments and query parameters.
   const url = new URL(
-    `${platformOwner ? "/platform-login" : "/login"}/${rawToken}`,
+    platformOwner
+      ? `/api/auth/platform/web/complete/${rawToken}`
+      : `/login/${rawToken}`,
     appUrl,
   );
   return Markup.inlineKeyboard([

@@ -193,7 +193,14 @@ declare module "fastify" {
 }
 async function platformAuth(req: any, reply: any) {
   try {
-    const decoded = (await req.jwtVerify()) as PlatformIdentity & {
+    const cookieToken = String(req.headers.cookie || "")
+      .split(";")
+      .map((part: string) => part.trim())
+      .find((part: string) => part.startsWith("platform_session="))
+      ?.slice("platform_session=".length);
+    const decoded = (cookieToken
+      ? app.jwt.verify(decodeURIComponent(cookieToken))
+      : await req.jwtVerify()) as PlatformIdentity & {
       scope?: string;
     };
     if (decoded.scope !== "platform" || !decoded.userId)
@@ -1008,6 +1015,56 @@ app.post(
     return result;
   },
 );
+
+app.get(
+  "/api/auth/platform/web/complete/:token",
+  { config: { rateLimit: { max: 10, timeWindow: "10 minutes" } } },
+  async (req: any, reply) => {
+    const rawToken = String(req.params?.token || "");
+    if (!/^[A-Za-z0-9_-]{43}$/.test(rawToken))
+      return reply.redirect("/platform-login?error=invalid");
+    const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+    const intent = await prisma.webLoginIntent.findUnique({ where: { tokenHash } });
+    if (!intent || intent.expiresAt <= new Date() || !intent.userId)
+      return reply.redirect("/platform-login?error=expired");
+    const user = await prisma.user.findUnique({ where: { id: intent.userId } });
+    if (!user || user.status !== "active" || user.platformRole !== "platform_owner")
+      return reply.redirect("/platform-login?error=denied");
+    if (intent.status === "claimed") {
+      const consumed = await prisma.webLoginIntent.updateMany({
+        where: { id: intent.id, status: "claimed", expiresAt: { gt: new Date() } },
+        data: { status: "consumed", consumedAt: new Date() },
+      });
+      if (consumed.count !== 1)
+        return reply.redirect("/platform-login?error=used");
+    } else if (intent.status !== "consumed") {
+      return reply.redirect("/platform-login?error=used");
+    }
+    const accessToken = await reply.jwtSign(platformSessionPayload(user, false), {
+      expiresIn: config.ACCESS_TOKEN_TTL_SECONDS,
+    });
+    reply.header(
+      "Set-Cookie",
+      `platform_session=${encodeURIComponent(accessToken)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${config.ACCESS_TOKEN_TTL_SECONDS}`,
+    );
+    await prisma.auditEvent.create({ data: {
+      actorId: user.id,
+      scope: "platform_security",
+      action: "web_telegram_cookie_session_created",
+      targetType: "WebLoginIntent",
+      targetId: intent.id,
+    }});
+    return reply.redirect("/platform-owner");
+  },
+);
+
+app.post("/api/auth/platform/logout", async (_req, reply) => {
+  reply.header(
+    "Set-Cookie",
+    "platform_session=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0",
+  );
+  return { ok: true };
+});
 
 async function consumeSecondFactor(user: {
   id: string;

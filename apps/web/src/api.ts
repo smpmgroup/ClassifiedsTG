@@ -70,6 +70,11 @@ export function clearPlatformSession() {
   sessionStorage.removeItem("platformToken");
 }
 
+export async function logoutPlatformSession() {
+  await api<any>("/auth/platform/logout", { method: "POST" });
+  clearPlatformSession();
+}
+
 export async function completePlatformTwoFactor(challengeToken: string, code: string) {
   const result = await api<any>("/auth/platform/two-factor", {
     method: "POST",
