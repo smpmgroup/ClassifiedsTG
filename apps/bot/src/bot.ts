@@ -48,6 +48,13 @@ const platformBoard = () =>
   Markup.inlineKeyboard([
     Markup.button.webApp("Кабинет владельца", platformUrl()),
   ]);
+const confirmedWebLogin = (rawToken: string) => {
+  const url = new URL("/login", appUrl);
+  url.hash = new URLSearchParams({ token: rawToken }).toString();
+  return Markup.inlineKeyboard([
+    Markup.button.webApp("Перейти в панель администратора", url.toString()),
+  ]);
+};
 const publicBoard = (communitySlug: string) =>
   Markup.inlineKeyboard([
     Markup.button.url(
@@ -298,10 +305,8 @@ bot.start(async (ctx) => {
       targetId: intent.id,
     }});
     return ctx.reply(
-      "✅ Вход подтверждён.\n\nВернитесь на исходную страницу сайта — кабинет откроется автоматически. Если страница была закрыта, нажмите кнопку ниже.",
-      Markup.inlineKeyboard([
-        Markup.button.webApp("Перейти в кабинет администратора", platformUrl()),
-      ]),
+      "✅ Вход подтверждён.\n\nНажмите кнопку ниже — откроется ваша панель администратора.",
+      confirmedWebLogin(rawToken),
     );
   }
   if (ctx.startPayload === "platform") {
