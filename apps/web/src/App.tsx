@@ -404,14 +404,14 @@ function PlatformWorkspace({ platformAdminOnly = false }: { platformAdminOnly?: 
           </button>
         </form>
       )}
-      {!platformAdminOnly && data.user.twoFactor.sessionVerified && ["platform_admin", "platform_owner"].includes(data.user.platformRole) && (
+      {!platformAdminOnly && ["platform_admin", "platform_owner"].includes(data.user.platformRole) && (
         <a className="platform-console-link" href="/platform-owner"><b>Перейти в кабинет владельца платформы</b><span>Организации, сообщества, Stars, выплаты и аудит →</span></a>
       )}
-      {platformAdminOnly && data.user.twoFactor.sessionVerified && ["platform_admin", "platform_owner"].includes(
+      {platformAdminOnly && ["platform_admin", "platform_owner"].includes(
         data.user.platformRole,
       ) && <PlatformOwnerPanel canEdit={data.user.platformRole === "platform_owner"} />}
-      {platformAdminOnly && data.user.twoFactor.sessionVerified && data.user.platformRole === "support" && <PlatformSupportPanel />}
-      {platformAdminOnly && data.user.twoFactor.sessionVerified && data.user.platformRole === "finance" && <PlatformFinancePanel />}
+      {platformAdminOnly && data.user.platformRole === "support" && <PlatformSupportPanel />}
+      {platformAdminOnly && data.user.platformRole === "finance" && <PlatformFinancePanel />}
       {platformAdminOnly && !["platform_admin", "platform_owner", "support", "finance"].includes(data.user.platformRole) && <LoadError message="Этот отдельный кабинет доступен только владельцу и сотрудникам платформы." />}
     </main>
   );
