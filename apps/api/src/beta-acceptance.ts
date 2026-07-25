@@ -242,7 +242,10 @@ try {
   expectStatus("signed image delivery", (await request(protectedUrl, memberA)).status, 200);
   const tampered = new URL(protectedUrl, baseUrl);
   const signedValue = tampered.searchParams.get("token") || "";
-  tampered.searchParams.set("token", `${signedValue.slice(0, -1)}${signedValue.endsWith("a") ? "b" : "a"}`);
+  const tokenParts = signedValue.split(".");
+  const signature = tokenParts[2] || "";
+  tokenParts[2] = `${signature.startsWith("a") ? "b" : "a"}${signature.slice(1)}`;
+  tampered.searchParams.set("token", tokenParts.join("."));
   const tamperedResponse = await fetch(tampered);
   expectStatus("tampered image token denied", tamperedResponse.status, 401);
   expectStatus("legacy upload path denied", (await fetch(`${baseUrl}/uploads/${fileA}`)).status, 404);
