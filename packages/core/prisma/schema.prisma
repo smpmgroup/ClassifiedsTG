@@ -124,6 +124,8 @@ model Community {
   prohibitedWords String[] @default([])
   minMonthlyMessagesForFree Int @default(10)
   publicationPriceStars Int @default(50)
+  monetizationMode String @default("hybrid")
+  activityWindowDays Int @default(30)
   allowPaidNonMembers Boolean @default(true)
   abuseProtectionMode String @default("enforce")
   minQualifiedMessageChars Int @default(12)
@@ -142,6 +144,7 @@ model Community {
   actions ModerationAction[]
   notifications Notification[]
   activities MessageActivity[]
+  dailyActivities DailyMessageActivity[]
   payments PublicationPayment[]
   organization Organization? @relation(fields: [organizationId], references: [id])
   auditEvents AuditEvent[]
@@ -180,6 +183,7 @@ model User {
   notifications Notification[]
   views ListingView[]
   activities MessageActivity[]
+  dailyActivities DailyMessageActivity[]
   payments PublicationPayment[]
   organizations OrganizationMember[]
   auditEvents AuditEvent[] @relation("AuditActor")
@@ -222,6 +226,10 @@ model Organization {
   subscriptionPriceId String?
   subscriptionCurrentPeriodEnd DateTime?
   subscriptionCancelAtPeriodEnd Boolean @default(false)
+  starsSubscriptionStatus String @default("none")
+  starsSubscriptionChargeId String? @unique
+  starsSubscriptionExpiresAt DateTime?
+  starsSubscriptionPrice Int @default(500)
   billingUpdatedAt DateTime?
   connectDetailsSubmitted Boolean @default(false)
   connectChargesEnabled Boolean @default(false)
@@ -379,7 +387,8 @@ model PlatformSetting {
   id String @id @default("global")
   platformName String @default("Community Board")
   minimumPublicationStars Int @default(10)
-  defaultCommissionBps Int @default(2500)
+  defaultCommissionBps Int @default(1500)
+  freeBoardSubscriptionStars Int @default(500)
   payoutsEnabled Boolean @default(false)
   starsHoldDays Int @default(21)
   minimumPayoutStars Int @default(1000)
@@ -437,6 +446,8 @@ model CommunityMember {
   notifyListingUpdates Boolean @default(true)
   notifyBuyerInterest Boolean @default(true)
   allowDirectContact Boolean @default(true)
+  freePublicationOverride Boolean @default(false)
+  freePublicationUntil DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   community Community @relation(fields: [communityId], references: [id], onDelete: Cascade)
@@ -529,6 +540,21 @@ model MessageActivity {
   community Community @relation(fields: [communityId], references: [id], onDelete: Cascade)
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   @@unique([communityId, userId, month])
+}
+
+model DailyMessageActivity {
+  id String @id @default(cuid())
+  communityId String
+  userId String
+  day String
+  messageCount Int @default(0)
+  totalMessageCount Int @default(0)
+  rejectedMessageCount Int @default(0)
+  updatedAt DateTime @updatedAt
+  community Community @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([communityId, userId, day])
+  @@index([communityId, userId, day])
 }
 
 model PublicationPayment {

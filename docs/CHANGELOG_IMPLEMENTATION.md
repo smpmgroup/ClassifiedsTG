@@ -1,5 +1,23 @@
 # Implementation changelog
 
+## 2026-07-25 — Stars-only owner monetization
+
+- Split responsibilities explicitly: the website is the owner cabinet for connection,
+  monetization, Stars and payouts; the Telegram administrator panel retains moderation,
+  users, categories, rules and abuse controls.
+- Added owner-selectable `paid_all`, `hybrid` and `free_subscription` publication
+  modes. Hybrid boards support an exact 7/30/90-day qualified-message window and
+  administrator-managed manual free-publication overrides.
+- Fixed the platform share at 15% and the community accrual at 85%; the listing price
+  remains configurable by each owner above the platform minimum.
+- Added a recurring 500-Star/30-day owner subscription and made it a hard prerequisite
+  for a board that is free to every user.
+- Removed Stripe billing surfaces from the customer journey and rewrote landing,
+  pricing and onboarding copy around Telegram Stars.
+- Added daily qualified-activity aggregates, subscription payment validation,
+  production-safe migration checks and acceptance coverage for owner-only pricing,
+  subscription enforcement and manual free access.
+
 ## 2026-07-24 — website registration and owner onboarding
 
 - Added a dedicated `/login` website flow: the browser creates a ten-minute one-time request, Telegram confirms identity in the platform bot, and the original page opens `/dashboard` automatically.

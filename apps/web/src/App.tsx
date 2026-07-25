@@ -40,6 +40,8 @@ type CommunityShowcase = {
   description: string;
   hasAvatar: boolean;
   minMonthlyMessagesForFree: number;
+  activityWindowDays: number;
+  monetizationMode: string;
   publicationPriceStars: number;
   messageCount: number;
   freeForUser: boolean;
@@ -324,7 +326,9 @@ function PlatformWorkspace() {
                 <p className="muted">Группы пока не подключены.</p>
               )}
             </div>
-            <OrganizationBilling organization={organization} />
+            {organization.role === "owner" && (
+              <OwnerMonetization organization={organization} onChanged={load} />
+            )}
             <OrganizationFinance organizationId={organization.id} />
             <OrganizationSupport organization={organization} />
             {organization.role === "owner" && (
@@ -395,6 +399,75 @@ function LegalAcceptance({ documents, onAccepted }: { documents: any[]; onAccept
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   return <main className="legal-acceptance"><section><small>ВАЖНО</small><h1>Условия закрытой beta</h1><p>Перед созданием и управлением сообществом ознакомьтесь с актуальными документами.</p><div>{documents.map((document) => <a key={document.id} href={`/${document.type}`} target="_blank" rel="noreferrer"><span>{document.title}</span><small>Версия {document.version} ↗</small></a>)}</div><label><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} />Я прочитал(а) и принимаю все указанные документы</label>{error && <LoadError message={error}/>}<button className="primary" disabled={!confirmed || busy} onClick={async () => { setBusy(true); setError(""); try { await request("/platform/legal/accept", "POST", { documentIds: documents.map((document) => document.id) }); await onAccepted(); } catch (e: any) { setError(e.message); } finally { setBusy(false); } }}>{busy ? "Сохраняем…" : "Принять и продолжить"}</button></section></main>;
+}
+
+function OwnerMonetization({ organization, onChanged }: { organization: any; onChanged: () => Promise<any> }) {
+  const [drafts, setDrafts] = useState<Record<string, any>>(
+    Object.fromEntries(organization.communities.map((community: any) => [community.id, {
+      monetizationMode: community.monetizationMode || "hybrid",
+      publicationPriceStars: community.publicationPriceStars || 50,
+      minMonthlyMessagesForFree: community.minMonthlyMessagesForFree || 10,
+      activityWindowDays: community.activityWindowDays || 30,
+      allowPaidNonMembers: community.allowPaidNonMembers ?? true,
+    }])),
+  );
+  const [busy, setBusy] = useState("");
+  const [message, setMessage] = useState("");
+  const subscriptionActive =
+    organization.starsSubscriptionStatus === "active" &&
+    organization.starsSubscriptionExpiresAt &&
+    new Date(organization.starsSubscriptionExpiresAt) > new Date();
+  const update = (communityId: string, patch: any) =>
+    setDrafts((current) => ({
+      ...current,
+      [communityId]: { ...current[communityId], ...patch },
+    }));
+  const subscribe = async () => {
+    setBusy("subscription"); setMessage("");
+    try {
+      const result = await request(`/platform/organizations/${organization.id}/stars-subscription-link`, "POST", {});
+      window.location.href = result.invoiceUrl;
+    } catch (e: any) { setMessage(e.message); setBusy(""); }
+  };
+  const save = async (communityId: string) => {
+    setBusy(communityId); setMessage("");
+    try {
+      await request(`/platform/communities/${communityId}/monetization`, "PATCH", drafts[communityId]);
+      setMessage("✓ Модель публикаций сохранена");
+      await onChanged();
+    } catch (e: any) { setMessage(e.message); }
+    finally { setBusy(""); }
+  };
+  return (
+    <section className="organization-billing">
+      <div className="finance-summary">
+        <span><small>МОНЕТИЗАЦИЯ В STARS</small><b>15% платформе · 85% сообществу</b></span>
+      </div>
+      <div className="billing-details">
+        <div className="connect-status">
+          <b>Подписка бесплатной доски</b>
+          <small>{subscriptionActive
+            ? `Активна до ${new Date(organization.starsSubscriptionExpiresAt).toLocaleDateString("ru")}`
+            : "Нужна только если публикации бесплатны абсолютно для всех"}</small>
+          <strong>500 ⭐ / 30 дней</strong>
+          {!subscriptionActive && <button className="primary" disabled={Boolean(busy)} onClick={() => void subscribe()}>{busy === "subscription" ? "Создаём счёт…" : "Оформить подписку"}</button>}
+        </div>
+        {organization.communities.map((community: any) => {
+          const draft = drafts[community.id];
+          if (!draft) return null;
+          return <form key={community.id} className="platform-settings" onSubmit={(event) => { event.preventDefault(); void save(community.id); }}>
+            <h4>{community.name}</h4>
+            <label>Кто оплачивает публикацию<select value={draft.monetizationMode} onChange={(e) => update(community.id, { monetizationMode: e.target.value })}><option value="paid_all">Все пользователи платят</option><option value="hybrid">Активные бесплатно, остальные платят</option><option value="free_subscription" disabled={!subscriptionActive}>Бесплатно всем — по подписке владельца</option></select></label>
+            {draft.monetizationMode !== "free_subscription" && <label>Цена публикации, Stars<input type="number" min="10" max="10000" value={draft.publicationPriceStars} onChange={(e) => update(community.id, { publicationPriceStars: Number(e.target.value) })}/></label>}
+            {draft.monetizationMode === "hybrid" && <><label>Сообщений для бесплатной публикации<input type="number" min="1" max="10000" value={draft.minMonthlyMessagesForFree} onChange={(e) => update(community.id, { minMonthlyMessagesForFree: Number(e.target.value) })}/></label><label>Период активности<select value={draft.activityWindowDays} onChange={(e) => update(community.id, { activityWindowDays: Number(e.target.value) })}><option value={7}>7 дней</option><option value={30}>30 дней</option><option value={90}>90 дней</option></select></label></>}
+            <label className="check"><input type="checkbox" checked={draft.allowPaidNonMembers} onChange={(e) => update(community.id, { allowPaidNonMembers: e.target.checked })}/>Разрешить платные объявления людям не из группы</label>
+            <button className="primary" disabled={Boolean(busy)}>{busy === community.id ? "Сохраняем…" : "Сохранить модель"}</button>
+          </form>;
+        })}
+        {message && <p className="platform-message">{message}</p>}
+      </div>
+    </section>
+  );
 }
 
 function OrganizationBilling({ organization }: { organization: any }) {
@@ -740,17 +813,14 @@ function PlatformSupportPanel() {
 
 function PlatformFinancePanel() {
   const [ledger, setLedger] = useState<any[]>([]);
-  const [events, setEvents] = useState<any[]>([]);
   const [payouts, setPayouts] = useState<any[]>([]);
   const [error, setError] = useState("");
   useEffect(() => {
     Promise.all([
       request("/platform/admin/ledger?limit=100"),
-      request("/platform/admin/stripe-events"),
       request("/platform/admin/payouts"),
-    ]).then(([ledgerItems, eventItems, payoutItems]) => {
+    ]).then(([ledgerItems, payoutItems]) => {
       setLedger(ledgerItems);
-      setEvents(eventItems);
       setPayouts(payoutItems);
     }).catch((e) => setError(e.message));
   }, []);
@@ -760,11 +830,9 @@ function PlatformFinancePanel() {
       {error && <LoadError message={error} />}
       <h3>Telegram Stars ledger</h3>
       <div className="global-audit">{ledger.map((item) => <p key={item.id}><span><b>{item.type}</b><small>{item.organization?.name || "Платформа"} · {item.status}</small></span><time>{item.grossAmount} ⭐</time></p>)}</div>
-      <h3>Stripe webhooks</h3>
-      <div className="global-audit">{events.map((item) => <p key={item.id}><span><b>{item.type}</b><small>{item.status} · попыток {item.attempts}{item.lastError ? ` · ${item.lastError}` : ""}</small></span><time>{new Date(item.createdAt).toLocaleString("ru")}</time></p>)}</div>
       <h3>Заявки на выплату</h3>
       <div className="global-audit">{payouts.map((item) => <p key={item.id}><span><b>{item.organization.name}</b><small>{item.status} · {item.rail}</small></span><time>{item.amountStars} ⭐</time></p>)}</div>
-      {!ledger.length && !events.length && !error && <p className="muted">Финансовых событий пока нет.</p>}
+      {!ledger.length && !error && <p className="muted">Финансовых событий пока нет.</p>}
     </section>
   );
 }
@@ -813,17 +881,15 @@ function PlatformOwnerPanel({ canEdit }: { canEdit: boolean }) {
   const [payoutsEnabled, setPayoutsEnabled] = useState(false);
   const [payouts, setPayouts] = useState<any[]>([]);
   const [ledger, setLedger] = useState<any[]>([]);
-  const [billingPlans, setBillingPlans] = useState<any[]>([]);
   const [reconciliation, setReconciliation] = useState<any>();
   const [reliability, setReliability] = useState<any>();
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const load = async () => {
-    const [summary, tenantItems, ledgerItems, planItems, payoutItems, reliabilityStatus] = await Promise.all([
+    const [summary, tenantItems, ledgerItems, payoutItems, reliabilityStatus] = await Promise.all([
       request("/platform/admin/overview"),
       request("/platform/admin/communities"),
       request("/platform/admin/ledger?limit=50"),
-      request("/platform/admin/billing-plans"),
       request("/platform/admin/payouts"),
       request("/platform/admin/reliability"),
     ]);
@@ -835,7 +901,6 @@ function PlatformOwnerPanel({ canEdit }: { canEdit: boolean }) {
     setMinimumPayout(summary.settings.minimumPayoutStars);
     setPayoutsEnabled(summary.settings.payoutsEnabled);
     setLedger(ledgerItems);
-    setBillingPlans(planItems);
     setPayouts(payoutItems);
     setReliability(reliabilityStatus);
   };
@@ -885,23 +950,6 @@ function PlatformOwnerPanel({ canEdit }: { canEdit: boolean }) {
     try {
       await request(`/platform/admin/payments/${payment.id}/refund`, "POST", { reason });
       setMessage("✓ Stars возвращены, объявление скрыто");
-      await load();
-    } catch (e: any) {
-      setMessage(e.message);
-    } finally {
-      setBusy(false);
-    }
-  };
-  const saveBillingPlan = async (plan: any) => {
-    setBusy(true);
-    setMessage("");
-    try {
-      await request(`/platform/admin/billing-plans/${plan.id}`, "PATCH", {
-        stripePriceId: plan.stripePriceId,
-        unitAmount: Number(plan.unitAmount),
-        active: Boolean(plan.active),
-      });
-      setMessage(`✓ Тариф ${plan.name} сохранён`);
       await load();
     } catch (e: any) {
       setMessage(e.message);
@@ -964,7 +1012,8 @@ function PlatformOwnerPanel({ canEdit }: { canEdit: boolean }) {
           </label>
           <label>
             Комиссия платформы, %
-            <input type="number" min="0" max="90" step="0.01" value={commissionPercent} onChange={(e) => setCommissionPercent(Number(e.target.value))} />
+            <input type="number" value={commissionPercent} disabled readOnly />
+            <small>Фиксированная ставка: 15%</small>
           </label>
           <label>
             Срок разблокировки Stars, дней
@@ -986,18 +1035,6 @@ function PlatformOwnerPanel({ canEdit }: { canEdit: boolean }) {
       </div>
       {reliability && <p className="platform-message">Уведомления в очереди: {reliability.notifications.pending} · dead-letter: {reliability.notifications.deadLetter} · открытых алертов: {reliability.alerts.length}</p>}
       <PlatformLegalManagement canEdit={canEdit} />
-      <h3>Stripe Billing</h3>
-      <div className="billing-plan-admin">
-        {billingPlans.map((plan) => (
-          <div key={plan.id}>
-            <span><b>{plan.name}</b><small>{plan.key} · {plan.currency.toUpperCase()} / {plan.interval}</small></span>
-            <label>Цена в центах<input type="number" min="0" value={plan.unitAmount} disabled={!canEdit} onChange={(event) => setBillingPlans((current) => current.map((item) => item.id === plan.id ? { ...item, unitAmount: Number(event.target.value) } : item))} /></label>
-            <label>Stripe Price ID<input placeholder="price_..." value={plan.stripePriceId || ""} disabled={!canEdit} onChange={(event) => setBillingPlans((current) => current.map((item) => item.id === plan.id ? { ...item, stripePriceId: event.target.value } : item))} /></label>
-            <label className="check"><input type="checkbox" checked={plan.active} disabled={!canEdit} onChange={(event) => setBillingPlans((current) => current.map((item) => item.id === plan.id ? { ...item, active: event.target.checked } : item))} />Активен</label>
-            {canEdit && <button disabled={busy} onClick={() => void saveBillingPlan(plan)}>Сохранить тариф</button>}
-          </div>
-        ))}
-      </div>
       <div className="platform-stars-tools">
         <span>
           <b>Сверка Telegram Stars</b>
@@ -1010,7 +1047,7 @@ function PlatformOwnerPanel({ canEdit }: { canEdit: boolean }) {
       )}
       <h3>Заявки на выплату</h3>
       <div className="platform-tenants">
-        {payouts.map((payout) => <div key={payout.id}><span><b>{payout.organization.name} · {payout.amountStars} ⭐</b><small>{payout.status}{payout.settlementAmount ? ` · ${(payout.settlementAmount / 100).toFixed(2)} ${payout.settlementCurrency} · ${payout.rail}` : ""}</small></span>{canEdit && payout.status === "requested" && <button onClick={async () => { const cents = Number(window.prompt("Сумма выплаты в евроцентах:")); if (!Number.isInteger(cents) || cents <= 0) return; const rail = window.confirm("Использовать Stripe Connect? Нажмите Отмена для manual SEPA") ? "stripe_connect" : "manual_sepa"; try { await request(`/platform/admin/payouts/${payout.id}/review`, "POST", { decision: "approve", settlementAmount: cents, settlementCurrency: "EUR", rail }); await load(); } catch (e: any) { setMessage(e.message); } }}>Согласовать</button>}{canEdit && ["approved", "failed"].includes(payout.status) && <button className="primary" onClick={async () => { const externalReference = payout.rail === "manual_sepa" ? window.prompt("Банковский reference выполненного перевода:") : ""; if (payout.rail === "manual_sepa" && !externalReference) return; try { await request(`/platform/admin/payouts/${payout.id}/execute`, "POST", { externalReference }); await load(); } catch (e: any) { setMessage(e.message); } }}>Выплатить</button>}</div>)}
+        {payouts.map((payout) => <div key={payout.id}><span><b>{payout.organization.name} · {payout.amountStars} ⭐ расчётного баланса</b><small>{payout.status}{payout.settlementAmount ? ` · ${(payout.settlementAmount / 100).toFixed(2)} ${payout.settlementCurrency} · ручная выплата` : ""}</small></span>{canEdit && payout.status === "requested" && <button onClick={async () => { const cents = Number(window.prompt("Сумма фактической выплаты в евроцентах:")); if (!Number.isInteger(cents) || cents <= 0) return; try { await request(`/platform/admin/payouts/${payout.id}/review`, "POST", { decision: "approve", settlementAmount: cents, settlementCurrency: "EUR", rail: "manual_sepa" }); await load(); } catch (e: any) { setMessage(e.message); } }}>Согласовать</button>}{canEdit && ["approved", "failed"].includes(payout.status) && <button className="primary" onClick={async () => { const externalReference = window.prompt("Reference выполненной выплаты:"); if (!externalReference) return; try { await request(`/platform/admin/payouts/${payout.id}/execute`, "POST", { externalReference }); await load(); } catch (e: any) { setMessage(e.message); } }}>Отметить выплаченной</button>}</div>)}
         {!payouts.length && <p className="muted">Заявок пока нет.</p>}
       </div>
       <h3>Финансовые операции</h3>
@@ -1183,7 +1220,7 @@ function Catalog() {
                 {community.isPrivileged
                   ? "Для администраторов сообщества без ограничений."
                   : community.freeForUser
-                    ? `Активность: ${community.messageCount} из ${community.minMonthlyMessagesForFree} сообщений в этом месяце.`
+                    ? `Активность: ${community.messageCount} из ${community.minMonthlyMessagesForFree} сообщений за ${community.activityWindowDays} дней.`
                     : `До бесплатного размещения осталось ${community.messagesRemaining} сообщений в чате.`}
               </small>
             </div>
@@ -2377,6 +2414,19 @@ function AdminUsers() {
       setSaved(`Доступ ${member.user.firstName} обновлён только для этого сообщества`);
     } catch (e: any) { setError(e.message); }
   };
+  const changeFreeAccess = async (member: any, enabled: boolean) => {
+    try {
+      await request(`/admin/users/${member.userId}`, "PATCH", {
+        freePublicationOverride: enabled,
+      });
+      setUsers((current) => current.map((item) =>
+        item.id === member.id ? { ...item, freePublicationOverride: enabled } : item,
+      ));
+      setSaved(enabled
+        ? `${member.user.firstName} добавлен в бесплатный список`
+        : `${member.user.firstName} удалён из бесплатного списка`);
+    } catch (e: any) { setError(e.message); }
+  };
   return (
     <div className="admin-view">
       <h2>Пользователи и роли</h2>
@@ -2426,6 +2476,10 @@ function AdminUsers() {
               <option value="owner">Владелец</option>
             </select>
             <select aria-label={`Доступ ${member.user.firstName}`} value={member.enforcementStatus || "active"} onChange={(event) => void changeAccess(member, event.target.value)}><option value="active">Доступ разрешён</option><option value="restricted">Ограничить</option><option value="banned">Заблокировать в доске</option></select>
+            <label className="check">
+              <input type="checkbox" checked={Boolean(member.freePublicationOverride)} onChange={(event) => void changeFreeAccess(member, event.target.checked)} />
+              Бесплатные публикации вручную
+            </label>
           </div>
         ))}
       </div>
@@ -2453,9 +2507,6 @@ function AdminSettings() {
     try {
       const result = await request("/admin/settings", "PATCH", {
         description: settings.description,
-        minMonthlyMessagesForFree: settings.minMonthlyMessagesForFree,
-        publicationPriceStars: settings.publicationPriceStars,
-        allowPaidNonMembers: settings.allowPaidNonMembers,
         rules: settings.rules,
         abuseProtectionMode: settings.abuseProtectionMode,
         minQualifiedMessageChars: settings.minQualifiedMessageChars,
@@ -2478,10 +2529,10 @@ function AdminSettings() {
   };
   return (
     <div className="admin-view">
-      <h2>Доступ и Telegram Stars</h2>
+      <h2>Правила и безопасность</h2>
       <p className="hint">
-        Активность считается по сообщениям в привязанной группе за текущий
-        календарный месяц.
+        Здесь администратор управляет правилами и защитой. Цена, комиссия,
+        активность и подписка находятся в кабинете владельца.
       </p>
       {error && <LoadError message={error} />}
       {message && <div className="save-success">{message}</div>}
@@ -2499,52 +2550,6 @@ function AdminSettings() {
               }
             />
             <small>Показывается на главной и завершает настройку бренда.</small>
-          </label>
-          <label>
-            <span>Сообщений в месяц для бесплатной публикации</span>
-            <input
-              type="number"
-              inputMode="numeric"
-              min="0"
-              max="10000"
-              value={settings.minMonthlyMessagesForFree}
-              onChange={(event) =>
-                setSettings({
-                  ...settings,
-                  minMonthlyMessagesForFree: Number(event.target.value),
-                })
-              }
-            />
-            <small>0 — бесплатно для всех участников</small>
-          </label>
-          <label>
-            <span>Цена одной публикации, Stars</span>
-            <input
-              type="number"
-              inputMode="numeric"
-              min="1"
-              max="10000"
-              value={settings.publicationPriceStars}
-              onChange={(event) =>
-                setSettings({
-                  ...settings,
-                  publicationPriceStars: Number(event.target.value),
-                })
-              }
-            />
-          </label>
-          <label className="check">
-            <input
-              type="checkbox"
-              checked={settings.allowPaidNonMembers}
-              onChange={(event) =>
-                setSettings({
-                  ...settings,
-                  allowPaidNonMembers: event.target.checked,
-                })
-              }
-            />
-            <span>Разрешить платную публикацию людям не из группы</span>
           </label>
           <fieldset className="abuse-settings"><legend>Защита от злоупотреблений</legend><label><span>Режим</span><select value={settings.abuseProtectionMode} onChange={(e) => setSettings({ ...settings, abuseProtectionMode: e.target.value })}><option value="enforce">Защищать</option><option value="observe">Только наблюдать</option><option value="off">Выключено</option></select></label>{[
             ["minQualifiedMessageChars", "Минимум символов в полезном сообщении", 1, 500],
@@ -2573,9 +2578,7 @@ function AdminSettings() {
           <button
             type="button"
             disabled={
-              saving ||
-              settings.minMonthlyMessagesForFree < 0 ||
-              settings.publicationPriceStars < 1
+              saving
             }
             className="primary save-settings"
             onClick={() => void save()}

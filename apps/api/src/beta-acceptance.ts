@@ -128,6 +128,60 @@ try {
   const platformA = token({ scope: "platform", userId: moderator.id, telegramUserId: String(moderator.telegramUserId), platformRole: "user" });
   const platformStaffUnverified = token({ scope: "platform", userId: platformStaff.id, telegramUserId: String(platformStaff.telegramUserId), platformRole: "platform_admin", mfa: false });
 
+  const paidMode = await request(`/api/platform/communities/${communityA.id}/monetization`, platformA, {
+    method: "PATCH",
+    body: JSON.stringify({
+      monetizationMode: "paid_all",
+      publicationPriceStars: 75,
+      minMonthlyMessagesForFree: 5,
+      activityWindowDays: 30,
+      allowPaidNonMembers: true,
+    }),
+  });
+  expectStatus("owner configures paid Stars model", paidMode.status, 200);
+  const unpaidFreeMode = await request(`/api/platform/communities/${communityA.id}/monetization`, platformA, {
+    method: "PATCH",
+    body: JSON.stringify({
+      monetizationMode: "free_subscription",
+      publicationPriceStars: 75,
+      minMonthlyMessagesForFree: 5,
+      activityWindowDays: 30,
+      allowPaidNonMembers: true,
+    }),
+  });
+  expectStatus("free-for-all requires owner subscription", unpaidFreeMode.status, 402);
+  await prisma.organization.update({
+    where: { id: orgA.id },
+    data: {
+      starsSubscriptionStatus: "active",
+      starsSubscriptionExpiresAt: new Date(Date.now() + 2_592_000_000),
+    },
+  });
+  expectStatus("subscribed owner enables free-for-all", (await request(`/api/platform/communities/${communityA.id}/monetization`, platformA, {
+    method: "PATCH",
+    body: JSON.stringify({
+      monetizationMode: "free_subscription",
+      publicationPriceStars: 75,
+      minMonthlyMessagesForFree: 5,
+      activityWindowDays: 30,
+      allowPaidNonMembers: true,
+    }),
+  })).status, 200);
+  await prisma.community.update({
+    where: { id: communityA.id },
+    data: { monetizationMode: "hybrid", publicationPriceStars: 50, minMonthlyMessagesForFree: 2 },
+  });
+  checks.push("owner Stars models enforce paid subscription for a fully free board");
+  expectStatus("admin grants manual free publication", (await request(`/api/admin/users/${seller.id}`, moderatorA, {
+    method: "PATCH",
+    body: JSON.stringify({ freePublicationOverride: true }),
+  })).status, 200);
+  const sellerOverride = await prisma.communityMember.findUniqueOrThrow({
+    where: { communityId_userId: { communityId: communityA.id, userId: seller.id } },
+  });
+  if (!sellerOverride.freePublicationOverride) throw new Error("manual free publication was not stored");
+  checks.push("administrator can maintain the manual free-publication list");
+
   const webStart = await request("/api/auth/platform/web/start", "", { method: "POST", body: "{}" });
   expectStatus("website starts Telegram registration", webStart.status, 200);
   if (

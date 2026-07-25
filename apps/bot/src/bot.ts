@@ -759,6 +759,34 @@ function notificationText(type: string, p: any) {
   );
 }
 bot.on("pre_checkout_query", async (ctx) => {
+  if (ctx.preCheckoutQuery.invoice_payload.startsWith("owner_subscription:")) {
+    const [, organizationId, userId] =
+      ctx.preCheckoutQuery.invoice_payload.split(":");
+    const [owner, organization, settings] = await Promise.all([
+      prisma.user.findUnique({
+        where: { telegramUserId: BigInt(ctx.from.id) },
+        include: { organizations: true },
+      }),
+      prisma.organization.findUnique({ where: { id: organizationId } }),
+      prisma.platformSetting.findUnique({ where: { id: "global" } }),
+    ]);
+    const valid =
+      owner?.id === userId &&
+      organization &&
+      owner.organizations.some(
+        (membership) =>
+          membership.organizationId === organizationId &&
+          membership.role === "owner",
+      ) &&
+      ctx.preCheckoutQuery.currency === "XTR" &&
+      ctx.preCheckoutQuery.total_amount ===
+        (settings?.freeBoardSubscriptionStars || 500);
+    await ctx.answerPreCheckoutQuery(
+      Boolean(valid),
+      valid ? undefined : "Подписка недействительна. Создайте новый счёт в кабинете владельца.",
+    );
+    return;
+  }
   const payment = await prisma.publicationPayment.findUnique({
     where: { invoicePayload: ctx.preCheckoutQuery.invoice_payload },
   });
@@ -781,6 +809,47 @@ bot.on("pre_checkout_query", async (ctx) => {
 bot.on("message", async (ctx) => {
   if ("successful_payment" in ctx.message) {
     const paid = ctx.message.successful_payment;
+    if (paid.invoice_payload.startsWith("owner_subscription:")) {
+      const [, organizationId, userId] = paid.invoice_payload.split(":");
+      const payer = await prisma.user.findUnique({
+        where: { telegramUserId: BigInt(ctx.from.id) },
+      });
+      if (!payer || payer.id !== userId || paid.currency !== "XTR")
+        throw new Error("Owner subscription payer mismatch");
+      const expirationSeconds = Number(
+        (paid as any).subscription_expiration_date ||
+          Math.floor(Date.now() / 1000) + 2_592_000,
+      );
+      await prisma.$transaction([
+        prisma.organization.update({
+          where: { id: organizationId },
+          data: {
+            starsSubscriptionStatus: "active",
+            starsSubscriptionChargeId: paid.telegram_payment_charge_id,
+            starsSubscriptionExpiresAt: new Date(expirationSeconds * 1000),
+            starsSubscriptionPrice: paid.total_amount,
+          },
+        }),
+        prisma.auditEvent.create({
+          data: {
+            actorId: payer.id,
+            scope: "owner_billing",
+            action: "stars_subscription_paid",
+            targetType: "Organization",
+            targetId: organizationId,
+            metadata: {
+              amountStars: paid.total_amount,
+              expiresAt: new Date(expirationSeconds * 1000).toISOString(),
+            },
+          },
+        }),
+      ]);
+      await ctx.reply(
+        `✅ Подписка владельца активна до ${new Date(expirationSeconds * 1000).toLocaleDateString("ru-RU")}.\nТеперь можно включить бесплатные публикации для всех в кабинете владельца.`,
+        platformBoard(),
+      );
+      return;
+    }
     const payment = await prisma.publicationPayment.findUnique({
       where: { invoicePayload: paid.invoice_payload },
       include: { community: true },
@@ -898,6 +967,30 @@ bot.on("message", async (ctx) => {
       rejectedMessageCount: quality.qualified ? 0 : 1,
       lastMessageHash: quality.hash,
       lastMessageAt: new Date(),
+    },
+  });
+  const day = new Date().toISOString().slice(0, 10);
+  await prisma.dailyMessageActivity.upsert({
+    where: {
+      communityId_userId_day: {
+        communityId: community.id,
+        userId: user.id,
+        day,
+      },
+    },
+    update: {
+      totalMessageCount: { increment: 1 },
+      ...(quality.qualified
+        ? { messageCount: { increment: 1 } }
+        : { rejectedMessageCount: { increment: 1 } }),
+    },
+    create: {
+      communityId: community.id,
+      userId: user.id,
+      day,
+      messageCount: quality.qualified ? 1 : 0,
+      totalMessageCount: 1,
+      rejectedMessageCount: quality.qualified ? 0 : 1,
     },
   });
 });

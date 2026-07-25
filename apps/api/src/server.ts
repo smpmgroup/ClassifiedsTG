@@ -88,6 +88,71 @@ function protectImageUrls(value: unknown): unknown {
   }
   return output;
 }
+const ownerStarsSubscriptionActive = (organization: {
+  starsSubscriptionStatus: string;
+  starsSubscriptionExpiresAt: Date | null;
+}) =>
+  organization.starsSubscriptionStatus === "active" &&
+  Boolean(
+    organization.starsSubscriptionExpiresAt &&
+      organization.starsSubscriptionExpiresAt > new Date(),
+  );
+
+async function publicationAccess(
+  communityId: string,
+  userId: string,
+  role: Identity["role"],
+) {
+  const [community, member, activity] = await prisma.$transaction([
+    prisma.community.findUniqueOrThrow({
+      where: { id: communityId },
+      include: { organization: true },
+    }),
+    prisma.communityMember.findUnique({
+      where: { communityId_userId: { communityId, userId } },
+    }),
+    prisma.messageActivity.findUnique({
+      where: {
+        communityId_userId_month: {
+          communityId,
+          userId,
+          month: new Date().toISOString().slice(0, 7),
+        },
+      },
+    }),
+  ]);
+  const cutoff = new Date();
+  cutoff.setUTCDate(cutoff.getUTCDate() - community.activityWindowDays + 1);
+  const daily = await prisma.dailyMessageActivity.aggregate({
+    where: {
+      communityId,
+      userId,
+      day: { gte: cutoff.toISOString().slice(0, 10) },
+    },
+    _sum: { messageCount: true },
+    _count: true,
+  });
+  const privileged = privilegedRoles.has(role);
+  const manual =
+    Boolean(member?.freePublicationOverride) &&
+    (!member?.freePublicationUntil || member.freePublicationUntil > new Date());
+  // Monthly data is retained as a compatibility fallback while existing
+  // communities accumulate the new exact daily activity counters.
+  const messageCount =
+    daily._count > 0
+      ? daily._sum.messageCount || 0
+      : activity?.messageCount || 0;
+  const subscriptionActive = Boolean(
+    community.organization && ownerStarsSubscriptionActive(community.organization),
+  );
+  const free =
+    privileged ||
+    manual ||
+    (community.monetizationMode === "free_subscription" && subscriptionActive) ||
+    (community.monetizationMode === "hybrid" &&
+      messageCount >= community.minMonthlyMessagesForFree);
+  return { community, member, messageCount, subscriptionActive, free, manual };
+}
 app.addHook("preSerialization", async (_req, _reply, payload) => protectImageUrls(payload));
 await app.register(rawBody, {
   field: "rawBody",
@@ -1183,6 +1248,11 @@ app.get("/api/platform/me", { preHandler: platformAuth }, async (req: any) => {
                   deletionFinalizedAt: true,
                   rules: true,
                   description: true,
+                  monetizationMode: true,
+                  publicationPriceStars: true,
+                  minMonthlyMessagesForFree: true,
+                  activityWindowDays: true,
+                  allowPaidNonMembers: true,
                   _count: { select: { members: true, listings: true } },
                 },
               },
@@ -1251,6 +1321,116 @@ app.post(
         } });
     });
     return { accepted: true, documents: await requiredLegalStatus(req.platformIdentity.userId) };
+  },
+);
+
+app.patch(
+  "/api/platform/communities/:id/monetization",
+  { preHandler: platformAuth },
+  async (req: any) => {
+    const community = await prisma.community.findUniqueOrThrow({
+      where: { id: String(req.params.id) },
+      include: { organization: true },
+    });
+    if (!community.organizationId || !community.organization)
+      throw new DomainError("ORGANIZATION_REQUIRED", "У сообщества нет владельца", 409);
+    await organizationPlatformMembership(
+      community.organizationId,
+      req.platformIdentity.userId,
+      ["owner"],
+    );
+    const monetizationMode = String(req.body?.monetizationMode || "");
+    const publicationPriceStars = Number(req.body?.publicationPriceStars);
+    const minMonthlyMessagesForFree = Number(req.body?.minMonthlyMessagesForFree);
+    const activityWindowDays = Number(req.body?.activityWindowDays);
+    if (!["paid_all", "hybrid", "free_subscription"].includes(monetizationMode))
+      throw new DomainError("MONETIZATION_MODE_INVALID", "Выберите режим публикаций");
+    if (!Number.isInteger(publicationPriceStars) || publicationPriceStars < 1 || publicationPriceStars > 10000)
+      throw new DomainError("PUBLICATION_PRICE_INVALID", "Цена должна быть от 1 до 10000 Stars");
+    if (!Number.isInteger(minMonthlyMessagesForFree) || minMonthlyMessagesForFree < 1 || minMonthlyMessagesForFree > 10000)
+      throw new DomainError("ACTIVITY_THRESHOLD_INVALID", "Порог должен быть от 1 до 10000 сообщений");
+    if (![7, 30, 90].includes(activityWindowDays))
+      throw new DomainError("ACTIVITY_WINDOW_INVALID", "Период активности: 7, 30 или 90 дней");
+    const platformSettings = await prisma.platformSetting.upsert({
+      where: { id: "global" },
+      update: {},
+      create: { id: "global", defaultCommissionBps: 1500, freeBoardSubscriptionStars: 500 },
+    });
+    if (publicationPriceStars < platformSettings.minimumPublicationStars)
+      throw new DomainError(
+        "PUBLICATION_PRICE_BELOW_PLATFORM_MINIMUM",
+        `Минимальная цена платформы — ${platformSettings.minimumPublicationStars} Stars`,
+      );
+    if (monetizationMode === "free_subscription" && !ownerStarsSubscriptionActive(community.organization))
+      throw new DomainError(
+        "OWNER_SUBSCRIPTION_REQUIRED",
+        `Для бесплатной доски сначала оформите подписку ${platformSettings.freeBoardSubscriptionStars} Stars в месяц`,
+        402,
+      );
+    const updated = await prisma.community.update({
+      where: { id: community.id },
+      data: {
+        monetizationMode,
+        publicationPriceStars,
+        minMonthlyMessagesForFree,
+        activityWindowDays,
+        allowPaidNonMembers: Boolean(req.body?.allowPaidNonMembers),
+      },
+    });
+    await prisma.auditEvent.create({
+      data: {
+        communityId: community.id,
+        actorId: req.platformIdentity.userId,
+        scope: "owner_settings",
+        action: "monetization_updated",
+        targetType: "Community",
+        targetId: community.id,
+        metadata: { monetizationMode, publicationPriceStars, minMonthlyMessagesForFree, activityWindowDays },
+      },
+    });
+    return updated;
+  },
+);
+
+app.post(
+  "/api/platform/organizations/:id/stars-subscription-link",
+  { preHandler: platformAuth },
+  async (req: any) => {
+    const organizationId = String(req.params.id);
+    await organizationPlatformMembership(
+      organizationId,
+      req.platformIdentity.userId,
+      ["owner"],
+    );
+    const settings = await prisma.platformSetting.upsert({
+      where: { id: "global" },
+      update: {},
+      create: { id: "global", defaultCommissionBps: 1500, freeBoardSubscriptionStars: 500 },
+    });
+    const payload = `owner_subscription:${organizationId}:${req.platformIdentity.userId}`;
+    const response = await fetch(
+      `https://api.telegram.org/bot${config.TELEGRAM_BOT_TOKEN}/createInvoiceLink`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          title: "Бесплатная доска Community Board",
+          description: "Подписка владельца: бесплатные публикации для всех участников",
+          payload,
+          currency: "XTR",
+          prices: [{ label: "30 дней", amount: settings.freeBoardSubscriptionStars }],
+          subscription_period: 2_592_000,
+        }),
+      },
+    );
+    const result = (await response.json()) as any;
+    if (!result.ok)
+      throw new DomainError("STARS_SUBSCRIPTION_CREATE_FAILED", "Не удалось создать подписку Stars", 502);
+    await prisma.organization.update({
+      where: { id: organizationId },
+      data: { starsSubscriptionPrice: settings.freeBoardSubscriptionStars },
+    });
+    return { invoiceUrl: result.result, amountStars: settings.freeBoardSubscriptionStars };
   },
 );
 
@@ -3082,14 +3262,10 @@ app.patch(
         "PLATFORM_SETTINGS_INVALID",
         "Порог выплаты должен быть от 1 до 10000000 Stars",
       );
-    if (
-      !Number.isInteger(defaultCommissionBps) ||
-      defaultCommissionBps < 0 ||
-      defaultCommissionBps > 9000
-    )
+    if (defaultCommissionBps !== 1500)
       throw new DomainError(
         "PLATFORM_SETTINGS_INVALID",
-        "Комиссия должна быть от 0% до 90%",
+        "Комиссия платформы зафиксирована на уровне 15%",
       );
     const settings = await prisma.platformSetting.update({
       where: { id: "global" },
@@ -3179,29 +3355,20 @@ app.get("/api/me", { preHandler: auth }, async (req: any) => {
   };
 });
 app.get("/api/community/showcase", { preHandler: auth }, async (req: any) => {
-  const [community, activity, chat] = await Promise.all([
-    prisma.community.findUniqueOrThrow({
-      where: { id: req.identity.communityId },
-    }),
-    prisma.messageActivity.findUnique({
-      where: {
-        communityId_userId_month: {
-          communityId: req.identity.communityId,
-          userId: req.identity.userId,
-          month: new Date().toISOString().slice(0, 7),
-        },
-      },
-    }),
+  const [access, chat] = await Promise.all([
+    publicationAccess(
+      req.identity.communityId,
+      req.identity.userId,
+      req.identity.role,
+    ),
     prisma.community
       .findUniqueOrThrow({ where: { id: req.identity.communityId } })
       .then((selectedCommunity) =>
         getTelegramChatInfo(selectedCommunity.telegramChatId),
       ),
   ]);
-  const messageCount = activity?.messageCount || 0;
+  const { community, messageCount, free: freeForUser, manual, subscriptionActive } = access;
   const isPrivileged = privilegedRoles.has(req.identity.role);
-  const freeForUser =
-    isPrivileged || messageCount >= community.minMonthlyMessagesForFree;
   return {
     name: chat?.title || community.name,
     description:
@@ -3211,10 +3378,14 @@ app.get("/api/community/showcase", { preHandler: auth }, async (req: any) => {
     hasAvatar: Boolean(chat?.photo?.big_file_id),
     inviteUrl: community.inviteUrl,
     minMonthlyMessagesForFree: community.minMonthlyMessagesForFree,
+    activityWindowDays: community.activityWindowDays,
+    monetizationMode: community.monetizationMode,
     publicationPriceStars: community.publicationPriceStars,
     allowPaidNonMembers: community.allowPaidNonMembers,
     messageCount,
     freeForUser,
+    manualFreeAccess: manual,
+    ownerSubscriptionActive: subscriptionActive,
     isPrivileged,
     messagesRemaining: freeForUser
       ? 0
@@ -3604,20 +3775,21 @@ app.post(
             metadata: { duplicateSimilarity, duplicateOf, prohibitedMatches: listingRisk.prohibitedMatches },
           } });
       });
-      const month = new Date().toISOString().slice(0, 7);
-      const activity = await prisma.messageActivity.findUnique({
-        where: {
-          communityId_userId_month: {
-            communityId: req.identity.communityId,
-            userId: req.identity.userId,
-            month,
-          },
-        },
-      });
-      const free =
-        privilegedRoles.has(req.identity.role) ||
-        (activity?.messageCount || 0) >= community.minMonthlyMessagesForFree;
-      if (!free && listing.paymentStatus !== "paid")
+      const access = await publicationAccess(
+        req.identity.communityId,
+        req.identity.userId,
+        req.identity.role,
+      );
+      if (
+        community.monetizationMode === "free_subscription" &&
+        !access.subscriptionActive
+      )
+        throw new DomainError(
+          "OWNER_SUBSCRIPTION_REQUIRED",
+          "Владелец сообщества должен продлить подписку бесплатной доски",
+          402,
+        );
+      if (!access.free && listing.paymentStatus !== "paid")
         throw new DomainError(
           "PUBLICATION_PAYMENT_REQUIRED",
           `Для публикации нужно ${community.publicationPriceStars} Stars`,
@@ -3625,7 +3797,7 @@ app.post(
           {
             amountStars: community.publicationPriceStars,
             listingId: listing.id,
-            messageCount: activity?.messageCount || 0,
+            messageCount: access.messageCount,
             requiredMessages: community.minMonthlyMessagesForFree,
           },
         );
@@ -3688,6 +3860,17 @@ app.post(
       throw new DomainError(
         "COMMUNITY_BILLING_NOT_CONFIGURED",
         "Для сообщества не настроена организация",
+        409,
+      );
+    const access = await publicationAccess(
+      req.identity.communityId,
+      req.identity.userId,
+      req.identity.role,
+    );
+    if (access.free)
+      throw new DomainError(
+        "PUBLICATION_PAYMENT_NOT_REQUIRED",
+        "Для этого пользователя публикация бесплатна",
         409,
       );
     const split = splitStarsCommission(
@@ -4351,6 +4534,12 @@ app.patch(
     });
     const role = req.body?.role;
     const status = req.body?.status;
+    const freePublicationOverride = req.body?.freePublicationOverride;
+    if (
+      freePublicationOverride !== undefined &&
+      typeof freePublicationOverride !== "boolean"
+    )
+      throw new DomainError("FREE_ACCESS_INVALID", "Неверное значение бесплатного доступа");
     if (status && !["active", "restricted", "banned"].includes(status))
       throw new DomainError("ENFORCEMENT_STATUS_INVALID", "Неверный статус доступа");
     if (status && status !== "active" && target.role === "owner")
@@ -4379,6 +4568,15 @@ app.patch(
           role,
           isMuted: req.body?.isMuted,
           mutedUntil: req.body?.mutedUntil && new Date(req.body.mutedUntil),
+          ...(freePublicationOverride !== undefined
+            ? {
+                freePublicationOverride,
+                freePublicationUntil:
+                  freePublicationOverride && req.body?.freePublicationUntil
+                    ? new Date(req.body.freePublicationUntil)
+                    : null,
+              }
+            : {}),
           ...(status ? { enforcementStatus: status === "active" ? "active" : status, enforcementReason: String(req.body?.reason || "").slice(0, 500) || null } : {}),
           ...(req.body?.restrictedUntil ? { restrictedUntil: new Date(req.body.restrictedUntil) } : status === "active" ? { restrictedUntil: null } : {}),
         },
@@ -4484,9 +4682,6 @@ app.patch(
       "autoHideReportThreshold",
       "rules",
       "prohibitedWords",
-      "minMonthlyMessagesForFree",
-      "publicationPriceStars",
-      "allowPaidNonMembers",
       "abuseProtectionMode",
       "minQualifiedMessageChars",
       "maxLinksPerQualifiedMessage",
