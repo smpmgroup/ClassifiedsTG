@@ -280,7 +280,7 @@ try {
     subject: `Beta protected support ${stamp}`,
   }});
   expectStatus("Telegram-authenticated platform session reaches owner console without mandatory 2FA", (await request("/api/platform/admin/reliability", platformStaffUnverified)).status, 200);
-  expectStatus("Telegram-authenticated platform admin reaches support tools", (await request(`/api/platform/support/${supportTicket.id}/messages`, platformStaffUnverified, { method: "POST", body: JSON.stringify({ message: "telegram-authenticated internal note", internal: true }) })).status, 200);
+  expectStatus("platform admin without tenant support assignment stays isolated", (await request(`/api/platform/support/${supportTicket.id}/messages`, platformStaffUnverified, { method: "POST", body: JSON.stringify({ message: "must not be written", internal: true }) })).status, 403);
   const twoFactorSetup = await request("/api/platform/security/two-factor/setup", platformStaffUnverified, { method: "POST", body: "{}" });
   expectStatus("privileged user starts encrypted 2FA setup", twoFactorSetup.status, 200);
   const setupCode = totpAt(twoFactorSetup.body.secret);
