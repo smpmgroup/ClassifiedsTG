@@ -170,7 +170,7 @@ export function PublicSite() {
   if (path === "/platform-login" || path.startsWith("/platform-login/")) return <div className="public-site service-login"><WebLogin platformOwner/></div>;
   let content = <Landing data={data}/>;
   if (path === "/pricing") content = <Pricing data={data}/>;
-  if (path === "/login") content = <WebLogin/>;
+  if (path === "/login" || path.startsWith("/login/")) content = <WebLogin/>;
   if (path === "/docs") content = <Docs data={data}/>;
   if (path === "/support") content = <Support data={data}/>;
   if (["/terms", "/privacy", "/prohibited"].includes(path)) content = <Legal document={data.documents.find((item) => item.type === legalType)}/>;
