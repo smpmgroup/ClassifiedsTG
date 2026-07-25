@@ -11,7 +11,7 @@ type SiteData = {
   botUsername: string;
   plans: Array<{ key: string; name: string; description: string; currency: string; unitAmount: number; interval: string; features: unknown }>;
   documents: Array<{ id: string; type: string; version: string; title: string; body: string; effectiveAt: string }>;
-  publication: { minimumStars: number; defaultCommissionPercent: number; holdDays: number };
+  publication: { minimumStars: number; defaultCommissionPercent: number; holdDays: number; freeBoardSubscriptionStars: number; minimumPayoutStars: number };
 };
 
 const visitor = () => {
@@ -60,15 +60,16 @@ function Landing({ data }: { data: SiteData }) {
 
 function Pricing({ data }: { data: SiteData }) {
   useEffect(() => { void track("pricing_view"); }, []);
-  return <main className="public-page"><small>ТАРИФЫ В TELEGRAM STARS</small><h1>Платформа зарабатывает вместе с сообществом</h1><p className="lead">Банковская карта и Stripe не нужны. Владелец выбирает одну из двух прозрачных моделей прямо в кабинете.</p><div className="pricing-grid"><article><small>МОНЕТИЗАЦИЯ</small><h2>Платные публикации</h2><strong>15%<i>комиссия платформы</i></strong><p>Владелец назначает цену в Stars. Можно брать оплату со всех либо оставить бесплатное размещение активным участникам.</p><ul><li>✓ 85% начисляется сообществу</li><li>✓ Настраиваемый порог активности</li><li>✓ Ручной бесплатный доступ</li></ul></article><article><small>БЕСПЛАТНО ДЛЯ ЛЮДЕЙ</small><h2>Подписка владельца</h2><strong>500 ⭐<i>/ 30 дней</i></strong><p>Если абсолютно все объявления бесплатны, владелец оплачивает работу сервиса ежемесячной подпиской Stars.</p><ul><li>✓ Автоматическое продление Telegram</li><li>✓ Никакой комиссии с объявлений</li><li>✓ Отмена через Telegram</li></ul></article></div><div className="pricing-note"><b>Все расчёты внутри Telegram</b><p>Оплата цифровых функций проводится исключительно в Telegram Stars. Начисления сообществу отражаются в защищённом финансовом журнале.</p></div><TelegramCta data={data}/></main>;
+  return <main className="public-page"><small>ТАРИФЫ В TELEGRAM STARS</small><h1>Платформа зарабатывает вместе с сообществом</h1><p className="lead">Банковская карта и Stripe не нужны. Владелец выбирает одну из двух прозрачных моделей прямо в кабинете.</p><div className="pricing-grid"><article><small>МОНЕТИЗАЦИЯ</small><h2>Платные публикации</h2><strong>15%<i>комиссия платформы</i></strong><p>Владелец назначает цену от {data.publication.minimumStars} Stars. Можно брать оплату со всех либо оставить бесплатное размещение активным участникам.</p><ul><li>✓ 85% начисляется сообществу</li><li>✓ Настраиваемый порог активности</li><li>✓ Ручной бесплатный доступ</li></ul></article><article><small>БЕСПЛАТНО ДЛЯ ЛЮДЕЙ</small><h2>Подписка владельца</h2><strong>{data.publication.freeBoardSubscriptionStars} ⭐<i>/ 30 дней</i></strong><p>Если абсолютно все объявления бесплатны, владелец оплачивает работу сервиса ежемесячной подпиской Stars.</p><ul><li>✓ Автоматическое продление Telegram</li><li>✓ Никакой комиссии с объявлений</li><li>✓ Отмена через Telegram</li></ul></article></div><div className="pricing-note"><b>Все расчёты внутри Telegram</b><p>Оплата цифровых функций проводится исключительно в Telegram Stars. Начисления выдерживают {data.publication.holdDays} день, после чего доступны к выплате от {data.publication.minimumPayoutStars} Stars.</p></div><TelegramCta data={data}/></main>;
 }
 
 function Docs({ data }: { data: SiteData }) {
   useEffect(() => { void track("docs_view"); }, []);
-  return <main className="public-page"><small>ПОШАГОВОЕ ПОДКЛЮЧЕНИЕ</small><h1>От регистрации до доски внутри группы</h1><p className="lead">Собственный Telegram-бот и его токен не нужны. Один защищённый бот платформы обслуживает независимые сообщества и определяет нужную доску по группе.</p><div className="steps"><article><b>1</b><div><h2>Создайте кабинет владельца</h2><p>Подтвердите Telegram ID через бота. В кабинете владельца находятся подключение групп, коммерческая модель, Stars и выплаты.</p></div></article><article><b>2</b><div><h2>Создайте организацию</h2><p>Укажите название проекта или сообщества. Здесь будут финансовая история, обращения и одна или несколько досок.</p></div></article><article><b>3</b><div><h2>Добавьте общего бота в группу</h2><p>Кабинет сформирует одноразовую ссылку. Выберите группу, где вы владелец или администратор, и добавьте бота.</p></div></article><article><b>4</b><div><h2>Проверьте разрешения</h2><p>Выдайте права администратора для публикации, проверки участников и модерации. Кабинет покажет, каких разрешений не хватает.</p></div></article><article><b>5</b><div><h2>Выберите модель Stars</h2><p>Установите цену объявления и критерии активности либо оформите подписку 500 ⭐/30 дней для полностью бесплатной доски.</p></div></article><article><b>6</b><div><h2>Назначьте администраторов</h2><p>Панель администратора отвечает за модерацию, пользователей, категории и правила; коммерческие настройки остаются только у владельца.</p></div></article></div><h2>Комиссия и выплаты</h2><p>С каждой платной публикации 15% остаётся платформе, 85% начисляется владельцу сообщества. Telegram не позволяет переводить Stars между ботом и владельцем напрямую, поэтому кабинет показывает подтверждённый расчётный баланс и заявки на выплату после вывода вознаграждения платформой.</p><TelegramCta data={data} label="Начать регистрацию"/></main>;
+  return <main className="public-page"><small>ПОШАГОВОЕ ПОДКЛЮЧЕНИЕ</small><h1>От регистрации до доски внутри группы</h1><p className="lead">Собственный Telegram-бот и его токен не нужны. Один защищённый бот платформы обслуживает независимые сообщества и определяет нужную доску по группе.</p><div className="steps"><article><b>1</b><div><h2>Создайте кабинет владельца</h2><p>Подтвердите Telegram ID через бота. В кабинете владельца находятся подключение групп, коммерческая модель, Stars и выплаты.</p></div></article><article><b>2</b><div><h2>Создайте организацию</h2><p>Укажите название проекта или сообщества. Здесь будут финансовая история, обращения и одна или несколько досок.</p></div></article><article><b>3</b><div><h2>Добавьте общего бота в группу</h2><p>Кабинет сформирует одноразовую ссылку. Выберите группу, где вы владелец или администратор, и добавьте бота.</p></div></article><article><b>4</b><div><h2>Проверьте разрешения</h2><p>Выдайте права администратора для публикации, проверки участников и модерации. Кабинет покажет, каких разрешений не хватает.</p></div></article><article><b>5</b><div><h2>Выберите модель Stars</h2><p>Установите цену объявления и критерии активности либо оформите подписку {data.publication.freeBoardSubscriptionStars} ⭐/30 дней для полностью бесплатной доски.</p></div></article><article><b>6</b><div><h2>Назначьте администраторов</h2><p>Панель администратора отвечает за модерацию, пользователей, категории и правила; коммерческие настройки остаются только у владельца.</p></div></article></div><h2>Комиссия и выплаты</h2><p>С каждой платной публикации 15% остаётся платформе, 85% начисляется владельцу сообщества. Начисление становится доступным через {data.publication.holdDays} день. Минимальная заявка — {data.publication.minimumPayoutStars} Stars.</p><TelegramCta data={data} label="Начать регистрацию"/></main>;
 }
 
 function WebLogin() {
+  const nextPath = new URLSearchParams(window.location.search).get("next") === "/platform-admin" ? "/platform-admin" : "/dashboard";
   const hashToken = new URLSearchParams(window.location.hash.replace(/^#/, "")).get("token");
   const savedIntent = (() => {
     try {
@@ -100,7 +101,7 @@ function WebLogin() {
         localStorage.removeItem("platformWebLoginIntent");
         if (window.location.hash) window.history.replaceState({}, "", "/login");
         void track("web_login_complete");
-        window.location.assign("/dashboard");
+        window.location.assign(nextPath);
       } catch (e: any) {
         if (!active) return;
         setError(e.message);
@@ -110,7 +111,7 @@ function WebLogin() {
     void poll();
     const timer = window.setInterval(() => void poll(), 1500);
     return () => { active = false; window.clearInterval(timer); };
-  }, [intent, state]);
+  }, [intent, state, nextPath]);
   const start = async () => {
     setBusy(true); setError("");
     try {
@@ -128,7 +129,7 @@ function WebLogin() {
   };
   const finishTwoFactor = async (event: any) => {
     event.preventDefault(); setBusy(true); setError("");
-    try { await completePlatformTwoFactor(challenge, code); window.location.assign("/dashboard"); }
+    try { await completePlatformTwoFactor(challenge, code); window.location.assign(nextPath); }
     catch (e: any) { setError(e.message); }
     finally { setBusy(false); }
   };

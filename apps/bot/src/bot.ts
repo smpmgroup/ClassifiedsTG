@@ -780,7 +780,7 @@ bot.on("pre_checkout_query", async (ctx) => {
       ) &&
       ctx.preCheckoutQuery.currency === "XTR" &&
       ctx.preCheckoutQuery.total_amount ===
-        (settings?.freeBoardSubscriptionStars || 500);
+        (settings?.freeBoardSubscriptionStars || 750);
     await ctx.answerPreCheckoutQuery(
       Boolean(valid),
       valid ? undefined : "Подписка недействительна. Создайте новый счёт в кабинете владельца.",

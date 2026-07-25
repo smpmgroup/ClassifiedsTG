@@ -132,7 +132,7 @@ try {
     method: "PATCH",
     body: JSON.stringify({
       monetizationMode: "paid_all",
-      publicationPriceStars: 75,
+      publicationPriceStars: 100,
       minMonthlyMessagesForFree: 5,
       activityWindowDays: 30,
       allowPaidNonMembers: true,
@@ -143,7 +143,7 @@ try {
     method: "PATCH",
     body: JSON.stringify({
       monetizationMode: "free_subscription",
-      publicationPriceStars: 75,
+      publicationPriceStars: 100,
       minMonthlyMessagesForFree: 5,
       activityWindowDays: 30,
       allowPaidNonMembers: true,
@@ -161,7 +161,7 @@ try {
     method: "PATCH",
     body: JSON.stringify({
       monetizationMode: "free_subscription",
-      publicationPriceStars: 75,
+      publicationPriceStars: 100,
       minMonthlyMessagesForFree: 5,
       activityWindowDays: 30,
       allowPaidNonMembers: true,
@@ -169,7 +169,7 @@ try {
   })).status, 200);
   await prisma.community.update({
     where: { id: communityA.id },
-    data: { monetizationMode: "hybrid", publicationPriceStars: 50, minMonthlyMessagesForFree: 2 },
+    data: { monetizationMode: "hybrid", publicationPriceStars: 100, minMonthlyMessagesForFree: 2 },
   });
   checks.push("owner Stars models enforce paid subscription for a fully free board");
   expectStatus("admin grants manual free publication", (await request(`/api/admin/users/${seller.id}`, moderatorA, {

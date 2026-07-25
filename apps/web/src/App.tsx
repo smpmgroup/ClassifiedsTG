@@ -51,8 +51,10 @@ type CommunityShowcase = {
 export function App() {
   const { t } = useTranslation();
   const pathName = window.location.pathname.replace(/\/$/, "") || "/";
+  const platformAdminMode = pathName === "/platform-admin";
   const platformMode =
     pathName === "/dashboard" ||
+    platformAdminMode ||
     new URLSearchParams(window.location.search).get("mode") === "platform";
   const publicPath = ["/login", "/pricing", "/docs", "/terms", "/privacy", "/prohibited", "/support"].includes(pathName) ||
     (pathName === "/" && !platformMode && !new URLSearchParams(window.location.search).get("community") && !window.Telegram?.WebApp.initData);
@@ -68,7 +70,7 @@ export function App() {
       import.meta.env.VITE_TELEGRAM_INIT_DATA;
     if (!init && import.meta.env.PROD) {
       if (platformMode) {
-        window.location.replace("/login");
+        window.location.replace(platformAdminMode ? "/login?next=%2Fplatform-admin" : "/login");
         return;
       }
       setState("outside");
@@ -163,7 +165,7 @@ export function App() {
         actions={<button onClick={boot}>{t("retry")}</button>}
       />
     );
-  if (platformMode) return <PlatformWorkspace />;
+  if (platformMode) return <PlatformWorkspace platformAdminOnly={platformAdminMode} />;
   return (
     <Shell>
       <ScrollToTop />
@@ -222,7 +224,7 @@ function PlatformTwoFactorSecurity({ security, onChanged }: { security: any; onC
   return <section className="two-factor-security"><small>{security.required ? "ТРЕБУЕТСЯ ДЛЯ ДОСТУПА" : "РЕКОМЕНДУЕТСЯ"}</small><h2>{backupCodes.length ? "Сохраните резервные коды" : "Защитите кабинет вторым фактором"}</h2>{backupCodes.length ? <><p>Каждый код работает только один раз. Сохраните их вне Telegram — после закрытия они больше не показываются.</p><pre>{backupCodes.join("\n")}</pre><button className="primary" onClick={() => { setBackupCodes([]); void onChanged(); }}>Я надёжно сохранил коды</button></> : !setup ? <><p>Для служебных ролей вход без TOTP запрещён. Подойдёт Google Authenticator, 1Password, Microsoft Authenticator или аналог.</p><button className="primary" disabled={busy} onClick={() => void start()}>{busy ? "Создаём…" : "Настроить 2FA"}</button></> : <form onSubmit={confirm}><p>Откройте ссылку в приложении-аутентификаторе или добавьте ключ вручную.</p><a className="primary" href={setup.otpauthUrl}>Открыть в аутентификаторе</a><label>Ключ для ручного ввода<input readOnly value={setup.secret} onFocus={(event) => event.currentTarget.select()} /></label><label>Код из приложения<input autoFocus inputMode="numeric" autoComplete="one-time-code" value={code} onChange={(event) => setCode(event.target.value)} placeholder="000000" minLength={6} maxLength={6} required /></label><button className="primary" disabled={busy}>{busy ? "Проверяем…" : "Подтвердить и включить"}</button></form>}{error && <LoadError message={error}/>}</section>;
 }
 
-function PlatformWorkspace() {
+function PlatformWorkspace({ platformAdminOnly = false }: { platformAdminOnly?: boolean }) {
   const [data, setData] = useState<any>();
   const [error, setError] = useState("");
   const [organizationName, setOrganizationName] = useState("");
@@ -275,12 +277,12 @@ function PlatformWorkspace() {
     <main className="platform-workspace">
       <nav className="dashboard-nav">
         <a href="/"><span>CB</span><b>Community Board</b></a>
-        <div><a href="/docs">Инструкция</a><a href="/support">Поддержка</a><button onClick={() => { clearPlatformSession(); window.location.assign("/login"); }}>Выйти</button></div>
+        <div>{platformAdminOnly && <a href="/dashboard">Кабинет владельца</a>}<a href="/docs">Инструкция</a><a href="/support">Поддержка</a><button onClick={() => { clearPlatformSession(); window.location.assign("/login"); }}>Выйти</button></div>
       </nav>
       <header className="platform-header">
         <div>
           <small>COMMUNITY BOARD SAAS</small>
-          <h1>Кабинет владельца</h1>
+          <h1>{platformAdminOnly ? "Кабинет владельца платформы" : "Кабинет владельца"}</h1>
           <p>
             {data.user.firstName}
             {data.user.username ? ` · @${data.user.username}` : ""}
@@ -290,7 +292,7 @@ function PlatformWorkspace() {
           {data.user.firstName?.charAt(0).toUpperCase() || "U"}
         </div>
       </header>
-      <section className="platform-intro">
+      {!platformAdminOnly && <section className="platform-intro">
         <span>🧩</span>
         <div>
           <h2>Подключите Telegram-сообщество</h2>
@@ -299,10 +301,10 @@ function PlatformWorkspace() {
             отдельную защищённую доску.
           </p>
         </div>
-      </section>
+      </section>}
       <PlatformTwoFactorSecurity security={data.user.twoFactor} onChanged={load} />
       {error && <LoadError message={error} />}
-      <div className="organization-list">
+      {!platformAdminOnly && <div className="organization-list">
         {data.organizations.map((organization: any) => (
           <section className="organization-card" key={organization.id}>
             <div className="organization-title">
@@ -327,7 +329,7 @@ function PlatformWorkspace() {
               )}
             </div>
             {organization.role === "owner" && (
-              <OwnerMonetization organization={organization} onChanged={load} />
+              <OwnerMonetization organization={organization} pricing={data.platformPricing} onChanged={load} />
             )}
             <OrganizationFinance organizationId={organization.id} />
             <OrganizationSupport organization={organization} />
@@ -368,8 +370,8 @@ function PlatformWorkspace() {
             </button>
           </section>
         ))}
-      </div>
-      {!data.organizations.length && (
+      </div>}
+      {!platformAdminOnly && !data.organizations.length && (
         <form className="create-organization" onSubmit={createOrganization}>
           <h2>Создайте организацию</h2>
           <p>В ней будут храниться ваши сообщества и биллинг.</p>
@@ -385,11 +387,15 @@ function PlatformWorkspace() {
           </button>
         </form>
       )}
-      {data.user.twoFactor.sessionVerified && ["platform_admin", "platform_owner"].includes(
+      {!platformAdminOnly && data.user.twoFactor.sessionVerified && ["platform_admin", "platform_owner"].includes(data.user.platformRole) && (
+        <a className="platform-console-link" href="/platform-admin"><b>Кабинет владельца платформы</b><span>Организации, сообщества, Stars, выплаты и аудит →</span></a>
+      )}
+      {platformAdminOnly && data.user.twoFactor.sessionVerified && ["platform_admin", "platform_owner"].includes(
         data.user.platformRole,
       ) && <PlatformOwnerPanel canEdit={data.user.platformRole === "platform_owner"} />}
-      {data.user.twoFactor.sessionVerified && data.user.platformRole === "support" && <PlatformSupportPanel />}
-      {data.user.twoFactor.sessionVerified && data.user.platformRole === "finance" && <PlatformFinancePanel />}
+      {platformAdminOnly && data.user.twoFactor.sessionVerified && data.user.platformRole === "support" && <PlatformSupportPanel />}
+      {platformAdminOnly && data.user.twoFactor.sessionVerified && data.user.platformRole === "finance" && <PlatformFinancePanel />}
+      {platformAdminOnly && !["platform_admin", "platform_owner", "support", "finance"].includes(data.user.platformRole) && <LoadError message="Этот отдельный кабинет доступен только владельцу и сотрудникам платформы." />}
     </main>
   );
 }
@@ -401,11 +407,11 @@ function LegalAcceptance({ documents, onAccepted }: { documents: any[]; onAccept
   return <main className="legal-acceptance"><section><small>ВАЖНО</small><h1>Условия закрытой beta</h1><p>Перед созданием и управлением сообществом ознакомьтесь с актуальными документами.</p><div>{documents.map((document) => <a key={document.id} href={`/${document.type}`} target="_blank" rel="noreferrer"><span>{document.title}</span><small>Версия {document.version} ↗</small></a>)}</div><label><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} />Я прочитал(а) и принимаю все указанные документы</label>{error && <LoadError message={error}/>}<button className="primary" disabled={!confirmed || busy} onClick={async () => { setBusy(true); setError(""); try { await request("/platform/legal/accept", "POST", { documentIds: documents.map((document) => document.id) }); await onAccepted(); } catch (e: any) { setError(e.message); } finally { setBusy(false); } }}>{busy ? "Сохраняем…" : "Принять и продолжить"}</button></section></main>;
 }
 
-function OwnerMonetization({ organization, onChanged }: { organization: any; onChanged: () => Promise<any> }) {
+function OwnerMonetization({ organization, pricing, onChanged }: { organization: any; pricing: any; onChanged: () => Promise<any> }) {
   const [drafts, setDrafts] = useState<Record<string, any>>(
     Object.fromEntries(organization.communities.map((community: any) => [community.id, {
       monetizationMode: community.monetizationMode || "hybrid",
-      publicationPriceStars: community.publicationPriceStars || 50,
+      publicationPriceStars: community.publicationPriceStars || pricing.minimumPublicationStars,
       minMonthlyMessagesForFree: community.minMonthlyMessagesForFree || 10,
       activityWindowDays: community.activityWindowDays || 30,
       allowPaidNonMembers: community.allowPaidNonMembers ?? true,
@@ -449,7 +455,7 @@ function OwnerMonetization({ organization, onChanged }: { organization: any; onC
           <small>{subscriptionActive
             ? `Активна до ${new Date(organization.starsSubscriptionExpiresAt).toLocaleDateString("ru")}`
             : "Нужна только если публикации бесплатны абсолютно для всех"}</small>
-          <strong>500 ⭐ / 30 дней</strong>
+          <strong>{pricing.freeBoardSubscriptionStars} ⭐ / 30 дней</strong>
           {!subscriptionActive && <button className="primary" disabled={Boolean(busy)} onClick={() => void subscribe()}>{busy === "subscription" ? "Создаём счёт…" : "Оформить подписку"}</button>}
         </div>
         {organization.communities.map((community: any) => {
@@ -458,7 +464,7 @@ function OwnerMonetization({ organization, onChanged }: { organization: any; onC
           return <form key={community.id} className="platform-settings" onSubmit={(event) => { event.preventDefault(); void save(community.id); }}>
             <h4>{community.name}</h4>
             <label>Кто оплачивает публикацию<select value={draft.monetizationMode} onChange={(e) => update(community.id, { monetizationMode: e.target.value })}><option value="paid_all">Все пользователи платят</option><option value="hybrid">Активные бесплатно, остальные платят</option><option value="free_subscription" disabled={!subscriptionActive}>Бесплатно всем — по подписке владельца</option></select></label>
-            {draft.monetizationMode !== "free_subscription" && <label>Цена публикации, Stars<input type="number" min="10" max="10000" value={draft.publicationPriceStars} onChange={(e) => update(community.id, { publicationPriceStars: Number(e.target.value) })}/></label>}
+            {draft.monetizationMode !== "free_subscription" && <label>Цена публикации, Stars<input type="number" min={pricing.minimumPublicationStars} max="10000" value={draft.publicationPriceStars} onChange={(e) => update(community.id, { publicationPriceStars: Number(e.target.value) })}/><small>Минимум платформы — {pricing.minimumPublicationStars} ⭐</small></label>}
             {draft.monetizationMode === "hybrid" && <><label>Сообщений для бесплатной публикации<input type="number" min="1" max="10000" value={draft.minMonthlyMessagesForFree} onChange={(e) => update(community.id, { minMonthlyMessagesForFree: Number(e.target.value) })}/></label><label>Период активности<select value={draft.activityWindowDays} onChange={(e) => update(community.id, { activityWindowDays: Number(e.target.value) })}><option value={7}>7 дней</option><option value={30}>30 дней</option><option value={90}>90 дней</option></select></label></>}
             <label className="check"><input type="checkbox" checked={draft.allowPaidNonMembers} onChange={(e) => update(community.id, { allowPaidNonMembers: e.target.checked })}/>Разрешить платные объявления людям не из группы</label>
             <button className="primary" disabled={Boolean(busy)}>{busy === community.id ? "Сохраняем…" : "Сохранить модель"}</button>
@@ -661,6 +667,7 @@ function OrganizationFinance({ organizationId }: { organizationId: string }) {
       {expanded && (
         <div className="finance-details">
           <div><span>Ожидает разблокировки</span><b>{finance.balances.pending} ⭐</b></div>
+          <p className="muted">Холд Telegram: {finance.holdDays} день. После этой даты подтверждённые начисления автоматически переходят в доступные.</p>
           <div><span>Доступно к выплате</span><b>{finance.balances.available} ⭐</b></div>
           <div><span>Зарезервировано</span><b>{finance.balances.reserved} ⭐</b></div>
           <div><span>Выплачено</span><b>{finance.balances.paidOut} ⭐</b></div>
@@ -680,7 +687,7 @@ function OrganizationFinance({ organizationId }: { organizationId: string }) {
           <h4>Последние операции</h4>
           {finance.transactions.slice(0, 10).map((transaction: any) => (
             <p key={transaction.id}>
-              <span>{transaction.community?.name || "Сообщество"}<small>{new Date(transaction.occurredAt).toLocaleDateString("ru")}</small></span>
+              <span>{transaction.community?.name || "Сообщество"}<small>{transaction.status === "pending_settlement" ? `Доступно с ${new Date(transaction.availableAt).toLocaleDateString("ru")}` : new Date(transaction.occurredAt).toLocaleDateString("ru")}</small></span>
               <b>+{transaction.payment?.communityShareStars || 0} ⭐</b>
             </p>
           ))}
@@ -874,10 +881,10 @@ function PlatformStaffManagement({ canEdit }: { canEdit: boolean }) {
 function PlatformOwnerPanel({ canEdit }: { canEdit: boolean }) {
   const [overview, setOverview] = useState<any>();
   const [communities, setCommunities] = useState<any[]>([]);
-  const [minimumStars, setMinimumStars] = useState(10);
-  const [commissionPercent, setCommissionPercent] = useState(25);
+  const [minimumStars, setMinimumStars] = useState(100);
+  const [commissionPercent, setCommissionPercent] = useState(15);
   const [holdDays, setHoldDays] = useState(21);
-  const [minimumPayout, setMinimumPayout] = useState(1000);
+  const [minimumPayout, setMinimumPayout] = useState(2500);
   const [payoutsEnabled, setPayoutsEnabled] = useState(false);
   const [payouts, setPayouts] = useState<any[]>([]);
   const [ledger, setLedger] = useState<any[]>([]);
@@ -1004,6 +1011,12 @@ function PlatformOwnerPanel({ canEdit }: { canEdit: boolean }) {
         <div><b>{metrics.users}</b><span>Пользователей</span></div>
         <div><b>{metrics.grossStars} ⭐</b><span>Валовый оборот</span></div>
       </div>
+      <div className="platform-metrics">
+        <div><b>{overview.finance.communityPendingStars} ⭐</b><span>На холде 21 день</span></div>
+        <div><b>{overview.finance.communityAvailableStars} ⭐</b><span>Доступно владельцам</span></div>
+        <div><b>{overview.finance.communityReservedStars} ⭐</b><span>В заявках</span></div>
+        <div><b>{overview.finance.platformAvailableStars} ⭐</b><span>Доход платформы</span></div>
+      </div>
       {canEdit && (
         <form className="platform-settings" onSubmit={save}>
           <label>
@@ -1022,6 +1035,11 @@ function PlatformOwnerPanel({ canEdit }: { canEdit: boolean }) {
           <label>
             Минимум для выплаты, Stars
             <input type="number" min="1" max="10000000" value={minimumPayout} onChange={(e) => setMinimumPayout(Number(e.target.value))} />
+          </label>
+          <label>
+            Бесплатная доска, Stars / 30 дней
+            <input type="number" value={overview.settings.freeBoardSubscriptionStars} disabled readOnly />
+            <small>Фиксированный тариф: 750 ⭐</small>
           </label>
           <label className="check"><input type="checkbox" checked={payoutsEnabled} onChange={(e) => setPayoutsEnabled(e.target.checked)} />Разрешить новые заявки на выплату</label>
           <button className="primary" disabled={busy}>{busy ? "Сохраняем…" : "Сохранить"}</button>

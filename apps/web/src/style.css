@@ -1665,3 +1665,17 @@ nav .active {
     width: calc(100% - 24px);
   }
 }
+.platform-console-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin: 20px 0;
+  padding: 20px 22px;
+  border: 1px solid rgba(63, 200, 184, .55);
+  border-radius: 18px;
+  background: rgba(17, 57, 47, .72);
+  color: #fff;
+  text-decoration: none;
+}
+.platform-console-link span { color: #bce7de; font-size: 14px; }

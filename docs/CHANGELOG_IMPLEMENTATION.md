@@ -232,3 +232,17 @@
   workspace.
 - Kept Telegram publication purchases separate from Stripe SaaS subscriptions and
   documented the external approval/funding gates for owner payouts.
+# 2026-07-25 — Commercial Stars pricing and platform owner console
+
+- Production pricing is now consistent across the database, API, bot, landing
+  and owner UI: 100 Stars minimum publication, 750 Stars per 30 days for a
+  completely free board, fixed 15% platform commission and 2,500 Stars minimum
+  payout.
+- Community revenue remains pending for 21 days and the owner finance view now
+  shows the exact availability date for each publication.
+- Added `/platform-admin` as a separate MFA-protected platform-owner workspace
+  instead of appending SaaS operations to the community-owner cabinet.
+- Added global liabilities, available platform revenue and payout reservation
+  metrics to the platform owner console.
+- Added a database migration that upgrades existing beta tenants without
+  changing an already active Stars subscription.

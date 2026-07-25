@@ -568,7 +568,13 @@ app.get("/api/public/site", async () => {
     botUsername: config.TELEGRAM_BOT_USERNAME,
     plans,
     documents,
-    publication: { minimumStars: settings.minimumPublicationStars, defaultCommissionPercent: settings.defaultCommissionBps / 100, holdDays: settings.starsHoldDays },
+    publication: {
+      minimumStars: settings.minimumPublicationStars,
+      defaultCommissionPercent: settings.defaultCommissionBps / 100,
+      holdDays: settings.starsHoldDays,
+      freeBoardSubscriptionStars: settings.freeBoardSubscriptionStars,
+      minimumPayoutStars: settings.minimumPayoutStars,
+    },
   };
 });
 
@@ -1219,7 +1225,8 @@ async function requireCurrentLegalAcceptance(userId: string) {
 }
 
 app.get("/api/platform/me", { preHandler: platformAuth }, async (req: any) => {
-  const user = await prisma.user.findUniqueOrThrow({
+  const [user, platformSettings] = await prisma.$transaction([
+    prisma.user.findUniqueOrThrow({
     where: { id: req.platformIdentity.userId },
     include: {
       organizations: {
@@ -1262,7 +1269,20 @@ app.get("/api/platform/me", { preHandler: platformAuth }, async (req: any) => {
         orderBy: { createdAt: "asc" },
       },
     },
-  });
+    }),
+    prisma.platformSetting.upsert({
+      where: { id: "global" },
+      update: {},
+      create: {
+        id: "global",
+        minimumPublicationStars: 100,
+        defaultCommissionBps: 1500,
+        freeBoardSubscriptionStars: 750,
+        starsHoldDays: 21,
+        minimumPayoutStars: 2500,
+      },
+    }),
+  ]);
   return {
     user: {
       id: user.id,
@@ -1295,6 +1315,13 @@ app.get("/api/platform/me", { preHandler: platformAuth }, async (req: any) => {
         },
       })),
     })),
+    platformPricing: {
+      minimumPublicationStars: platformSettings.minimumPublicationStars,
+      commissionPercent: platformSettings.defaultCommissionBps / 100,
+      freeBoardSubscriptionStars: platformSettings.freeBoardSubscriptionStars,
+      starsHoldDays: platformSettings.starsHoldDays,
+      minimumPayoutStars: platformSettings.minimumPayoutStars,
+    },
     legalDocuments: await requiredLegalStatus(user.id),
   };
 });
@@ -1354,7 +1381,7 @@ app.patch(
     const platformSettings = await prisma.platformSetting.upsert({
       where: { id: "global" },
       update: {},
-      create: { id: "global", defaultCommissionBps: 1500, freeBoardSubscriptionStars: 500 },
+      create: { id: "global", minimumPublicationStars: 100, defaultCommissionBps: 1500, freeBoardSubscriptionStars: 750, starsHoldDays: 21, minimumPayoutStars: 2500 },
     });
     if (publicationPriceStars < platformSettings.minimumPublicationStars)
       throw new DomainError(
@@ -1405,7 +1432,7 @@ app.post(
     const settings = await prisma.platformSetting.upsert({
       where: { id: "global" },
       update: {},
-      create: { id: "global", defaultCommissionBps: 1500, freeBoardSubscriptionStars: 500 },
+      create: { id: "global", minimumPublicationStars: 100, defaultCommissionBps: 1500, freeBoardSubscriptionStars: 750, starsHoldDays: 21, minimumPayoutStars: 2500 },
     });
     const payload = `owner_subscription:${organizationId}:${req.platformIdentity.userId}`;
     const response = await fetch(
@@ -1945,6 +1972,8 @@ app.get(
         -account.entries.reduce((sum, entry) => sum + entry.amount, 0),
       ]),
     );
+    const platformSettings = await prisma.platformSetting.findUnique({ where: { id: "global" } });
+    const holdDays = platformSettings?.starsHoldDays || 21;
     return {
       currency: "XTR",
       balances: {
@@ -1953,9 +1982,16 @@ app.get(
         reserved: balances.liability_reserved || 0,
         paidOut: payouts.filter((item) => item.status === "paid").reduce((sum, item) => sum + item.amountStars, 0),
       },
-      minimumPayoutStars: (await prisma.platformSetting.findUnique({ where: { id: "global" } }))?.minimumPayoutStars || 1000,
-      payoutsEnabled: (await prisma.platformSetting.findUnique({ where: { id: "global" } }))?.payoutsEnabled || false,
-      transactions,
+      holdDays,
+      minimumPayoutStars: platformSettings?.minimumPayoutStars || 2500,
+      payoutsEnabled: platformSettings?.payoutsEnabled || false,
+      transactions: transactions.map((transaction) => ({
+        ...transaction,
+        availableAt:
+          transaction.type === "stars_publication_paid"
+            ? new Date(transaction.occurredAt.getTime() + holdDays * 86_400_000)
+            : transaction.occurredAt,
+      })),
       payouts,
     };
   },
@@ -2378,6 +2414,8 @@ app.get(
       users,
       listings,
       payments,
+      payoutQueue,
+      ledgerAccounts,
     ] = await prisma.$transaction([
       prisma.platformSetting.upsert({
         where: { id: "global" },
@@ -2394,7 +2432,35 @@ app.get(
         _count: true,
         _sum: { amountStars: true },
       }),
+      prisma.payoutRequest.groupBy({
+        by: ["status"],
+        orderBy: { status: "asc" },
+        _count: true,
+        _sum: { amountStars: true },
+      }),
+      prisma.ledgerAccount.findMany({
+        where: {
+          kind: {
+            in: [
+              "liability_pending",
+              "liability_available",
+              "liability_reserved",
+              "revenue_available",
+            ],
+          },
+        },
+        select: { kind: true, entries: { select: { amount: true } } },
+      }),
     ]);
+    const ledgerBalances = ledgerAccounts.reduce<Record<string, number>>(
+      (result, account) => {
+        result[account.kind] =
+          (result[account.kind] || 0) -
+          account.entries.reduce((sum, entry) => sum + entry.amount, 0);
+        return result;
+      },
+      {},
+    );
     return {
       settings,
       metrics: {
@@ -2405,6 +2471,18 @@ app.get(
         listings,
         paidPublications: payments._count,
         grossStars: payments._sum.amountStars || 0,
+      },
+      finance: {
+        communityPendingStars: ledgerBalances.liability_pending || 0,
+        communityAvailableStars: ledgerBalances.liability_available || 0,
+        communityReservedStars: ledgerBalances.liability_reserved || 0,
+        platformAvailableStars: ledgerBalances.revenue_available || 0,
+        payouts: Object.fromEntries(
+          payoutQueue.map((item) => [
+            item.status,
+            { count: item._count, stars: item._sum?.amountStars || 0 },
+          ]),
+        ),
       },
     };
   },

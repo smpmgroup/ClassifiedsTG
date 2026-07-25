@@ -123,7 +123,7 @@ model Community {
   rules String @default("")
   prohibitedWords String[] @default([])
   minMonthlyMessagesForFree Int @default(10)
-  publicationPriceStars Int @default(50)
+  publicationPriceStars Int @default(100)
   monetizationMode String @default("hybrid")
   activityWindowDays Int @default(30)
   allowPaidNonMembers Boolean @default(true)
@@ -229,7 +229,7 @@ model Organization {
   starsSubscriptionStatus String @default("none")
   starsSubscriptionChargeId String? @unique
   starsSubscriptionExpiresAt DateTime?
-  starsSubscriptionPrice Int @default(500)
+  starsSubscriptionPrice Int @default(750)
   billingUpdatedAt DateTime?
   connectDetailsSubmitted Boolean @default(false)
   connectChargesEnabled Boolean @default(false)
@@ -386,12 +386,12 @@ model OrganizationMember {
 model PlatformSetting {
   id String @id @default("global")
   platformName String @default("Community Board")
-  minimumPublicationStars Int @default(10)
+  minimumPublicationStars Int @default(100)
   defaultCommissionBps Int @default(1500)
-  freeBoardSubscriptionStars Int @default(500)
+  freeBoardSubscriptionStars Int @default(750)
   payoutsEnabled Boolean @default(false)
   starsHoldDays Int @default(21)
-  minimumPayoutStars Int @default(1000)
+  minimumPayoutStars Int @default(2500)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
