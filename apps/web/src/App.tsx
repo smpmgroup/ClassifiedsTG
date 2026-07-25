@@ -79,7 +79,16 @@ export function App() {
       import.meta.env.VITE_TELEGRAM_INIT_DATA;
     if (!init && import.meta.env.PROD) {
       if (platformMode) {
-        window.location.replace(platformAdminMode ? "/platform-login" : "/login");
+        // A browser login is stored in an HttpOnly cookie and therefore cannot
+        // be inspected by JavaScript. Ask the server before deciding that the
+        // visitor has no session.
+        try {
+          await request("/platform/me");
+          setState("ready");
+          return;
+        } catch {
+          window.location.replace(platformAdminMode ? "/platform-login" : "/login");
+        }
         return;
       }
       setState("outside");
