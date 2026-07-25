@@ -79,8 +79,11 @@ export async function completePlatformTwoFactor(challengeToken: string, code: st
   return result;
 }
 
-export async function startPlatformWebLogin() {
-  return api<any>("/auth/platform/web/start", { method: "POST", body: "{}" });
+export async function startPlatformWebLogin(destination: "owner" | "platform_owner" = "owner") {
+  return api<any>("/auth/platform/web/start", {
+    method: "POST",
+    body: JSON.stringify({ destination }),
+  });
 }
 
 export async function pollPlatformWebLogin(loginToken: string) {

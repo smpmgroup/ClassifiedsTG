@@ -31,8 +31,9 @@ const mediaUrl = (imageId: string) => {
 const roles = new Set(["moderator", "admin", "owner"]);
 const boardUrl = (communitySlug?: string, screen?: string) => {
   const url = new URL(appUrl);
+  if (screen === "admin") url.pathname = "/admin";
+  if (screen === "my-listings") url.pathname = "/profile";
   if (communitySlug) url.searchParams.set("community", communitySlug);
-  if (screen) url.searchParams.set("screen", screen);
   return url.toString();
 };
 const privateBoard = (communitySlug?: string, screen?: string) =>
@@ -48,11 +49,11 @@ const platformBoard = () =>
   Markup.inlineKeyboard([
     Markup.button.webApp("Кабинет владельца", platformUrl()),
   ]);
-const confirmedWebLogin = (rawToken: string) => {
-  const url = new URL("/login", appUrl);
+const confirmedWebLogin = (rawToken: string, platformOwner = false) => {
+  const url = new URL(platformOwner ? "/platform-login" : "/login", appUrl);
   url.hash = new URLSearchParams({ token: rawToken }).toString();
   return Markup.inlineKeyboard([
-    Markup.button.webApp("Перейти в панель администратора", url.toString()),
+    Markup.button.url(platformOwner ? "Продолжить вход" : "Открыть кабинет владельца", url.toString()),
   ]);
 };
 const publicBoard = (communitySlug: string) =>
@@ -262,10 +263,11 @@ bot.start(async (ctx) => {
     await claimCommunityConnection(ctx, ctx.startPayload.slice(8));
     return;
   }
-  if (ctx.startPayload?.startsWith("login_")) {
+  if (ctx.startPayload?.startsWith("login_") || ctx.startPayload?.startsWith("loginp_")) {
     if (ctx.chat.type !== "private")
       return ctx.reply("Подтвердить вход можно только в личном чате с ботом.");
-    const rawToken = ctx.startPayload.slice(6);
+    const platformOwnerLogin = ctx.startPayload.startsWith("loginp_");
+    const rawToken = ctx.startPayload.slice(platformOwnerLogin ? 7 : 6);
     if (!/^[A-Za-z0-9_-]{43}$/.test(rawToken))
       return ctx.reply("Ссылка входа повреждена. Начните вход заново на сайте.");
     const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
@@ -305,8 +307,10 @@ bot.start(async (ctx) => {
       targetId: intent.id,
     }});
     return ctx.reply(
-      "✅ Вход подтверждён.\n\nНажмите кнопку ниже — откроется ваша панель администратора.",
-      confirmedWebLogin(rawToken),
+      platformOwnerLogin
+        ? "✅ Личность подтверждена. Вернитесь в браузер или нажмите кнопку ниже."
+        : "✅ Вход подтверждён. Откройте браузерный кабинет владельца.",
+      confirmedWebLogin(rawToken, platformOwnerLogin),
     );
   }
   if (ctx.startPayload === "platform") {
@@ -327,7 +331,8 @@ bot.start(async (ctx) => {
       data: { botStartedAt: new Date() } as any,
     });
   }
-  const requestedSlug = ctx.startPayload?.replace(/^community_/, "");
+  const moderationStart = ctx.startPayload?.startsWith("moderate_");
+  const requestedSlug = ctx.startPayload?.replace(/^(community|moderate)_/, "");
   const requestedCommunity = requestedSlug
     ? await prisma.community.findUnique({ where: { slug: requestedSlug } })
     : null;
@@ -363,7 +368,7 @@ bot.start(async (ctx) => {
     privileged
       ? `Бот подключён. Ваша роль: ${privileged.role}. Карточки модерации будут приходить в этот чат.`
       : "Добро пожаловать на доску объявлений сообщества.",
-    privateBoard(requestedCommunity?.slug),
+    privateBoard(requestedCommunity?.slug, moderationStart ? "admin" : undefined),
   );
 });
 bot.command("board", async (ctx) => {

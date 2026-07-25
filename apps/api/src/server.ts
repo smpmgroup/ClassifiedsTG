@@ -924,7 +924,11 @@ const platformSessionPayload = (user: { id: string; telegramUserId: bigint; plat
 app.post(
   "/api/auth/platform/web/start",
   { config: { rateLimit: { max: 5, timeWindow: "10 minutes" } } },
-  async () => {
+  async (req: any) => {
+    const destination =
+      String(req.body?.destination || "owner") === "platform_owner"
+        ? "platform_owner"
+        : "owner";
     const rawToken = crypto.randomBytes(32).toString("base64url");
     const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
     const expiresAt = new Date(Date.now() + 10 * 60_000);
@@ -938,8 +942,9 @@ app.post(
       token: rawToken,
       expiresAt,
       botUsername: config.TELEGRAM_BOT_USERNAME,
-      botUrl: `https://t.me/${config.TELEGRAM_BOT_USERNAME}?start=login_${rawToken}`,
-      telegramAppUrl: `tg://resolve?domain=${config.TELEGRAM_BOT_USERNAME}&start=login_${rawToken}`,
+      botUrl: `https://t.me/${config.TELEGRAM_BOT_USERNAME}?start=${destination === "platform_owner" ? "loginp" : "login"}_${rawToken}`,
+      telegramAppUrl: `tg://resolve?domain=${config.TELEGRAM_BOT_USERNAME}&start=${destination === "platform_owner" ? "loginp" : "login"}_${rawToken}`,
+      destination,
     };
   },
 );
@@ -2508,6 +2513,7 @@ app.get(
         paidPublications: payments._count,
         grossStars: payments._sum.amountStars || 0,
       },
+      botUsername: config.TELEGRAM_BOT_USERNAME,
       finance: {
         communityPendingStars: ledgerBalances.liability_pending || 0,
         communityAvailableStars: ledgerBalances.liability_available || 0,

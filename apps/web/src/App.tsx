@@ -1020,6 +1020,10 @@ function PlatformOwnerPanel({ canEdit }: { canEdit: boolean }) {
     <section className="platform-admin">
       <small>УПРАВЛЕНИЕ SAAS</small>
       <h2>Панель владельца платформы</h2>
+      <div className="platform-console-link">
+        <b>Режимы проверки</b>
+        <span><a href="/platform-owner">Платформа</a> · <a href="/owner">Владелец сообщества</a></span>
+      </div>
       <div className="platform-metrics">
         <div><b>{metrics.organizations}</b><span>Организаций</span></div>
         <div><b>{metrics.activeCommunities}</b><span>Активных досок</span></div>
@@ -1100,7 +1104,7 @@ function PlatformOwnerPanel({ canEdit }: { canEdit: boolean }) {
       <div className="platform-tenants">
         {communities.map((community) => (
           <div key={community.id}>
-            <span><b>{community.name}</b><small>{community.organization?.name} · {community._count.members} участников · {community._count.listings} объявлений{community.deletionScheduledFor ? ` · удаление ${new Date(community.deletionScheduledFor).toLocaleDateString("ru")}` : ""}</small></span>
+            <span><b>{community.name}</b><small>{community.organization?.name} · {community._count.members} участников · {community._count.listings} объявлений{community.deletionScheduledFor ? ` · удаление ${new Date(community.deletionScheduledFor).toLocaleDateString("ru")}` : ""}</small><small><a href={`https://t.me/${overview.botUsername}?start=moderate_${community.slug}`} target="_blank" rel="noreferrer">Модератор ↗</a> · <a href={`https://t.me/${overview.botUsername}?start=community_${community.slug}`} target="_blank" rel="noreferrer">Пользователь ↗</a></small></span>
             {community.deletionScheduledFor && !community.deletionFinalizedAt ? (
               <button className="danger-soft" disabled={!canEdit || new Date(community.deletionScheduledFor) > new Date()} onClick={() => void finalizeDeletion(community)}>Финализировать</button>
             ) : (

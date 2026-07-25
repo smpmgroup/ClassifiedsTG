@@ -118,7 +118,7 @@ function WebLogin({ platformOwner = false }: { platformOwner?: boolean }) {
   const start = async () => {
     setBusy(true); setError("");
     try {
-      const nextIntent = await startPlatformWebLogin();
+      const nextIntent = await startPlatformWebLogin(platformOwner ? "platform_owner" : "owner");
       const storedIntent = { ...nextIntent, nextPath };
       localStorage.setItem("platformWebLoginIntent", JSON.stringify(storedIntent));
       setIntent(storedIntent);
@@ -156,10 +156,10 @@ export function PublicSite() {
   useEffect(() => { fetch("/api/public/site").then((response) => response.json()).then(setData); if (path === "/") void track("landing_view"); }, [path]);
   const legalType = useMemo(() => path.slice(1), [path]);
   if (!data) return <div className="public-loading">Community Board</div>;
+  if (path === "/platform-login") return <WebLogin platformOwner/>;
   let content = <Landing data={data}/>;
   if (path === "/pricing") content = <Pricing data={data}/>;
   if (path === "/login") content = <WebLogin/>;
-  if (path === "/platform-login") content = <WebLogin platformOwner/>;
   if (path === "/docs") content = <Docs data={data}/>;
   if (path === "/support") content = <Support data={data}/>;
   if (["/terms", "/privacy", "/prohibited"].includes(path)) content = <Legal document={data.documents.find((item) => item.type === legalType)}/>;

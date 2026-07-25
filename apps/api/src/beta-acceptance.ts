@@ -192,6 +192,17 @@ try {
   )
     throw new Error("web login did not return a valid bot confirmation link");
   checks.push("website login returns a ten-minute Telegram deep link");
+  const platformOwnerStart = await request("/api/auth/platform/web/start", "", {
+    method: "POST",
+    body: JSON.stringify({ destination: "platform_owner" }),
+  });
+  expectStatus("platform owner starts dedicated browser login", platformOwnerStart.status, 200);
+  if (!String(platformOwnerStart.body.botUrl).includes(`?start=loginp_${platformOwnerStart.body.token}`))
+    throw new Error("platform owner login lost its destination");
+  const platformOwnerTokenHash = crypto.createHash("sha256").update(platformOwnerStart.body.token).digest("hex");
+  const platformOwnerIntent = await prisma.webLoginIntent.findUniqueOrThrow({ where: { tokenHash: platformOwnerTokenHash } });
+  webLoginIntentIds.push(platformOwnerIntent.id);
+  checks.push("platform owner Telegram handoff preserves the browser destination");
   const webTokenHash = crypto.createHash("sha256").update(webStart.body.token).digest("hex");
   const webIntent = await prisma.webLoginIntent.findUniqueOrThrow({ where: { tokenHash: webTokenHash } });
   webLoginIntentIds.push(webIntent.id);
