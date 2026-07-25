@@ -102,13 +102,14 @@ function WebLogin() {
   }, [intent, state]);
   const start = async () => {
     setBusy(true); setError("");
-    const telegramWindow = window.open("", "_blank");
     try {
       const nextIntent = await startPlatformWebLogin();
       setIntent(nextIntent);
       setState("waiting");
       void track("web_login_started");
-      if (telegramWindow) telegramWindow.location.href = nextIntent.telegramAppUrl || nextIntent.botUrl;
+      // Keep the registration page in this tab. Opening an intermediate blank
+      // window leaves users on a white page when they return from Telegram.
+      window.location.href = nextIntent.telegramAppUrl || nextIntent.botUrl;
     }
     catch (e: any) { setError(e.message); setState("error"); }
     finally { setBusy(false); }
