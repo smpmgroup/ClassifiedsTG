@@ -65,6 +65,7 @@ export function App() {
     platformAdminMode ||
     new URLSearchParams(window.location.search).get("mode") === "platform";
   const publicPath = ["/login", "/platform-login", "/pricing", "/docs", "/terms", "/privacy", "/prohibited", "/support"].includes(pathName) ||
+    pathName.startsWith("/login/") || pathName.startsWith("/platform-login/") ||
     (pathName === "/" && !platformMode && !new URLSearchParams(window.location.search).get("community") && !window.Telegram?.WebApp.initData);
   const [state, setState] = useState<
     "loading" | "ready" | "outside" | "denied" | "select" | "twoFactor" | "error"
@@ -310,7 +311,6 @@ function PlatformWorkspace({ platformAdminOnly = false }: { platformAdminOnly?: 
           </p>
         </div>
       </section>}
-      <PlatformTwoFactorSecurity security={data.user.twoFactor} onChanged={load} />
       {error && <LoadError message={error} />}
       {!platformAdminOnly && <div className="organization-list">
         {data.organizations.map((organization: any) => (

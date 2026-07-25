@@ -279,8 +279,8 @@ try {
     organizationId: orgA.id, communityId: communityA.id, createdById: moderator.id,
     subject: `Beta protected support ${stamp}`,
   }});
-  expectStatus("privileged platform session requires 2FA setup", (await request("/api/platform/admin/reliability", platformStaffUnverified)).status, 428);
-  expectStatus("unverified platform staff cannot bypass tenant support", (await request(`/api/platform/support/${supportTicket.id}/messages`, platformStaffUnverified, { method: "POST", body: JSON.stringify({ message: "must not be written", internal: true }) })).status, 403);
+  expectStatus("Telegram-authenticated platform session reaches owner console without mandatory 2FA", (await request("/api/platform/admin/reliability", platformStaffUnverified)).status, 200);
+  expectStatus("Telegram-authenticated platform admin reaches support tools", (await request(`/api/platform/support/${supportTicket.id}/messages`, platformStaffUnverified, { method: "POST", body: JSON.stringify({ message: "telegram-authenticated internal note", internal: true }) })).status, 200);
   const twoFactorSetup = await request("/api/platform/security/two-factor/setup", platformStaffUnverified, { method: "POST", body: "{}" });
   expectStatus("privileged user starts encrypted 2FA setup", twoFactorSetup.status, 200);
   const setupCode = totpAt(twoFactorSetup.body.secret);
@@ -300,13 +300,9 @@ try {
     status: "claimed", userId: platformStaff.id, claimedAt: new Date(),
   }});
   const staffWebStatus = await request("/api/auth/platform/web/status", "", { method: "POST", body: JSON.stringify({ token: staffWebStart.body.token }) });
-  expectStatus("privileged website login requests second factor", staffWebStatus.status, 200);
-  if (!staffWebStatus.body.requiresTwoFactor || !staffWebStatus.body.challengeToken) throw new Error("privileged web login bypassed 2FA");
-  const staffWebMfa = await request("/api/auth/platform/two-factor", "", { method: "POST", body: JSON.stringify({
-    challengeToken: staffWebStatus.body.challengeToken,
-    code: twoFactorConfirm.body.backupCodes[1],
-  }) });
-  expectStatus("privileged website login completes with recovery code", staffWebMfa.status, 200);
+  expectStatus("privileged website login completes after Telegram confirmation", staffWebStatus.status, 200);
+  if (staffWebStatus.body.status !== "complete" || !staffWebStatus.body.accessToken)
+    throw new Error("privileged Telegram web login did not issue a session");
   const challenge = token({ scope: "platform_2fa", userId: platformStaff.id, nonce: `beta-${stamp}` });
   expectStatus("used TOTP step cannot be replayed", (await request("/api/auth/platform/two-factor", platformStaffUnverified, { method: "POST", body: JSON.stringify({ challengeToken: challenge, code: setupCode }) })).status, 401);
   const backupChallenge = token({ scope: "platform_2fa", userId: platformStaff.id, nonce: `beta-backup-${stamp}` });

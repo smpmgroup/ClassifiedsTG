@@ -228,11 +228,6 @@ const requirePlatformRole = (roles: Set<string>) =>
     if (reply.sent) return;
     if (!roles.has(req.platformIdentity.platformRole))
       return reply.status(403).send(error("FORBIDDEN", "Недостаточно прав"));
-    if (req.platformIdentity.platformRole !== "user" && !req.platformIdentity.mfa)
-      return reply.status(428).send(error(
-        req.platformIdentity.totpEnabled ? "TWO_FACTOR_REQUIRED" : "TWO_FACTOR_SETUP_REQUIRED",
-        req.platformIdentity.totpEnabled ? "Введите код второго фактора" : "Настройте двухфакторную защиту",
-      ));
   };
 const platformAdminRoles = new Set(["platform_admin", "platform_owner"]);
 const platformFinanceRoles = new Set([
@@ -981,7 +976,7 @@ app.post(
     if (user.status !== "active")
       throw new DomainError("ACCESS_DENIED", "Доступ ограничен", 403);
     let result: Record<string, unknown>;
-    if (user.platformRole !== "user" && user.totpEnabledAt) {
+    if (false && user.platformRole !== "user" && user.totpEnabledAt) {
       result = {
         status: "two_factor",
         requiresTwoFactor: true,
@@ -1099,7 +1094,7 @@ app.post(
       "EX",
       config.TELEGRAM_INIT_DATA_MAX_AGE_SECONDS,
     );
-    if (user.platformRole !== "user" && user.totpEnabledAt) {
+    if (false && user.platformRole !== "user" && user.totpEnabledAt) {
       const challengeToken = await reply.jwtSign(
         { scope: "platform_2fa", userId: user.id, nonce: crypto.randomUUID() },
         { expiresIn: 300 },
@@ -1332,7 +1327,7 @@ app.get("/api/platform/me", { preHandler: platformAuth }, async (req: any) => {
       platformRole: user.platformRole,
       twoFactor: {
         enabled: Boolean(user.totpEnabledAt),
-        required: user.platformRole !== "user",
+        required: false,
         sessionVerified: req.platformIdentity.mfa,
         backupCodesRemaining: user.backupCodeHashes.length,
       },
