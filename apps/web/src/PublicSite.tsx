@@ -68,8 +68,7 @@ function Docs({ data }: { data: SiteData }) {
   return <main className="public-page"><small>ПОШАГОВОЕ ПОДКЛЮЧЕНИЕ</small><h1>От регистрации до доски внутри группы</h1><p className="lead">Собственный Telegram-бот и его токен не нужны. Один защищённый бот платформы обслуживает независимые сообщества и определяет нужную доску по группе.</p><div className="steps"><article><b>1</b><div><h2>Создайте кабинет владельца</h2><p>Подтвердите Telegram ID через бота. В кабинете владельца находятся подключение групп, коммерческая модель, Stars и выплаты.</p></div></article><article><b>2</b><div><h2>Создайте организацию</h2><p>Укажите название проекта или сообщества. Здесь будут финансовая история, обращения и одна или несколько досок.</p></div></article><article><b>3</b><div><h2>Добавьте общего бота в группу</h2><p>Кабинет сформирует одноразовую ссылку. Выберите группу, где вы владелец или администратор, и добавьте бота.</p></div></article><article><b>4</b><div><h2>Проверьте разрешения</h2><p>Выдайте права администратора для публикации, проверки участников и модерации. Кабинет покажет, каких разрешений не хватает.</p></div></article><article><b>5</b><div><h2>Выберите модель Stars</h2><p>Установите цену объявления и критерии активности либо оформите подписку {data.publication.freeBoardSubscriptionStars} ⭐/30 дней для полностью бесплатной доски.</p></div></article><article><b>6</b><div><h2>Назначьте администраторов</h2><p>Панель администратора отвечает за модерацию, пользователей, категории и правила; коммерческие настройки остаются только у владельца.</p></div></article></div><h2>Комиссия и выплаты</h2><p>С каждой платной публикации 15% остаётся платформе, 85% начисляется владельцу сообщества. Начисление становится доступным через {data.publication.holdDays} день. Минимальная заявка — {data.publication.minimumPayoutStars} Stars.</p><TelegramCta data={data} label="Начать регистрацию"/></main>;
 }
 
-function WebLogin() {
-  const nextPath = new URLSearchParams(window.location.search).get("next") === "/platform-admin" ? "/platform-admin" : "/dashboard";
+function WebLogin({ platformOwner = false }: { platformOwner?: boolean }) {
   const hashToken = new URLSearchParams(window.location.hash.replace(/^#/, "")).get("token");
   const savedIntent = (() => {
     try {
@@ -78,7 +77,11 @@ function WebLogin() {
       return null;
     }
   })();
-  const initialIntent = hashToken ? { token: hashToken } : savedIntent;
+  const initialIntent = hashToken ? { ...savedIntent, token: hashToken } : savedIntent;
+  const nextPath =
+    platformOwner || initialIntent?.nextPath === "/platform-owner"
+      ? "/platform-owner"
+      : "/owner";
   const [intent, setIntent] = useState<any>(initialIntent);
   const [state, setState] = useState<"intro" | "waiting" | "two_factor" | "error">(initialIntent ? "waiting" : "intro");
   const [challenge, setChallenge] = useState("");
@@ -116,8 +119,9 @@ function WebLogin() {
     setBusy(true); setError("");
     try {
       const nextIntent = await startPlatformWebLogin();
-      localStorage.setItem("platformWebLoginIntent", JSON.stringify(nextIntent));
-      setIntent(nextIntent);
+      const storedIntent = { ...nextIntent, nextPath };
+      localStorage.setItem("platformWebLoginIntent", JSON.stringify(storedIntent));
+      setIntent(storedIntent);
       setState("waiting");
       void track("web_login_started");
       // Keep the registration page in this tab. Opening an intermediate blank
@@ -133,7 +137,7 @@ function WebLogin() {
     catch (e: any) { setError(e.message); }
     finally { setBusy(false); }
   };
-  return <main className="web-login"><section><small>ЗАКРЫТЫЙ КАБИНЕТ</small><h1>{state === "two_factor" ? "Подтвердите второй фактор" : "Вход и регистрация через Telegram"}</h1>{state === "intro" && <><p>Telegram подтвердит вашу личность. Мы не просим номер телефона, пароль или токен собственного бота.</p><ol><li>Нажмите кнопку — откроется личный чат с <b>@ITTarragonaadsbot</b>.</li><li>Нажмите «Запустить» или подтвердите вход в сообщении бота.</li><li>Нажмите в ответе бота «Перейти в панель администратора».</li></ol><button className="public-primary" disabled={busy} onClick={() => void start()}>{busy ? "Открываем бота…" : "Открыть бота и зарегистрироваться"}<span>↗</span></button></>}{state === "waiting" && <><div className="login-waiting"><span>1</span><div><b>{intent.botUsername ? `Личный чат с @${intent.botUsername}` : "Вход подтверждён в Telegram"}</b><p>После ответа бота нажмите там кнопку перехода в панель.</p></div></div>{intent.telegramAppUrl && <a className="public-primary" href={intent.telegramAppUrl}>Открыть личный чат в Telegram <span>↗</span></a>}{intent.botUrl && <a href={intent.botUrl} target="_blank" rel="noreferrer">Если приложение не открылось — открыть через t.me</a>}<div className="login-pulse"><i/>Ожидаем подтверждение…</div></>}{state === "two_factor" && <form onSubmit={finishTwoFactor}><p>Для служебной роли требуется код приложения-аутентификатора или recovery-код.</p><input autoFocus value={code} onChange={(event) => setCode(event.target.value.trim())} autoComplete="one-time-code" placeholder="000000" minLength={6} maxLength={12} required/><button className="public-primary" disabled={busy}>{busy ? "Проверяем…" : "Войти"}</button></form>}{state === "error" && <><p className="login-error">{error}</p><button onClick={() => { localStorage.removeItem("platformWebLoginIntent"); window.history.replaceState({}, "", "/login"); setState("intro"); setIntent(undefined); }}>Начать заново</button></>}<aside><b>После регистрации</b><span>Организация → группа → права бота → правила и цена → запуск</span></aside></section></main>;
+  return <main className="web-login"><section><small>{platformOwner ? "СЛУЖЕБНЫЙ WEB-КАБИНЕТ" : "КАБИНЕТ ВЛАДЕЛЬЦА СООБЩЕСТВА"}</small><h1>{state === "two_factor" ? "Подтвердите второй фактор" : platformOwner ? "Вход владельца платформы" : "Вход и регистрация через Telegram"}</h1>{state === "intro" && <><p>{platformOwner ? "Это отдельный браузерный вход для управления всей SaaS-платформой. Telegram подтверждает личность, после чего обязательна 2FA." : "Telegram подтвердит вашу личность. Мы не просим номер телефона, пароль или токен собственного бота."}</p><ol><li>Нажмите кнопку — откроется личный чат с <b>@ITTarragonaadsbot</b>.</li><li>Нажмите «Запустить» или подтвердите вход в сообщении бота.</li><li>Вернитесь в браузер — кабинет откроется автоматически.</li></ol><button className="public-primary" disabled={busy} onClick={() => void start()}>{busy ? "Открываем бота…" : "Подтвердить вход через Telegram"}<span>↗</span></button></>}{state === "waiting" && <><div className="login-waiting"><span>1</span><div><b>{intent.botUsername ? `Личный чат с @${intent.botUsername}` : "Вход подтверждён в Telegram"}</b><p>После ответа бота вернитесь на эту страницу.</p></div></div>{intent.telegramAppUrl && <a className="public-primary" href={intent.telegramAppUrl}>Открыть личный чат в Telegram <span>↗</span></a>}{intent.botUrl && <a href={intent.botUrl} target="_blank" rel="noreferrer">Если приложение не открылось — открыть через t.me</a>}<div className="login-pulse"><i/>Ожидаем подтверждение…</div></>}{state === "two_factor" && <form onSubmit={finishTwoFactor}><p>Для служебной роли требуется код приложения-аутентификатора или recovery-код.</p><input autoFocus value={code} onChange={(event) => setCode(event.target.value.trim())} autoComplete="one-time-code" placeholder="000000" minLength={6} maxLength={12} required/><button className="public-primary" disabled={busy}>{busy ? "Проверяем…" : "Войти"}</button></form>}{state === "error" && <><p className="login-error">{error}</p><button onClick={() => { localStorage.removeItem("platformWebLoginIntent"); window.history.replaceState({}, "", platformOwner ? "/platform-login" : "/login"); setState("intro"); setIntent(undefined); }}>Начать заново</button></>}<aside><b>{platformOwner ? "Доступ владельца платформы" : "После регистрации"}</b><span>{platformOwner ? "Организации → сообщества → Stars → TON → выплаты → аудит" : "Организация → группа → права бота → правила и цена → запуск"}</span></aside></section></main>;
 }
 
 function Legal({ document }: { document?: SiteData["documents"][number] }) {
@@ -155,6 +159,7 @@ export function PublicSite() {
   let content = <Landing data={data}/>;
   if (path === "/pricing") content = <Pricing data={data}/>;
   if (path === "/login") content = <WebLogin/>;
+  if (path === "/platform-login") content = <WebLogin platformOwner/>;
   if (path === "/docs") content = <Docs data={data}/>;
   if (path === "/support") content = <Support data={data}/>;
   if (["/terms", "/privacy", "/prohibited"].includes(path)) content = <Legal document={data.documents.find((item) => item.type === legalType)}/>;

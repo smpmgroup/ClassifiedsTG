@@ -59,12 +59,12 @@ const actualTon = (nano: string | number | bigint | null | undefined) =>
 export function App() {
   const { t } = useTranslation();
   const pathName = window.location.pathname.replace(/\/$/, "") || "/";
-  const platformAdminMode = pathName === "/platform-admin";
+  const platformAdminMode = ["/platform-admin", "/platform-owner"].includes(pathName);
   const platformMode =
-    pathName === "/dashboard" ||
+    ["/dashboard", "/owner"].includes(pathName) ||
     platformAdminMode ||
     new URLSearchParams(window.location.search).get("mode") === "platform";
-  const publicPath = ["/login", "/pricing", "/docs", "/terms", "/privacy", "/prohibited", "/support"].includes(pathName) ||
+  const publicPath = ["/login", "/platform-login", "/pricing", "/docs", "/terms", "/privacy", "/prohibited", "/support"].includes(pathName) ||
     (pathName === "/" && !platformMode && !new URLSearchParams(window.location.search).get("community") && !window.Telegram?.WebApp.initData);
   const [state, setState] = useState<
     "loading" | "ready" | "outside" | "denied" | "select" | "twoFactor" | "error"
@@ -78,7 +78,7 @@ export function App() {
       import.meta.env.VITE_TELEGRAM_INIT_DATA;
     if (!init && import.meta.env.PROD) {
       if (platformMode) {
-        window.location.replace(platformAdminMode ? "/login?next=%2Fplatform-admin" : "/login");
+        window.location.replace(platformAdminMode ? "/platform-login" : "/login");
         return;
       }
       setState("outside");
@@ -285,7 +285,7 @@ function PlatformWorkspace({ platformAdminOnly = false }: { platformAdminOnly?: 
     <main className="platform-workspace">
       <nav className="dashboard-nav">
         <a href="/"><span>CB</span><b>Community Board</b></a>
-        <div>{platformAdminOnly && <a href="/dashboard">Кабинет владельца</a>}<a href="/docs">Инструкция</a><a href="/support">Поддержка</a><button onClick={() => { clearPlatformSession(); window.location.assign("/login"); }}>Выйти</button></div>
+        <div>{platformAdminOnly && <a href="/owner">Кабинет сообщества</a>}<a href="/docs">Инструкция</a><a href="/support">Поддержка</a><button onClick={() => { clearPlatformSession(); window.location.assign(platformAdminOnly ? "/platform-login" : "/login"); }}>Выйти</button></div>
       </nav>
       <header className="platform-header">
         <div>
@@ -396,7 +396,7 @@ function PlatformWorkspace({ platformAdminOnly = false }: { platformAdminOnly?: 
         </form>
       )}
       {!platformAdminOnly && data.user.twoFactor.sessionVerified && ["platform_admin", "platform_owner"].includes(data.user.platformRole) && (
-        <a className="platform-console-link" href="/platform-admin"><b>Кабинет владельца платформы</b><span>Организации, сообщества, Stars, выплаты и аудит →</span></a>
+        <a className="platform-console-link" href="/platform-owner"><b>Перейти в кабинет владельца платформы</b><span>Организации, сообщества, Stars, выплаты и аудит →</span></a>
       )}
       {platformAdminOnly && data.user.twoFactor.sessionVerified && ["platform_admin", "platform_owner"].includes(
         data.user.platformRole,
