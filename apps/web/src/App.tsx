@@ -48,6 +48,14 @@ type CommunityShowcase = {
   isPrivileged: boolean;
   messagesRemaining: number;
 };
+const estimatedTon = (stars: number, rate: any) =>
+  rate?.tonPerStar
+    ? `${(Number(stars || 0) * Number(rate.tonPerStar)).toLocaleString("ru", { maximumFractionDigits: 4 })} TON`
+    : "TON уточняется";
+const actualTon = (nano: string | number | bigint | null | undefined) =>
+  nano
+    ? `${(Number(nano) / 1_000_000_000).toLocaleString("ru", { maximumFractionDigits: 9 })} TON`
+    : "";
 export function App() {
   const { t } = useTranslation();
   const pathName = window.location.pathname.replace(/\/$/, "") || "/";
@@ -666,11 +674,12 @@ function OrganizationFinance({ organizationId }: { organizationId: string }) {
       </button>
       {expanded && (
         <div className="finance-details">
-          <div><span>Ожидает разблокировки</span><b>{finance.balances.pending} ⭐</b></div>
+          <div><span>Ожидает разблокировки</span><b>{finance.balances.pending} ⭐ <small>≈ {estimatedTon(finance.balances.pending, finance.tonRate)}</small></b></div>
           <p className="muted">Холд Telegram: {finance.holdDays} день. После этой даты подтверждённые начисления автоматически переходят в доступные.</p>
-          <div><span>Доступно к выплате</span><b>{finance.balances.available} ⭐</b></div>
-          <div><span>Зарезервировано</span><b>{finance.balances.reserved} ⭐</b></div>
-          <div><span>Выплачено</span><b>{finance.balances.paidOut} ⭐</b></div>
+          <div><span>Доступно к выплате</span><b>{finance.balances.available} ⭐ <small>≈ {estimatedTon(finance.balances.available, finance.tonRate)}</small></b></div>
+          <div><span>Зарезервировано</span><b>{finance.balances.reserved} ⭐ <small>≈ {estimatedTon(finance.balances.reserved, finance.tonRate)}</small></b></div>
+          <div><span>Выплачено</span><b>{finance.balances.paidOut} ⭐ <small>по фактическим TON-переводам</small></b></div>
+          <p className="muted">Оценка: 1 ⭐ = ${finance.tonRate.starUsd} вознаграждения, TON/USD = ${finance.tonRate.tonUsd?.toFixed(4) || "—"}. Обновлено {new Date(finance.tonRate.updatedAt).toLocaleString("ru")}. Финальная сумма фиксируется при выплате.</p>
           {finance.payoutsEnabled ? (
             <form className="payout-request" onSubmit={async (event) => {
               event.preventDefault(); setMessage("");
@@ -683,12 +692,12 @@ function OrganizationFinance({ organizationId }: { organizationId: string }) {
           ) : <p className="muted">Выплаты откроются после проверки платёжного контура платформы.</p>}
           {message && <p className="platform-message">{message}</p>}
           <h4>Заявки на выплату</h4>
-          {finance.payouts.map((payout: any) => <p key={payout.id}><span>{payout.status}<small>{new Date(payout.requestedAt).toLocaleDateString("ru")}{payout.externalReference ? ` · ${payout.externalReference}` : ""}</small></span><b>{payout.amountStars} ⭐{payout.settlementAmount ? ` → ${(payout.settlementAmount / 100).toFixed(2)} ${payout.settlementCurrency}` : ""}</b></p>)}
+          {finance.payouts.map((payout: any) => <p key={payout.id}><span>{payout.status}<small>{new Date(payout.requestedAt).toLocaleDateString("ru")}{payout.tonTransactionHash ? ` · TON tx ${payout.tonTransactionHash}` : ""}</small></span><b>{payout.amountStars} ⭐ <small>{payout.settlementTonNano ? `→ ${actualTon(payout.settlementTonNano)}` : `≈ ${estimatedTon(payout.amountStars, finance.tonRate)}`}</small></b></p>)}
           <h4>Последние операции</h4>
           {finance.transactions.slice(0, 10).map((transaction: any) => (
             <p key={transaction.id}>
               <span>{transaction.community?.name || "Сообщество"}<small>{transaction.status === "pending_settlement" ? `Доступно с ${new Date(transaction.availableAt).toLocaleDateString("ru")}` : new Date(transaction.occurredAt).toLocaleDateString("ru")}</small></span>
-              <b>+{transaction.payment?.communityShareStars || 0} ⭐</b>
+              <b>+{transaction.payment?.communityShareStars || 0} ⭐ <small>≈ {estimatedTon(transaction.payment?.communityShareStars || 0, finance.tonRate)}</small></b>
             </p>
           ))}
           {!finance.transactions.length && <p className="muted">Платных публикаций пока нет.</p>}
@@ -822,13 +831,16 @@ function PlatformFinancePanel() {
   const [ledger, setLedger] = useState<any[]>([]);
   const [payouts, setPayouts] = useState<any[]>([]);
   const [error, setError] = useState("");
+  const [tonRate, setTonRate] = useState<any>();
   useEffect(() => {
     Promise.all([
       request("/platform/admin/ledger?limit=100"),
       request("/platform/admin/payouts"),
-    ]).then(([ledgerItems, payoutItems]) => {
+      request("/public/ton-rate"),
+    ]).then(([ledgerItems, payoutItems, rate]) => {
       setLedger(ledgerItems);
       setPayouts(payoutItems);
+      setTonRate(rate);
     }).catch((e) => setError(e.message));
   }, []);
   return (
@@ -836,9 +848,9 @@ function PlatformFinancePanel() {
       <small>ФИНАНСЫ</small><h2>Финансовый контроль</h2>
       {error && <LoadError message={error} />}
       <h3>Telegram Stars ledger</h3>
-      <div className="global-audit">{ledger.map((item) => <p key={item.id}><span><b>{item.type}</b><small>{item.organization?.name || "Платформа"} · {item.status}</small></span><time>{item.grossAmount} ⭐</time></p>)}</div>
+      <div className="global-audit">{ledger.map((item) => <p key={item.id}><span><b>{item.type}</b><small>{item.organization?.name || "Платформа"} · {item.status}</small></span><time>{item.grossAmount} ⭐ <small>≈ {estimatedTon(item.grossAmount, tonRate)}</small></time></p>)}</div>
       <h3>Заявки на выплату</h3>
-      <div className="global-audit">{payouts.map((item) => <p key={item.id}><span><b>{item.organization.name}</b><small>{item.status} · {item.rail}</small></span><time>{item.amountStars} ⭐</time></p>)}</div>
+      <div className="global-audit">{payouts.map((item) => <p key={item.id}><span><b>{item.organization.name}</b><small>{item.status} · {item.rail}</small></span><time>{item.amountStars} ⭐ <small>{item.settlementTonNano ? actualTon(item.settlementTonNano) : `≈ ${estimatedTon(item.amountStars, tonRate)}`}</small></time></p>)}</div>
       {!ledger.length && !error && <p className="muted">Финансовых событий пока нет.</p>}
     </section>
   );
@@ -892,13 +904,15 @@ function PlatformOwnerPanel({ canEdit }: { canEdit: boolean }) {
   const [reliability, setReliability] = useState<any>();
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [tonRate, setTonRate] = useState<any>();
   const load = async () => {
-    const [summary, tenantItems, ledgerItems, payoutItems, reliabilityStatus] = await Promise.all([
+    const [summary, tenantItems, ledgerItems, payoutItems, reliabilityStatus, rate] = await Promise.all([
       request("/platform/admin/overview"),
       request("/platform/admin/communities"),
       request("/platform/admin/ledger?limit=50"),
       request("/platform/admin/payouts"),
       request("/platform/admin/reliability"),
+      request("/public/ton-rate"),
     ]);
     setOverview(summary);
     setCommunities(tenantItems);
@@ -910,6 +924,7 @@ function PlatformOwnerPanel({ canEdit }: { canEdit: boolean }) {
     setLedger(ledgerItems);
     setPayouts(payoutItems);
     setReliability(reliabilityStatus);
+    setTonRate(rate);
   };
   useEffect(() => {
     void load().catch((e) => setMessage(e.message));
@@ -1012,11 +1027,12 @@ function PlatformOwnerPanel({ canEdit }: { canEdit: boolean }) {
         <div><b>{metrics.grossStars} ⭐</b><span>Валовый оборот</span></div>
       </div>
       <div className="platform-metrics">
-        <div><b>{overview.finance.communityPendingStars} ⭐</b><span>На холде 21 день</span></div>
-        <div><b>{overview.finance.communityAvailableStars} ⭐</b><span>Доступно владельцам</span></div>
-        <div><b>{overview.finance.communityReservedStars} ⭐</b><span>В заявках</span></div>
-        <div><b>{overview.finance.platformAvailableStars} ⭐</b><span>Доход платформы</span></div>
+        <div><b>{overview.finance.communityPendingStars} ⭐</b><small>≈ {estimatedTon(overview.finance.communityPendingStars, tonRate)}</small><span>На холде 21 день</span></div>
+        <div><b>{overview.finance.communityAvailableStars} ⭐</b><small>≈ {estimatedTon(overview.finance.communityAvailableStars, tonRate)}</small><span>Доступно владельцам</span></div>
+        <div><b>{overview.finance.communityReservedStars} ⭐</b><small>≈ {estimatedTon(overview.finance.communityReservedStars, tonRate)}</small><span>В заявках</span></div>
+        <div><b>{overview.finance.platformAvailableStars} ⭐</b><small>≈ {estimatedTon(overview.finance.platformAvailableStars, tonRate)}</small><span>Доход платформы</span></div>
       </div>
+      {tonRate && <p className="platform-message">Расчётный курс: 1 ⭐ = ${tonRate.starUsd}; TON/USD ${tonRate.tonUsd?.toFixed(4) || "недоступен"} · {tonRate.source} · обновлено {new Date(tonRate.updatedAt).toLocaleString("ru")}. Фактическая выплата фиксируется отдельно.</p>}
       {canEdit && (
         <form className="platform-settings" onSubmit={save}>
           <label>
@@ -1065,14 +1081,14 @@ function PlatformOwnerPanel({ canEdit }: { canEdit: boolean }) {
       )}
       <h3>Заявки на выплату</h3>
       <div className="platform-tenants">
-        {payouts.map((payout) => <div key={payout.id}><span><b>{payout.organization.name} · {payout.amountStars} ⭐ расчётного баланса</b><small>{payout.status}{payout.settlementAmount ? ` · ${(payout.settlementAmount / 100).toFixed(2)} ${payout.settlementCurrency} · ручная выплата` : ""}</small></span>{canEdit && payout.status === "requested" && <button onClick={async () => { const cents = Number(window.prompt("Сумма фактической выплаты в евроцентах:")); if (!Number.isInteger(cents) || cents <= 0) return; try { await request(`/platform/admin/payouts/${payout.id}/review`, "POST", { decision: "approve", settlementAmount: cents, settlementCurrency: "EUR", rail: "manual_sepa" }); await load(); } catch (e: any) { setMessage(e.message); } }}>Согласовать</button>}{canEdit && ["approved", "failed"].includes(payout.status) && <button className="primary" onClick={async () => { const externalReference = window.prompt("Reference выполненной выплаты:"); if (!externalReference) return; try { await request(`/platform/admin/payouts/${payout.id}/execute`, "POST", { externalReference }); await load(); } catch (e: any) { setMessage(e.message); } }}>Отметить выплаченной</button>}</div>)}
+        {payouts.map((payout) => <div key={payout.id}><span><b>{payout.organization.name} · {payout.amountStars} ⭐</b><small>{payout.status} · {payout.settlementTonNano ? actualTon(payout.settlementTonNano) : `оценка ${estimatedTon(payout.amountStars, tonRate)}`}{payout.tonTransactionHash ? ` · tx ${payout.tonTransactionHash}` : ""}</small></span>{canEdit && payout.status === "requested" && <button onClick={async () => { const suggested = tonRate?.tonPerStar ? (payout.amountStars * tonRate.tonPerStar).toFixed(9) : ""; const settlementTon = window.prompt("Фактическая сумма выплаты в TON:", suggested); if (!settlementTon) return; try { await request(`/platform/admin/payouts/${payout.id}/review`, "POST", { decision: "approve", settlementTon }); await load(); } catch (e: any) { setMessage(e.message); } }}>Согласовать TON</button>}{canEdit && ["approved", "failed"].includes(payout.status) && <button className="primary" onClick={async () => { const externalReference = window.prompt("Hash выполненной TON-транзакции:"); if (!externalReference) return; try { await request(`/platform/admin/payouts/${payout.id}/execute`, "POST", { externalReference }); await load(); } catch (e: any) { setMessage(e.message); } }}>Подтвердить TON-выплату</button>}</div>)}
         {!payouts.length && <p className="muted">Заявок пока нет.</p>}
       </div>
       <h3>Финансовые операции</h3>
       <div className="platform-tenants">
         {ledger.slice(0, 15).map((transaction) => (
           <div key={transaction.id}>
-            <span><b>{transaction.type.replaceAll("_", " ")}</b><small>{transaction.organization?.name || "Платформа"} · {new Date(transaction.occurredAt).toLocaleString("ru")} · {transaction.grossAmount} ⭐</small></span>
+            <span><b>{transaction.type.replaceAll("_", " ")}</b><small>{transaction.organization?.name || "Платформа"} · {new Date(transaction.occurredAt).toLocaleString("ru")} · {transaction.grossAmount} ⭐ ≈ {estimatedTon(transaction.grossAmount, tonRate)}</small></span>
             {transaction.type === "stars_publication_paid" && transaction.payment?.status === "paid" && (
               <button className="danger-soft" disabled={busy} onClick={() => void refund(transaction.payment)}>Вернуть</button>
             )}

@@ -654,12 +654,14 @@ model PayoutRequest {
   amountStars Int
   settlementCurrency String @default("EUR")
   settlementAmount Int?
+  settlementTonNano BigInt?
   status String @default("requested")
   rail String @default("manual_sepa")
   reservationTransactionId String? @unique
   completionTransactionId String? @unique
   stripeTransferId String? @unique
   externalReference String?
+  tonTransactionHash String?
   statementNote String?
   failureReason String?
   requestedAt DateTime @default(now())

@@ -246,3 +246,14 @@
   metrics to the platform owner console.
 - Added a database migration that upgrades existing beta tenants without
   changing an already active Stars subscription.
+# 2026-07-25 — TON-denominated partner settlements
+
+- Added a cached Stars-to-TON estimate based on the Telegram developer reward
+  value and the current TON/USD market rate, including source and refresh time.
+- Community-owner and platform-owner finance views now show Stars together with
+  their estimated TON equivalent.
+- Payout approval now fixes the actual TON amount; completion requires and
+  stores the TON transaction hash. The estimate and the actual settlement are
+  intentionally kept separate for auditability.
+- Added dedicated bigint storage for nanoTON amounts so settlement calculations
+  do not lose precision.

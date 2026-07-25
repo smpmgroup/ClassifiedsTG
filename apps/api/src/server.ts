@@ -272,6 +272,39 @@ async function telegramBotApi<T>(method: string, body: Record<string, unknown>) 
   return payload.result as T;
 }
 
+const STAR_WITHDRAW_USD = 0.013;
+async function tonRewardRate() {
+  const cacheKey = "finance:ton-reward-rate:v1";
+  const cached = await redis.get(cacheKey);
+  if (cached) return JSON.parse(cached);
+  let tonUsd: number | null = null;
+  let source = "unavailable";
+  try {
+    const response = await fetch(
+      "https://api.coingecko.com/api/v3/simple/price?ids=the-open-network&vs_currencies=usd",
+      { signal: AbortSignal.timeout(5000) },
+    );
+    const payload = (await response.json()) as any;
+    const value = Number(payload?.["the-open-network"]?.usd);
+    if (response.ok && Number.isFinite(value) && value > 0) {
+      tonUsd = value;
+      source = "CoinGecko TON/USD";
+    }
+  } catch (rateError) {
+    app.log.warn({ err: rateError }, "TON/USD rate refresh failed");
+  }
+  const result = {
+    starUsd: STAR_WITHDRAW_USD,
+    tonUsd,
+    tonPerStar: tonUsd ? STAR_WITHDRAW_USD / tonUsd : null,
+    updatedAt: new Date().toISOString(),
+    source,
+    estimated: true,
+  };
+  await redis.set(cacheKey, JSON.stringify(result), "EX", tonUsd ? 900 : 60);
+  return result;
+}
+
 function requireStripe() {
   if (!stripe)
     throw new DomainError(
@@ -577,6 +610,8 @@ app.get("/api/public/site", async () => {
     },
   };
 });
+
+app.get("/api/public/ton-rate", async () => tonRewardRate());
 
 app.post(
   "/api/public/conversion",
@@ -1993,6 +2028,7 @@ app.get(
             : transaction.occurredAt,
       })),
       payouts,
+      tonRate: await tonRewardRate(),
     };
   },
 );
@@ -2634,30 +2670,30 @@ app.post(
     const decision = String(req.body?.decision || "");
     if (!["approve", "reject"].includes(decision))
       throw new DomainError("PAYOUT_DECISION_INVALID", "Укажите approve или reject");
-    const settlementAmount = Number(req.body?.settlementAmount);
-    const settlementCurrency = String(req.body?.settlementCurrency || "EUR").toUpperCase();
-    const rail = String(req.body?.rail || "manual_sepa");
-    if (decision === "approve" && (!Number.isSafeInteger(settlementAmount) || settlementAmount <= 0))
-      throw new DomainError("PAYOUT_SETTLEMENT_INVALID", "Укажите сумму выплаты в центах");
-    if (!/^[A-Z]{3}$/.test(settlementCurrency) || !["manual_sepa", "stripe_connect"].includes(rail))
-      throw new DomainError("PAYOUT_SETTLEMENT_INVALID", "Неверная валюта или способ выплаты");
+    const settlementTon = String(req.body?.settlementTon || "").trim().replace(",", ".");
+    const settlementTonNano =
+      /^\d+(\.\d{1,9})?$/.test(settlementTon)
+        ? BigInt(settlementTon.split(".")[0]) * 1_000_000_000n +
+          BigInt((settlementTon.split(".")[1] || "").padEnd(9, "0"))
+        : 0n;
+    const rail = "ton_wallet";
+    if (decision === "approve" && settlementTonNano <= 0n)
+      throw new DomainError("PAYOUT_SETTLEMENT_INVALID", "Укажите сумму выплаты в TON");
     return prisma.$transaction(async (tx) => {
       const payout = await tx.payoutRequest.findUnique({ where: { id: String(req.params.id) }, include: { organization: true } });
       if (!payout) throw new DomainError("PAYOUT_NOT_FOUND", "Заявка не найдена", 404);
       if (payout.status !== "requested") throw new DomainError("PAYOUT_STATE_INVALID", "Заявка уже рассмотрена", 409);
       if (decision === "reject") {
         await releasePayoutLedger(tx, { payoutId: payout.id, organizationId: payout.organizationId, amountStars: payout.amountStars, reason: String(req.body?.reason || "rejected_by_platform") });
-      } else if (rail === "stripe_connect" && (!payout.organization.stripeConnectAccountId || !payout.organization.connectPayoutsEnabled)) {
-        throw new DomainError("CONNECT_NOT_READY", "Stripe Connect организации не готов к выплатам", 409);
       }
       const updated = await tx.payoutRequest.update({ where: { id: payout.id }, data: {
         status: decision === "approve" ? "approved" : "rejected",
         reviewedById: req.platformIdentity.userId, reviewedAt: new Date(),
-        ...(decision === "approve" ? { settlementAmount, settlementCurrency, rail, statementNote: String(req.body?.statementNote || "").trim() || null } : { failureReason: String(req.body?.reason || "Отклонено платформой") }),
+        ...(decision === "approve" ? { settlementTonNano, settlementCurrency: "TON", settlementAmount: null, rail, statementNote: String(req.body?.statementNote || "").trim() || null } : { failureReason: String(req.body?.reason || "Отклонено платформой") }),
       } });
       await tx.auditEvent.create({ data: {
         actorId: req.platformIdentity.userId, scope: "platform_finance", action: `payout_${decision === "approve" ? "approved" : "rejected"}`,
-        targetType: "PayoutRequest", targetId: payout.id, metadata: { amountStars: payout.amountStars, settlementAmount: decision === "approve" ? settlementAmount : null, settlementCurrency, rail },
+        targetType: "PayoutRequest", targetId: payout.id, metadata: { amountStars: payout.amountStars, settlementTonNano: decision === "approve" ? settlementTonNano.toString() : null, rail },
       } });
       return updated;
     });
@@ -2671,41 +2707,23 @@ app.post(
     const payout = await prisma.payoutRequest.findUnique({ where: { id: String(req.params.id) }, include: { organization: true } });
     if (!payout) throw new DomainError("PAYOUT_NOT_FOUND", "Заявка не найдена", 404);
     if (payout.status === "paid") return payout;
-    if (!['approved', 'failed'].includes(payout.status) || !payout.settlementAmount)
+    if (!['approved', 'failed'].includes(payout.status) || !payout.settlementTonNano)
       throw new DomainError("PAYOUT_STATE_INVALID", "Выплата не готова к исполнению", 409);
-    let externalReference = String(req.body?.externalReference || "").trim();
-    let stripeTransferId: string | null = payout.stripeTransferId;
-    if (payout.rail === "stripe_connect") {
-      const stripeClient = requireStripe();
-      if (!payout.organization.stripeConnectAccountId || !payout.organization.connectPayoutsEnabled)
-        throw new DomainError("CONNECT_NOT_READY", "Stripe Connect организации не готов", 409);
-      try {
-        const transfer = await stripeClient.transfers.create({
-          amount: payout.settlementAmount, currency: payout.settlementCurrency.toLowerCase(),
-          destination: payout.organization.stripeConnectAccountId,
-          description: `Community payout ${payout.id}`,
-          metadata: { payoutId: payout.id, organizationId: payout.organizationId, amountStars: String(payout.amountStars) },
-        }, { idempotencyKey: `community-payout-${payout.id}` });
-        stripeTransferId = transfer.id;
-        externalReference = transfer.id;
-      } catch (e: any) {
-        await prisma.payoutRequest.update({ where: { id: payout.id }, data: { status: "failed", failureReason: String(e?.message || "Stripe transfer failed").slice(0, 1000) } });
-        throw new DomainError("PAYOUT_EXECUTION_FAILED", "Stripe не выполнил перевод; резерв сохранён для повтора", 502);
-      }
-    } else if (!externalReference) {
-      throw new DomainError("PAYOUT_REFERENCE_REQUIRED", "Укажите банковский reference ручной выплаты");
-    }
+    const settlementTonNano = payout.settlementTonNano;
+    const externalReference = String(req.body?.externalReference || "").trim();
+    if (!externalReference)
+      throw new DomainError("PAYOUT_REFERENCE_REQUIRED", "Укажите hash транзакции TON");
     return prisma.$transaction(async (tx) => {
       const current = await tx.payoutRequest.findUniqueOrThrow({ where: { id: payout.id } });
       if (current.status === "paid") return current;
       const completion = await completePayoutLedger(tx, { payoutId: payout.id, organizationId: payout.organizationId, amountStars: payout.amountStars, rail: payout.rail, externalReference });
       const updated = await tx.payoutRequest.update({ where: { id: payout.id }, data: {
-        status: "paid", completionTransactionId: completion.id, stripeTransferId,
-        externalReference, failureReason: null, processedAt: new Date(),
+        status: "paid", completionTransactionId: completion.id,
+        externalReference, tonTransactionHash: externalReference, failureReason: null, processedAt: new Date(),
       } });
       await tx.auditEvent.create({ data: {
         actorId: req.platformIdentity.userId, scope: "platform_finance", action: "payout_paid",
-        targetType: "PayoutRequest", targetId: payout.id, metadata: { rail: payout.rail, externalReference, settlementAmount: payout.settlementAmount, settlementCurrency: payout.settlementCurrency },
+        targetType: "PayoutRequest", targetId: payout.id, metadata: { rail: payout.rail, externalReference, settlementTonNano: settlementTonNano.toString() },
       } });
       return updated;
     });
