@@ -65,10 +65,46 @@ const confirmedWebLogin = (rawToken: string, platformOwner = false) => {
 const publicBoard = (communitySlug: string) =>
   Markup.inlineKeyboard([
     Markup.button.url(
-      "Открыть доску",
-      `https://t.me/${botUsername}?start=community_${communitySlug}`,
+      "📋 Открыть доску объявлений",
+      `https://t.me/${botUsername}?startapp=community_${communitySlug}`,
     ),
   ]);
+const groupCommands = [
+  { command: "board", description: "Открыть доску объявлений" },
+  { command: "rules", description: "Правила сообщества" },
+  { command: "install_board", description: "Установить кнопку доски (для админов)" },
+];
+
+async function installGroupBoardEntry(
+  ctx: any,
+  community: { name: string; slug: string },
+) {
+  await ctx.telegram
+    .setMyCommands(groupCommands, {
+      scope: { type: "chat", chat_id: ctx.chat.id },
+    })
+    .catch((error: unknown) =>
+      console.warn("Unable to install group bot commands", error),
+    );
+  const entry = await ctx.reply(
+    `📋 Доска объявлений сообщества «${community.name}»\n\nПубликуйте и находите объявления участников в одном месте. Нажмите кнопку ниже, чтобы открыть доску.`,
+    publicBoard(community.slug),
+  );
+  const pinned = await ctx.telegram
+    .pinChatMessage(ctx.chat.id, entry.message_id, {
+      disable_notification: true,
+    })
+    .then(() => true)
+    .catch((error: unknown) => {
+      console.warn("Unable to pin group board entry", error);
+      return false;
+    });
+  if (!pinned)
+    await ctx.reply(
+      "Кнопка доски опубликована, но бот не смог её закрепить. Выдайте боту право «Закреплять сообщения» и отправьте /install_board ещё раз либо закрепите сообщение вручную.",
+    );
+  return pinned;
+}
 const categorySlug = (name: string, index: number) =>
   name
     .toLowerCase()
@@ -160,10 +196,9 @@ async function claimCommunityConnection(ctx: any, rawToken: string) {
         targetId: existing.id,
       },
     });
-    return ctx.reply(
-      "Эта группа уже подключена.",
-      publicBoard(existing.slug),
-    );
+    await ctx.reply("Эта группа уже подключена. Обновляю точку входа в доску.");
+    await installGroupBoardEntry(ctx, existing);
+    return;
   }
   let inviteUrl =
     "username" in ctx.chat && ctx.chat.username
@@ -257,8 +292,8 @@ async function claimCommunityConnection(ctx: any, rawToken: string) {
   });
   await ctx.reply(
     `✅ Доска для «${community.name}» подключена.\n\nВажно: не отключайте боту доступ к сообщениям — он нужен для учёта активности.`,
-    publicBoard(community.slug),
   );
+  await installGroupBoardEntry(ctx, community);
 }
 
 bot.start(async (ctx) => {
@@ -393,9 +428,28 @@ bot.command("board", async (ctx) => {
       : publicBoard(community!.slug),
   );
 });
+bot.command("install_board", async (ctx) => {
+  if (ctx.chat.type === "private")
+    return ctx.reply(
+      "Эту команду нужно отправить в подключённой Telegram-группе.",
+    );
+  const community = await prisma.community.findUnique({
+    where: { telegramChatId: BigInt(ctx.chat.id) },
+  });
+  if (!community)
+    return ctx.reply(
+      "Эта группа пока не подключена. Начните подключение в кабинете владельца.",
+    );
+  const member = await ctx.telegram.getChatMember(ctx.chat.id, ctx.from.id);
+  if (!["creator", "administrator"].includes(member.status))
+    return ctx.reply(
+      "Установить и закрепить кнопку может только владелец или администратор группы.",
+    );
+  await installGroupBoardEntry(ctx, community);
+});
 bot.command("help", (ctx) =>
   ctx.reply(
-    "/board — открыть доску\n/myads — мои объявления\n/rules — правила\n/connect — кабинет владельца сообщества\n/terms — условия сервиса\n/support — поддержка\n/paysupport — вопросы по оплате",
+    "/board — открыть доску\n/install_board — установить кнопку в группе (для админов)\n/myads — мои объявления\n/rules — правила\n/connect — кабинет владельца сообщества\n/terms — условия сервиса\n/support — поддержка\n/paysupport — вопросы по оплате",
   ),
 );
 bot.command("terms", async (ctx) => {

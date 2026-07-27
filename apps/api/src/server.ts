@@ -1619,7 +1619,7 @@ app.post(
     return {
       id: intent.id,
       expiresAt: intent.expiresAt,
-      addBotUrl: `https://t.me/${config.TELEGRAM_BOT_USERNAME}?startgroup=connect_${rawToken}&admin=delete_messages+restrict_members+invite_users`,
+      addBotUrl: `https://t.me/${config.TELEGRAM_BOT_USERNAME}?startgroup=connect_${rawToken}&admin=delete_messages+restrict_members+invite_users+pin_messages`,
     };
   },
 );
