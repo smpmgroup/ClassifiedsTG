@@ -1422,14 +1422,21 @@ function listingCountLabel(count: number) {
 }
 function Categories() {
   const [data, setData] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const nav = useNavigate();
   useEffect(() => {
-    request("/categories").then(setData);
+    request("/categories")
+      .then(setData)
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
   }, []);
   return (
     <section className="page">
       <h1>Категории</h1>
-      <div className="category-list">
+      <p className="hint">Выберите раздел, чтобы увидеть подходящие объявления сообщества.</p>
+      {error && <LoadError message={error} />}
+      {loading ? <div className="skeleton hero" /> : <div className="category-list">
         {data.map((c) => (
           <button key={c.id} onClick={() => nav(`/?categoryId=${c.id}`)}>
             <span>{c.icon || "◻"}</span>
@@ -1437,7 +1444,7 @@ function Categories() {
             <b>›</b>
           </button>
         ))}
-      </div>
+      </div>}
     </section>
   );
 }
@@ -2398,7 +2405,7 @@ function AdminDashboard() {
         </NavLink>
         <NavLink to="/admin/settings">
           <b>⚙</b>
-          <span>Активность и Stars</span>
+          <span>Правила и защита</span>
         </NavLink>
         <NavLink to="/admin/audit">
           <b>📋</b>
