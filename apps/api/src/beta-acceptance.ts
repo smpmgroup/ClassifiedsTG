@@ -127,6 +127,12 @@ try {
   const moderatorA = token({ userId: moderator.id, communityId: communityA.id, role: "owner", telegramUserId: String(moderator.telegramUserId) });
   const platformA = token({ scope: "platform", userId: moderator.id, telegramUserId: String(moderator.telegramUserId), platformRole: "user" });
   const platformStaffUnverified = token({ scope: "platform", userId: platformStaff.id, telegramUserId: String(platformStaff.telegramUserId), platformRole: "platform_admin", mfa: false });
+  const isolatedAccount = await request("/api/platform/me", platformA, {
+    headers: { cookie: `platform_session=${platformStaffUnverified}` },
+  });
+  expectStatus("current Telegram Bearer account overrides a stale privileged browser cookie", isolatedAccount.status, 200);
+  if (isolatedAccount.body.user.id !== moderator.id || isolatedAccount.body.user.platformRole !== "user")
+    throw new Error("platform cookie leaked a privileged identity into the community-owner session");
 
   const paidMode = await request(`/api/platform/communities/${communityA.id}/monetization`, platformA, {
     method: "PATCH",

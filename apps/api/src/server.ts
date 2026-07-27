@@ -197,14 +197,23 @@ declare module "fastify" {
 }
 async function platformAuth(req: any, reply: any) {
   try {
+    const authorization = String(req.headers.authorization || "");
+    const bearerToken = authorization.startsWith("Bearer ")
+      ? authorization.slice("Bearer ".length).trim()
+      : "";
     const cookieToken = String(req.headers.cookie || "")
       .split(";")
       .map((part: string) => part.trim())
       .find((part: string) => part.startsWith("platform_session="))
       ?.slice("platform_session=".length);
-    const decoded = (cookieToken
-      ? app.jwt.verify(decodeURIComponent(cookieToken))
-      : await req.jwtVerify()) as PlatformIdentity & {
+    // An explicit Bearer session represents the account that just completed
+    // the current login flow. It must take precedence over an older browser
+    // cookie left by a different Telegram account.
+    const decoded = (bearerToken
+      ? app.jwt.verify(bearerToken)
+      : cookieToken
+        ? app.jwt.verify(decodeURIComponent(cookieToken))
+        : await req.jwtVerify()) as PlatformIdentity & {
       scope?: string;
     };
     if (decoded.scope !== "platform" || !decoded.userId)

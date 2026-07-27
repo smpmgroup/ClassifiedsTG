@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   completePlatformTwoFactor,
   pollPlatformWebLogin,
+  logoutPlatformSession,
   setPlatformToken,
   startPlatformWebLogin,
 } from "./api";
@@ -101,12 +102,20 @@ function WebLogin({ platformOwner = false }: { platformOwner?: boolean }) {
   const [code, setCode] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [sessionIsolated, setSessionIsolated] = useState(platformOwner);
+  useEffect(() => {
+    if (platformOwner) return;
+    // The same physical browser can be used with several Telegram accounts.
+    // Remove a previous service-owner cookie before exchanging a community
+    // owner login so identities and privileges can never bleed between flows.
+    void logoutPlatformSession().finally(() => setSessionIsolated(true));
+  }, [platformOwner]);
   useEffect(() => {
     if (!urlToken) return;
     window.history.replaceState({}, "", platformOwner ? "/platform-login" : "/login");
   }, []);
   useEffect(() => {
-    if (!intent || state !== "waiting") return;
+    if (!sessionIsolated || !intent || state !== "waiting") return;
     let active = true;
     const poll = async () => {
       try {
@@ -132,7 +141,7 @@ function WebLogin({ platformOwner = false }: { platformOwner?: boolean }) {
     void poll();
     const timer = window.setInterval(() => void poll(), 1500);
     return () => { active = false; window.clearInterval(timer); };
-  }, [intent, state, nextPath]);
+  }, [intent, state, nextPath, sessionIsolated]);
   const start = async () => {
     setBusy(true); setError("");
     try {
@@ -155,7 +164,7 @@ function WebLogin({ platformOwner = false }: { platformOwner?: boolean }) {
     catch (e: any) { setError(e.message); }
     finally { setBusy(false); }
   };
-  return <main className="web-login"><section><small>{platformOwner ? "СЛУЖЕБНЫЙ WEB-КАБИНЕТ" : "КАБИНЕТ ВЛАДЕЛЬЦА СООБЩЕСТВА"}</small><h1>{state === "two_factor" ? "Подтвердите второй фактор" : platformOwner ? "Вход владельца платформы" : "Вход и регистрация через Telegram"}</h1>{state === "intro" && <><p>{platformOwner ? "Это отдельный браузерный вход для управления всей SaaS-платформой. Личность и право доступа подтверждает ваш Telegram-аккаунт." : "Telegram подтвердит вашу личность. Мы не просим номер телефона, пароль или токен собственного бота."}</p><ol><li>Нажмите кнопку — откроется личный чат с <b>@ITTarragonaadsbot</b>.</li><li>Нажмите «Запустить» или подтвердите вход в сообщении бота.</li><li>Нажмите кнопку перехода в кабинет в сообщении бота.</li></ol><button className="public-primary" disabled={busy} onClick={() => void start()}>{busy ? "Открываем бота…" : "Подтвердить вход через Telegram"}<span>↗</span></button></>}{state === "waiting" && <><div className="login-waiting"><span>1</span><div><b>{intent.botUsername ? `Личный чат с @${intent.botUsername}` : "Вход подтверждён в Telegram"}</b><p>После ответа бота нажмите кнопку перехода в кабинет.</p></div></div>{intent.telegramAppUrl && <a className="public-primary" href={intent.telegramAppUrl}>Открыть личный чат в Telegram <span>↗</span></a>}{intent.botUrl && <a href={intent.botUrl} target="_blank" rel="noreferrer">Если приложение не открылось — открыть через t.me</a>}<div className="login-pulse"><i/>Ожидаем подтверждение…</div></>}{state === "two_factor" && <form onSubmit={finishTwoFactor}><p>Введите код подтверждения.</p><input autoFocus value={code} onChange={(event) => setCode(event.target.value.trim())} autoComplete="one-time-code" placeholder="000000" minLength={6} maxLength={12} required/><button className="public-primary" disabled={busy}>{busy ? "Проверяем…" : "Войти"}</button></form>}{state === "error" && <><p className="login-error">{error}</p><button onClick={() => { localStorage.removeItem("platformWebLoginIntent"); window.history.replaceState({}, "", platformOwner ? "/platform-login" : "/login"); setState("intro"); setIntent(undefined); }}>Начать заново</button></>}<aside><b>{platformOwner ? "Доступ владельца платформы" : "После регистрации"}</b><span>{platformOwner ? "Организации → сообщества → Stars → TON → выплаты → аудит" : "Организация → группа → права бота → правила и цена → запуск"}</span></aside></section></main>;
+  return <main className="web-login"><section><small>{platformOwner ? "СЛУЖЕБНЫЙ WEB-КАБИНЕТ" : "КАБИНЕТ ВЛАДЕЛЬЦА СООБЩЕСТВА"}</small><h1>{state === "two_factor" ? "Подтвердите второй фактор" : platformOwner ? "Вход владельца платформы" : "Вход и регистрация через Telegram"}</h1>{state === "intro" && <><p>{platformOwner ? "Это отдельный браузерный вход для управления всей SaaS-платформой. Личность и право доступа подтверждает ваш Telegram-аккаунт." : "Telegram подтвердит вашу личность. Мы не просим номер телефона, пароль или токен собственного бота."}</p><ol><li>Нажмите кнопку — откроется личный чат с <b>@ITTarragonaadsbot</b>.</li><li>Нажмите «Запустить» или подтвердите вход в сообщении бота.</li><li>Нажмите кнопку перехода в кабинет в сообщении бота.</li></ol><button className="public-primary" disabled={busy || !sessionIsolated} onClick={() => void start()}>{!sessionIsolated ? "Разделяем сессии…" : busy ? "Открываем бота…" : "Подтвердить вход через Telegram"}<span>↗</span></button></>}{state === "waiting" && <><div className="login-waiting"><span>1</span><div><b>{intent.botUsername ? `Личный чат с @${intent.botUsername}` : "Вход подтверждён в Telegram"}</b><p>После ответа бота нажмите кнопку перехода в кабинет.</p></div></div>{intent.telegramAppUrl && <a className="public-primary" href={intent.telegramAppUrl}>Открыть личный чат в Telegram <span>↗</span></a>}{intent.botUrl && <a href={intent.botUrl} target="_blank" rel="noreferrer">Если приложение не открылось — открыть через t.me</a>}<div className="login-pulse"><i/>Ожидаем подтверждение…</div></>}{state === "two_factor" && <form onSubmit={finishTwoFactor}><p>Введите код подтверждения.</p><input autoFocus value={code} onChange={(event) => setCode(event.target.value.trim())} autoComplete="one-time-code" placeholder="000000" minLength={6} maxLength={12} required/><button className="public-primary" disabled={busy}>{busy ? "Проверяем…" : "Войти"}</button></form>}{state === "error" && <><p className="login-error">{error}</p><button onClick={() => { localStorage.removeItem("platformWebLoginIntent"); window.history.replaceState({}, "", platformOwner ? "/platform-login" : "/login"); setState("intro"); setIntent(undefined); }}>Начать заново</button></>}<aside><b>{platformOwner ? "Доступ владельца платформы" : "После регистрации"}</b><span>{platformOwner ? "Организации → сообщества → Stars → TON → выплаты → аудит" : "Организация → группа → права бота → правила и цена → запуск"}</span></aside></section></main>;
 }
 
 function Legal({ document }: { document?: SiteData["documents"][number] }) {
