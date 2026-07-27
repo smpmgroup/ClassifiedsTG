@@ -1308,6 +1308,7 @@ app.get("/api/platform/me", { preHandler: platformAuth }, async (req: any) => {
     where: { id: req.platformIdentity.userId },
     include: {
       organizations: {
+        where: { organization: { onboardingDraft: false } },
         include: {
           organization: {
             include: {
@@ -1582,22 +1583,149 @@ app.post(
   },
 );
 
+app.patch(
+  "/api/platform/organizations/:id",
+  { preHandler: platformAuth },
+  async (req: any) => {
+    const organizationId = String(req.params.id);
+    await organizationPlatformMembership(
+      organizationId,
+      req.platformIdentity.userId,
+      ["owner"],
+    );
+    const name = String(req.body?.name || "").trim().slice(0, 100);
+    if (name.length < 2)
+      throw new DomainError(
+        "ORGANIZATION_NAME_REQUIRED",
+        "Название должно содержать минимум 2 символа",
+      );
+    const updated = await prisma.organization.update({
+      where: { id: organizationId },
+      data: { name },
+    });
+    await prisma.auditEvent.create({
+      data: {
+        actorId: req.platformIdentity.userId,
+        scope: "organization_settings",
+        action: "organization_renamed",
+        targetType: "Organization",
+        targetId: organizationId,
+        metadata: { name },
+      },
+    });
+    return updated;
+  },
+);
+
+app.delete(
+  "/api/platform/organizations/:id",
+  { preHandler: platformAuth },
+  async (req: any) => {
+    const organizationId = String(req.params.id);
+    await organizationPlatformMembership(
+      organizationId,
+      req.platformIdentity.userId,
+      ["owner"],
+    );
+    if (String(req.body?.confirmation || "") !== "DELETE")
+      throw new DomainError(
+        "CONFIRMATION_REQUIRED",
+        "Введите DELETE для подтверждения",
+      );
+    const organization = await prisma.organization.findUniqueOrThrow({
+      where: { id: organizationId },
+      include: {
+        _count: {
+          select: {
+            communities: true,
+            ledgerAccounts: true,
+            ledgerTransactions: true,
+            payoutRequests: true,
+            stripeInvoices: true,
+          },
+        },
+      },
+    });
+    const containsProtectedData =
+      organization._count.communities > 0 ||
+      organization._count.ledgerAccounts > 0 ||
+      organization._count.ledgerTransactions > 0 ||
+      organization._count.payoutRequests > 0 ||
+      organization._count.stripeInvoices > 0 ||
+      ["active", "trialing"].includes(organization.subscriptionStatus) ||
+      organization.starsSubscriptionStatus === "active";
+    if (containsProtectedData)
+      throw new DomainError(
+        "ORGANIZATION_NOT_EMPTY",
+        "Сначала отключите и удалите сообщества. Организацию с финансовой историей удалить нельзя.",
+        409,
+      );
+    await prisma.$transaction(async (tx) => {
+      await tx.auditEvent.create({
+        data: {
+          actorId: req.platformIdentity.userId,
+          scope: "organization_settings",
+          action: "empty_organization_deleted",
+          targetType: "Organization",
+          targetId: organizationId,
+          metadata: { name: organization.name },
+        },
+      });
+      await tx.organization.delete({ where: { id: organizationId } });
+    });
+    return { deleted: true };
+  },
+);
+
 app.post(
   "/api/platform/connect-intents",
   { preHandler: platformAuth },
   async (req: any) => {
     await requireCurrentLegalAcceptance(req.platformIdentity.userId);
-    const organizationId = String(req.body?.organizationId || "");
-    const membership = await prisma.organizationMember.findUnique({
-      where: {
-        organizationId_userId: {
-          organizationId,
-          userId: req.platformIdentity.userId,
+    let organizationId = String(req.body?.organizationId || "");
+    if (organizationId) {
+      const membership = await prisma.organizationMember.findUnique({
+        where: {
+          organizationId_userId: {
+            organizationId,
+            userId: req.platformIdentity.userId,
+          },
         },
-      },
-    });
-    if (!membership || !["owner", "administrator"].includes(membership.role))
-      throw new DomainError("FORBIDDEN", "Недостаточно прав", 403);
+      });
+      if (!membership || !["owner", "administrator"].includes(membership.role))
+        throw new DomainError("FORBIDDEN", "Недостаточно прав", 403);
+    } else {
+      const existingDraft = await prisma.organizationMember.findFirst({
+        where: {
+          userId: req.platformIdentity.userId,
+          role: "owner",
+          organization: {
+            onboardingDraft: true,
+            communities: { none: {} },
+          },
+        },
+        include: { organization: true },
+        orderBy: { createdAt: "desc" },
+      });
+      const draft = existingDraft?.organization || await prisma.$transaction(async (tx) => {
+        const organization = await tx.organization.create({
+          data: {
+            name: "Новое сообщество",
+            slug: `onboarding-${crypto.randomBytes(6).toString("hex")}`,
+            onboardingDraft: true,
+          },
+        });
+        await tx.organizationMember.create({
+          data: {
+            organizationId: organization.id,
+            userId: req.platformIdentity.userId,
+            role: "owner",
+          },
+        });
+        return organization;
+      });
+      organizationId = draft.id;
+    }
     await prisma.communityConnectionIntent.updateMany({
       where: {
         requestedById: req.platformIdentity.userId,

@@ -245,7 +245,6 @@ function PlatformTwoFactorSecurity({ security, onChanged }: { security: any; onC
 function PlatformWorkspace({ platformAdminOnly = false }: { platformAdminOnly?: boolean }) {
   const [data, setData] = useState<any>();
   const [error, setError] = useState("");
-  const [organizationName, setOrganizationName] = useState("");
   const [busy, setBusy] = useState("");
   const load = () =>
     request("/platform/me")
@@ -254,28 +253,13 @@ function PlatformWorkspace({ platformAdminOnly = false }: { platformAdminOnly?: 
   useEffect(() => {
     void load();
   }, []);
-  const createOrganization = async (event: any) => {
-    event.preventDefault();
-    setBusy("organization");
-    setError("");
-    try {
-      await request("/platform/organizations", "POST", {
-        name: organizationName,
-      });
-      setOrganizationName("");
-      await load();
-    } catch (e: any) {
-      setError(e.message);
-    } finally {
-      setBusy("");
-    }
-  };
-  const connect = async (organizationId: string) => {
-    setBusy(organizationId);
+  const connect = async (organizationId?: string) => {
+    const busyKey = organizationId || "new-community";
+    setBusy(busyKey);
     setError("");
     try {
       const intent = await request("/platform/connect-intents", "POST", {
-        organizationId,
+        ...(organizationId ? { organizationId } : {}),
       });
       window.Telegram?.WebApp.openTelegramLink
         ? window.Telegram.WebApp.openTelegramLink(intent.addBotUrl)
@@ -351,20 +335,19 @@ function PlatformWorkspace({ platformAdminOnly = false }: { platformAdminOnly?: 
           <p>{activeCommunities.length
             ? "Здесь находятся подключения, коммерческие настройки, выплаты и состояние каждой доски."
             : "Выберите группу, добавьте @AdnectaBot администратором — остальные технические шаги платформа выполнит сама."}</p>
-          {!activeCommunities.length && firstManageableOrganization && (
+          {!activeCommunities.length && (
             <button
               className="primary owner-connect-action"
-              disabled={busy === firstManageableOrganization.id}
-              onClick={() => void connect(firstManageableOrganization.id)}
+              disabled={busy === (firstManageableOrganization?.id || "new-community")}
+              onClick={() => void connect(firstManageableOrganization?.id)}
             >
-              {busy === firstManageableOrganization.id ? "Открываем Telegram…" : "Подключить сообщество →"}
+              {busy === (firstManageableOrganization?.id || "new-community") ? "Открываем Telegram…" : "Подключить сообщество →"}
             </button>
           )}
-          {!data.organizations.length && <a className="primary owner-connect-action" href="#owner-communities">Создать кабинет →</a>}
         </div>
         <div className="owner-connect-steps" aria-label="Этапы подключения">
-          <span className={data.organizations.length ? "done" : "current"}><b>{data.organizations.length ? "✓" : "1"}</b><i>Кабинет владельца</i></span>
-          <span className={activeCommunities.length ? "done" : data.organizations.length ? "current" : ""}><b>{activeCommunities.length ? "✓" : "2"}</b><i>Выбор Telegram-группы</i></span>
+          <span className="done"><b>✓</b><i>Кабинет владельца</i></span>
+          <span className={activeCommunities.length ? "done" : "current"}><b>{activeCommunities.length ? "✓" : "2"}</b><i>Выбор Telegram-группы</i></span>
           <span className={readyCommunities ? "done" : activeCommunities.length ? "current" : ""}><b>{readyCommunities ? "✓" : "3"}</b><i>Правила и запуск</i></span>
         </div>
       </section>}
@@ -377,10 +360,10 @@ function PlatformWorkspace({ platformAdminOnly = false }: { platformAdminOnly?: 
             <article><b>{totalListings}</b><span>Объявлений</span></article>
           </div>
           <div className="owner-next-step">
-            <span>{!data.organizations.length ? "1" : !activeCommunities.length ? "2" : readyCommunities < activeCommunities.length ? "3" : "✓"}</span>
+            <span>{!activeCommunities.length ? "2" : readyCommunities < activeCommunities.length ? "3" : "✓"}</span>
             <div>
               <small>СЛЕДУЮЩИЙ ШАГ</small>
-              <b>{!data.organizations.length ? "Создайте рабочее пространство" : !activeCommunities.length ? "Добавьте @AdnectaBot в Telegram-группу" : readyCommunities < activeCommunities.length ? "Завершите правила и настройки доски" : "Доски готовы — следите за публикациями и Stars"}</b>
+              <b>{!activeCommunities.length ? "Добавьте @AdnectaBot в Telegram-группу" : readyCommunities < activeCommunities.length ? "Завершите правила и настройки доски" : "Доски готовы — следите за публикациями и Stars"}</b>
             </div>
           </div>
         </section>
@@ -396,6 +379,7 @@ function PlatformWorkspace({ platformAdminOnly = false }: { platformAdminOnly?: 
               </div>
               <span>{organization.role === "owner" ? "Владелец" : "Админ"}</span>
             </div>
+            {organization.role === "owner" && <OrganizationIdentitySettings organization={organization} onChanged={load} />}
             <div className="connected-boards">
               {organization.communities.map((community: any) => (
                 <CommunityOperations
@@ -459,22 +443,6 @@ function PlatformWorkspace({ platformAdminOnly = false }: { platformAdminOnly?: 
           </section>
         ))}
       </div>}
-      {!platformAdminOnly && !data.organizations.length && (
-        <form className="create-organization" onSubmit={createOrganization}>
-          <h2>Создайте организацию</h2>
-          <p>В ней будут храниться ваши сообщества и биллинг.</p>
-          <input
-            value={organizationName}
-            onChange={(event) => setOrganizationName(event.target.value)}
-            placeholder="Название организации"
-            required
-            minLength={2}
-          />
-          <button className="primary" disabled={busy === "organization"}>
-            {busy === "organization" ? "Создаём…" : "Продолжить"}
-          </button>
-        </form>
-      )}
       {!platformAdminOnly && ["platform_admin", "platform_owner"].includes(data.user.platformRole) && (
         <a className="platform-console-link" href="/platform-owner"><b>Перейти в кабинет владельца платформы</b><span>Организации, сообщества, Stars, выплаты и аудит →</span></a>
       )}
@@ -485,6 +453,82 @@ function PlatformWorkspace({ platformAdminOnly = false }: { platformAdminOnly?: 
       {platformAdminOnly && data.user.platformRole === "finance" && <PlatformFinancePanel />}
       {platformAdminOnly && !["platform_admin", "platform_owner", "support", "finance"].includes(data.user.platformRole) && <LoadError message="Этот отдельный кабинет доступен только владельцу и сотрудникам платформы." />}
     </main>
+  );
+}
+
+function OrganizationIdentitySettings({
+  organization,
+  onChanged,
+}: {
+  organization: any;
+  onChanged: () => Promise<any>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(organization.name);
+  const [busy, setBusy] = useState("");
+  const [error, setError] = useState("");
+  const rename = async (event: any) => {
+    event.preventDefault();
+    setBusy("rename");
+    setError("");
+    try {
+      await request(`/platform/organizations/${organization.id}`, "PATCH", {
+        name,
+      });
+      setEditing(false);
+      await onChanged();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy("");
+    }
+  };
+  const remove = async () => {
+    const confirmation = window.prompt(
+      "Удалить пустую запись без возможности восстановления? Введите DELETE:",
+    );
+    if (confirmation !== "DELETE") return;
+    setBusy("delete");
+    setError("");
+    try {
+      await request(`/platform/organizations/${organization.id}`, "DELETE", {
+        confirmation,
+      });
+      await onChanged();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy("");
+    }
+  };
+  return (
+    <div className="organization-identity-settings">
+      {editing ? (
+        <form onSubmit={rename}>
+          <label>
+            Название
+            <input
+              autoFocus
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              minLength={2}
+              maxLength={100}
+              required
+            />
+          </label>
+          <button className="primary" disabled={Boolean(busy)}>
+            {busy === "rename" ? "Сохраняем…" : "Сохранить"}
+          </button>
+          <button type="button" onClick={() => { setName(organization.name); setEditing(false); }}>Отмена</button>
+        </form>
+      ) : (
+        <div>
+          <button type="button" onClick={() => setEditing(true)}>✎ Переименовать</button>
+          {!organization.communities.length && <button type="button" className="danger-link" disabled={Boolean(busy)} onClick={() => void remove()}>{busy === "delete" ? "Удаляем…" : "Удалить пустую запись"}</button>}
+        </div>
+      )}
+      {error && <LoadError message={error} />}
+    </div>
   );
 }
 

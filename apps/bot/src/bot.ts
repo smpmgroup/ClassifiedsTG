@@ -273,6 +273,14 @@ async function claimCommunityConnection(ctx: any, rawToken: string) {
           fieldSchema: taxonomy.fields as any,
         },
       });
+    if (intent.organization.onboardingDraft)
+      await tx.organization.update({
+        where: { id: intent.organizationId },
+        data: {
+          name: ctx.chat.title || "Telegram-сообщество",
+          onboardingDraft: false,
+        },
+      });
     await tx.communityConnectionIntent.update({
       where: { id: intent.id },
       data: { status: "claimed", communityId: created.id },

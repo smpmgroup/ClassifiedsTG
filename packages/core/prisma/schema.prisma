@@ -216,6 +216,7 @@ model Organization {
   id String @id @default(cuid())
   name String
   slug String @unique
+  onboardingDraft Boolean @default(false)
   legalName String?
   billingEmail String?
   stripeCustomerId String? @unique
