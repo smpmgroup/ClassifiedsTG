@@ -17,6 +17,13 @@ async function alert(fingerprint: string, title: string, message: string, metada
   });
 }
 
+async function resolveAlert(fingerprint: string) {
+  await prisma.systemAlert.updateMany({
+    where: { fingerprint, status: "open" },
+    data: { status: "resolved", resolvedAt: new Date(), lastSeenAt: new Date() },
+  });
+}
+
 async function withLock(name: string, ttlMs: number, work: () => Promise<{ processed: number; details?: object }>) {
   const token = `${instanceId}:${Date.now()}`;
   const key = `board:job-lock:${name}`;
@@ -26,6 +33,7 @@ async function withLock(name: string, ttlMs: number, work: () => Promise<{ proce
   try {
     const result = await work();
     await prisma.jobRun.update({ where: { id: run.id }, data: { status: "succeeded", finishedAt: new Date(), durationMs: Date.now() - started, processedCount: result.processed, details: result.details || {} } });
+    await resolveAlert(`job:${name}`);
     lastSuccessAt = new Date();
   } catch (error) {
     const message = String((error as Error).message).slice(0, 1500);
@@ -62,6 +70,7 @@ async function retryNotifications() {
   const retry = await prisma.notification.updateMany({ where: { status: "failed", attempts: { lt: 5 }, updatedAt: { lte: stale } }, data: { status: "pending" } });
   const abandoned = await prisma.notification.count({ where: { status: "failed", attempts: { gte: 5 } } });
   if (abandoned) await alert("notifications:dead-letter", "Notifications require attention", `${abandoned} notifications exhausted all retries`, { abandoned });
+  else await resolveAlert("notifications:dead-letter");
   return { processed: retry.count, details: { deadLetter: abandoned } };
 }
 
