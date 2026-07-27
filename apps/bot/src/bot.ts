@@ -66,7 +66,7 @@ const publicBoard = (communitySlug: string) =>
   Markup.inlineKeyboard([
     Markup.button.url(
       "📋 Открыть доску объявлений",
-      `https://t.me/${botUsername}?startapp=community_${communitySlug}`,
+      `https://t.me/${botUsername}?start=community_${communitySlug}`,
     ),
   ]);
 const groupCommands = [
