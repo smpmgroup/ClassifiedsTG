@@ -924,6 +924,11 @@ app.post(
         role: result.role,
         locale: result.user.languageCode,
       },
+      community: {
+        id: community.id,
+        slug: community.slug,
+        name: community.name,
+      },
     };
   },
 );
@@ -3622,6 +3627,104 @@ app.get("/api/me", { preHandler: auth }, async (req: any) => {
     },
   };
 });
+app.get("/api/communities", { preHandler: auth }, async (req: any) => {
+  const memberships = await prisma.communityMember.findMany({
+    where: {
+      userId: req.identity.userId,
+      enforcementStatus: { not: "banned" },
+      community: {
+        isActive: true,
+        tenantStatus: { in: ["active", "onboarding"] },
+      },
+    },
+    include: { community: true },
+    orderBy: { community: { name: "asc" } },
+  });
+  return memberships.map(({ community, role }) => ({
+    id: community.id,
+    slug: community.slug,
+    name: community.name,
+    role,
+    current: community.id === req.identity.communityId,
+  }));
+});
+app.post(
+  "/api/auth/community/switch",
+  {
+    preHandler: auth,
+    config: { rateLimit: { max: 20, timeWindow: "1 minute" } },
+  },
+  async (req: any, reply) => {
+    const communityId = String(req.body?.communityId || "");
+    const membership = await prisma.communityMember.findUnique({
+      where: {
+        communityId_userId: {
+          communityId,
+          userId: req.identity.userId,
+        },
+      },
+      include: { community: true, user: true },
+    });
+    if (
+      !membership ||
+      membership.enforcementStatus === "banned" ||
+      !membership.community.isActive ||
+      !["active", "onboarding"].includes(membership.community.tenantStatus)
+    )
+      throw new DomainError(
+        "COMMUNITY_ACCESS_DENIED",
+        "Эта доска недоступна для вашего аккаунта",
+        403,
+      );
+    const telegramStatus = await telegramMembership(
+      config,
+      membership.community.telegramChatId,
+      Number(membership.user.telegramUserId),
+    );
+    const isMember = [
+      "creator",
+      "administrator",
+      "member",
+      "restricted",
+    ].includes(telegramStatus);
+    if (!isMember && !membership.community.allowPaidNonMembers)
+      throw new DomainError(
+        "NOT_GROUP_MEMBER",
+        "Вы больше не состоите в этом сообществе",
+        403,
+      );
+    await prisma.communityMember.update({
+      where: {
+        communityId_userId: {
+          communityId,
+          userId: req.identity.userId,
+        },
+      },
+      data: {
+        telegramMembershipStatus: telegramStatus as any,
+        membershipCheckedAt: new Date(),
+      },
+    });
+    const accessToken = await reply.jwtSign(
+      {
+        userId: req.identity.userId,
+        communityId,
+        role: membership.role,
+        telegramUserId: String(membership.user.telegramUserId),
+      },
+      { expiresIn: config.ACCESS_TOKEN_TTL_SECONDS },
+    );
+    return {
+      accessToken,
+      expiresIn: config.ACCESS_TOKEN_TTL_SECONDS,
+      community: {
+        id: membership.community.id,
+        slug: membership.community.slug,
+        name: membership.community.name,
+      },
+    };
+  },
+);
 app.get("/api/community/showcase", { preHandler: auth }, async (req: any) => {
   const [access, chat] = await Promise.all([
     publicationAccess(

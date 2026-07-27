@@ -20,6 +20,7 @@ import {
   logoutPlatformSession,
   request,
   setPlatformToken,
+  switchTenantCommunity,
 } from "./api";
 type Listing = {
   id: string;
@@ -67,9 +68,31 @@ export function App() {
   const publicPath = ["/login", "/platform-login", "/pricing", "/docs", "/terms", "/privacy", "/prohibited", "/support"].includes(pathName) ||
     pathName.startsWith("/login/") || pathName.startsWith("/platform-login/") ||
     (pathName === "/" && !platformMode && !new URLSearchParams(window.location.search).get("community") && !window.Telegram?.WebApp.initData);
+  const telegramInitData = window.Telegram?.WebApp.initData || "";
+  const launchCommunity = (
+    new URLSearchParams(window.location.search).get("community") ||
+    new URLSearchParams(window.location.search).get("tgWebAppStartParam") ||
+    new URLSearchParams(telegramInitData).get("start_param") ||
+    ""
+  ).replace(/^community_/, "");
+  const storedTenantCommunity =
+    sessionStorage.getItem("tenantCommunitySlug") || "";
+  const telegramTenantLaunchRequiresLogin =
+    !platformMode &&
+    Boolean(telegramInitData) &&
+    (!activateSession("tenant") ||
+      (Boolean(launchCommunity) &&
+        launchCommunity !== storedTenantCommunity));
   const [state, setState] = useState<
     "loading" | "ready" | "outside" | "denied" | "select" | "twoFactor" | "error"
-  >(activateSession(platformMode ? "platform" : "tenant") ? "ready" : "loading");
+  >(
+    telegramTenantLaunchRequiresLogin
+      ? "loading"
+      : activateSession(platformMode ? "platform" : "tenant")
+        ? "ready"
+        : "loading",
+  );
+  const [tenantRevision, setTenantRevision] = useState(0);
   const [invite, setInvite] = useState("");
   const [communityChoices, setCommunityChoices] = useState<any[]>([]);
   const [twoFactorChallenge, setTwoFactorChallenge] = useState("");
@@ -185,8 +208,18 @@ export function App() {
     );
   if (platformMode) return <PlatformWorkspace platformAdminOnly={platformAdminMode} />;
   return (
-    <Shell>
+    <Shell key={tenantRevision}>
       <ScrollToTop />
+      <CommunitySwitcher
+        onSwitched={(community) => {
+          const url = new URL(window.location.href);
+          url.pathname = "/";
+          url.search = "";
+          url.searchParams.set("community", community.slug);
+          window.history.replaceState({}, "", url);
+          setTenantRevision((current) => current + 1);
+        }}
+      />
       <Routes>
         <Route path="/" element={<Catalog />} />
         <Route path="/categories" element={<Categories />} />
@@ -211,6 +244,58 @@ export function App() {
         ))}
       </nav>
     </Shell>
+  );
+}
+
+function CommunitySwitcher({
+  onSwitched,
+}: {
+  onSwitched: (community: any) => void;
+}) {
+  const [communities, setCommunities] = useState<any[]>([]);
+  const [switching, setSwitching] = useState(false);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    request("/communities")
+      .then(setCommunities)
+      .catch(() => undefined);
+  }, []);
+  if (communities.length < 2) return null;
+  const current = communities.find((community) => community.current);
+  return (
+    <header className="tenant-community-switcher">
+      <label>
+        <span>Доска сообщества</span>
+        <select
+          aria-label="Переключить сообщество"
+          disabled={switching}
+          value={current?.id || ""}
+          onChange={async (event) => {
+            const target = communities.find(
+              (community) => community.id === event.target.value,
+            );
+            if (!target || target.current) return;
+            setSwitching(true);
+            setError("");
+            try {
+              await switchTenantCommunity(target.id);
+              onSwitched(target);
+            } catch (unknownError: any) {
+              setError(unknownError.message || "Не удалось переключить доску");
+              setSwitching(false);
+            }
+          }}
+        >
+          {communities.map((community) => (
+            <option value={community.id} key={community.id}>
+              {community.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      {switching && <small>Переключаем…</small>}
+      {error && <small className="switch-error">{error}</small>}
+    </header>
   );
 }
 

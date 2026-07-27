@@ -66,7 +66,7 @@ const publicBoard = (communitySlug: string) =>
   Markup.inlineKeyboard([
     Markup.button.url(
       "📋 Открыть доску объявлений",
-      `https://t.me/${botUsername}?start=community_${communitySlug}`,
+      `https://t.me/${botUsername}?startapp=community_${communitySlug}`,
     ),
   ]);
 const groupCommands = [
@@ -87,7 +87,7 @@ async function installGroupBoardEntry(
       console.warn("Unable to install group bot commands", error),
     );
   const entry = await ctx.reply(
-    `📋 Доска объявлений сообщества «${community.name}»\n\nПубликуйте и находите объявления участников в одном месте. Нажмите кнопку ниже, чтобы открыть доску.`,
+    `📋 Доска объявлений сообщества «${community.name}»\n\nПубликуйте и находите объявления участников в одном месте. Кнопка открывает доску сразу внутри Telegram — переходить в личный чат с ботом не нужно.`,
     publicBoard(community.slug),
   );
   const pinned = await ctx.telegram

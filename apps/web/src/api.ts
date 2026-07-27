@@ -48,6 +48,19 @@ export async function login(initData: string, community?: string) {
   });
   token = result.accessToken;
   sessionStorage.setItem("tenantToken", token!);
+  sessionStorage.setItem("tenantCommunitySlug", result.community.slug);
+  return result;
+}
+
+export async function switchTenantCommunity(communityId: string) {
+  const result = await api<any>("/auth/community/switch", {
+    method: "POST",
+    body: JSON.stringify({ communityId }),
+  });
+  token = result.accessToken;
+  sessionStorage.setItem("tenantToken", token!);
+  sessionStorage.setItem("token", token!);
+  sessionStorage.setItem("tenantCommunitySlug", result.community.slug);
   return result;
 }
 
