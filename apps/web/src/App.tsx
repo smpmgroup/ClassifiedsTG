@@ -292,10 +292,25 @@ function PlatformWorkspace({ platformAdminOnly = false }: { platformAdminOnly?: 
   if (missingLegal.length)
     return <LegalAcceptance documents={missingLegal} onAccepted={load} />;
   const ownerCommunities = data.organizations.flatMap((organization: any) => organization.communities || []);
-  const readyCommunities = ownerCommunities.filter((community: any) => community.setup?.ready).length;
+  const activeCommunities = ownerCommunities.filter(
+    (community: any) =>
+      community.tenantStatus === "active" &&
+      community.botIsAdministrator,
+  );
+  const readyCommunities = ownerCommunities.filter(
+    (community: any) =>
+      community.setup?.connected &&
+      community.setup?.administrator &&
+      community.setup?.permissions &&
+      community.setup?.rules,
+  ).length;
   const totalListings = ownerCommunities.reduce((sum: number, community: any) => sum + Number(community._count?.listings || 0), 0);
+  const firstManageableOrganization = data.organizations.find(
+    (organization: any) =>
+      ["owner", "administrator"].includes(organization.role),
+  );
   return (
-    <main className="platform-workspace">
+    <main className={`platform-workspace ${platformAdminOnly ? "service-owner-workspace" : "owner-workspace"}`}>
       <nav className="dashboard-nav">
         <a href="/"><span>AD</span><b>Adnecta</b></a>
         <div>{platformAdminOnly && <a href="/owner">Кабинет сообщества</a>}<a href="/docs">Инструкция</a><a href="/support">Поддержка</a><button onClick={() => { void logoutPlatformSession().finally(() => window.location.assign(platformAdminOnly ? "/platform-login" : "/login")); }}>Выйти</button></div>
@@ -323,35 +338,49 @@ function PlatformWorkspace({ platformAdminOnly = false }: { platformAdminOnly?: 
           <a href="#platform-team">Команда</a>
           <a href="#platform-support">Поддержка</a>
         </> : <>
-          <a href="#owner-start">Старт</a>
-          <a href="#owner-communities">Мои сообщества</a>
-          <a href="#owner-finance">Stars и выплаты</a>
-          <a href="#owner-support">Поддержка</a>
+          <a href="#owner-start"><span>⌂</span> Обзор</a>
+          <a href="#owner-communities"><span>▦</span> Сообщества</a>
+          <a href="#owner-finance"><span>★</span> Stars и выплаты</a>
+          <a href="#owner-support"><span>?</span> Поддержка</a>
         </>}
       </nav>
-      {!platformAdminOnly && <section className="platform-intro" id="owner-start">
-        <span>🧩</span>
-        <div>
-          <h2>Подключите Telegram-сообщество</h2>
-          <p>
-            Бот проверит ваши права администратора и создаст
-            отдельную защищённую доску.
-          </p>
+      {!platformAdminOnly && <section className={`owner-connect-hub ${activeCommunities.length ? "connected" : ""}`} id="owner-start">
+        <div className="owner-connect-copy">
+          <small>{activeCommunities.length ? "ADNECTA ПОДКЛЮЧЕНА" : "БЫСТРЫЙ ЗАПУСК · ОКОЛО 2 МИНУТ"}</small>
+          <h2>{activeCommunities.length ? "Ваши доски готовы к управлению" : "Подключите Telegram-сообщество"}</h2>
+          <p>{activeCommunities.length
+            ? "Здесь находятся подключения, коммерческие настройки, выплаты и состояние каждой доски."
+            : "Выберите группу, добавьте @AdnectaBot администратором — остальные технические шаги платформа выполнит сама."}</p>
+          {!activeCommunities.length && firstManageableOrganization && (
+            <button
+              className="primary owner-connect-action"
+              disabled={busy === firstManageableOrganization.id}
+              onClick={() => void connect(firstManageableOrganization.id)}
+            >
+              {busy === firstManageableOrganization.id ? "Открываем Telegram…" : "Подключить сообщество →"}
+            </button>
+          )}
+          {!data.organizations.length && <a className="primary owner-connect-action" href="#owner-communities">Создать кабинет →</a>}
+        </div>
+        <div className="owner-connect-steps" aria-label="Этапы подключения">
+          <span className={data.organizations.length ? "done" : "current"}><b>{data.organizations.length ? "✓" : "1"}</b><i>Кабинет владельца</i></span>
+          <span className={activeCommunities.length ? "done" : data.organizations.length ? "current" : ""}><b>{activeCommunities.length ? "✓" : "2"}</b><i>Выбор Telegram-группы</i></span>
+          <span className={readyCommunities ? "done" : activeCommunities.length ? "current" : ""}><b>{readyCommunities ? "✓" : "3"}</b><i>Правила и запуск</i></span>
         </div>
       </section>}
       {!platformAdminOnly && (
         <section className="owner-overview" aria-label="Сводка кабинета">
           <div className="owner-kpis">
-            <article><b>{data.organizations.length}</b><span>Организаций</span></article>
-            <article><b>{ownerCommunities.length}</b><span>Сообществ</span></article>
+            <article><b>{data.organizations.length}</b><span>Рабочих пространств</span></article>
+            <article><b>{activeCommunities.length}</b><span>Подключено групп</span></article>
             <article><b>{readyCommunities}</b><span>Готовы к работе</span></article>
             <article><b>{totalListings}</b><span>Объявлений</span></article>
           </div>
           <div className="owner-next-step">
-            <span>{!data.organizations.length ? "1" : !ownerCommunities.length ? "2" : readyCommunities < ownerCommunities.length ? "3" : "✓"}</span>
+            <span>{!data.organizations.length ? "1" : !activeCommunities.length ? "2" : readyCommunities < activeCommunities.length ? "3" : "✓"}</span>
             <div>
               <small>СЛЕДУЮЩИЙ ШАГ</small>
-              <b>{!data.organizations.length ? "Создайте первую организацию" : !ownerCommunities.length ? "Добавьте бота в Telegram-группу" : readyCommunities < ownerCommunities.length ? "Завершите настройку разрешений и правил" : "Доски готовы — следите за публикациями и Stars"}</b>
+              <b>{!data.organizations.length ? "Создайте рабочее пространство" : !activeCommunities.length ? "Добавьте @AdnectaBot в Telegram-группу" : readyCommunities < activeCommunities.length ? "Завершите правила и настройки доски" : "Доски готовы — следите за публикациями и Stars"}</b>
             </div>
           </div>
         </section>
@@ -362,7 +391,7 @@ function PlatformWorkspace({ platformAdminOnly = false }: { platformAdminOnly?: 
           <section className="organization-card" key={organization.id}>
             <div className="organization-title">
               <div>
-                <small>ОРГАНИЗАЦИЯ</small>
+                <small>РАБОЧЕЕ ПРОСТРАНСТВО · НЕ TELEGRAM-ПОДКЛЮЧЕНИЕ</small>
                 <h2>{organization.name}</h2>
               </div>
               <span>{organization.role === "owner" ? "Владелец" : "Админ"}</span>
@@ -378,13 +407,17 @@ function PlatformWorkspace({ platformAdminOnly = false }: { platformAdminOnly?: 
                 />
               ))}
               {!organization.communities.length && (
-                <p className="muted">Группы пока не подключены.</p>
+                <div className="owner-empty-community">
+                  <span>▦</span>
+                  <div><b>Telegram-группы не подключены</b><small>Рабочее пространство хранит настройки и финансы, но само по себе не является подключением.</small></div>
+                  {["owner", "administrator"].includes(organization.role) && <button className="primary" disabled={busy === organization.id} onClick={() => void connect(organization.id)}>{busy === organization.id ? "Открываем…" : "Подключить группу"}</button>}
+                </div>
               )}
             </div>
-            {organization.role === "owner" && (
+            {organization.role === "owner" && organization.communities.length > 0 && (
               <OwnerMonetization organization={organization} pricing={data.platformPricing} onChanged={load} />
             )}
-            <div id={organizationIndex === 0 ? "owner-finance" : undefined}><OrganizationFinance organizationId={organization.id} /></div>
+            {organization.communities.length > 0 && <div id={organizationIndex === 0 ? "owner-finance" : undefined}><OrganizationFinance organizationId={organization.id} /></div>}
             <div id={organizationIndex === 0 ? "owner-support" : undefined}><OrganizationSupport organization={organization} /></div>
             {organization.role === "owner" && (
               <button
@@ -412,7 +445,7 @@ function PlatformWorkspace({ platformAdminOnly = false }: { platformAdminOnly?: 
                 Передать права владельца
               </button>
             )}
-            <button
+            {organization.communities.length > 0 && <button
               className="primary connect-community"
               disabled={busy === organization.id}
               onClick={() => void connect(organization.id)}
@@ -422,7 +455,7 @@ function PlatformWorkspace({ platformAdminOnly = false }: { platformAdminOnly?: 
                 : organization.communities.some((community: any) => community.botStatus === "unavailable")
                   ? "＋ Подключить Adnecta к группе"
                   : "＋ Добавить Adnecta в группу"}
-            </button>
+            </button>}
           </section>
         ))}
       </div>}
@@ -663,7 +696,9 @@ function CommunityOperations({
             {setupItems.map(([done, label]) => <span key={String(label)} className={done ? "done" : ""}>{done ? "✓" : "·"} {label}</span>)}
           </div>
           <div className="community-numbers"><span>{community._count?.members || 0}<small>Участников</small></span><span>{community._count?.listings || 0}<small>Объявлений</small></span></div>
-          <a className="open-board-link" href={`/?community=${encodeURIComponent(community.slug)}`}>Открыть доску →</a>
+          {community.tenantStatus === "active" && setup.connected
+            ? <a className="open-board-link" href={`/?community=${encodeURIComponent(community.slug)}`}>Открыть доску →</a>
+            : <div className="community-reconnect-note"><b>Telegram-подключение отсутствует</b><small>Нажмите «Подключить Adnecta к группе» ниже и выберите эту же группу. Настройки и объявления сохранятся.</small></div>}
           {error && <LoadError message={error} />}
           {community.deletionScheduledFor && (
             <div className="deletion-warning">
@@ -676,7 +711,7 @@ function CommunityOperations({
             <div className="community-tools">
               <button disabled={Boolean(busy)} onClick={() => void run("check", `/platform/communities/${community.id}/connection-check`)}>{busy === "check" ? "Проверяем…" : "Проверить бота"}</button>
               <button disabled={Boolean(busy)} onClick={() => void exportData()}>{busy === "export" ? "Готовим…" : "Скачать экспорт"}</button>
-              {community.tenantStatus === "closed" ? (
+              {community.botStatus === "unavailable" ? null : community.tenantStatus === "closed" ? (
                 <button className="primary" disabled={Boolean(busy)} onClick={() => void run("reconnect", `/platform/communities/${community.id}/reconnect`)}>Включить снова</button>
               ) : (
                 <button className="danger-soft" disabled={Boolean(busy)} onClick={() => {
