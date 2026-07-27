@@ -51,6 +51,10 @@ const stripe = config.STRIPE_SECRET_KEY
   : null;
 const redis = new Redis(config.REDIS_URL, { maxRetriesPerRequest: 2 });
 const app = Fastify({
+  // Production traffic reaches the API through Caddy and the internal Nginx
+  // proxy. Trust their forwarded chain so rate limits are per visitor instead
+  // of accidentally shared by every user under the proxy container address.
+  trustProxy: config.NODE_ENV === "production",
   logger: {
     level: process.env.LOG_LEVEL || "info",
     redact: [
@@ -982,26 +986,13 @@ app.post(
     const user = await prisma.user.findUniqueOrThrow({ where: { id: intent.userId } });
     if (user.status !== "active")
       throw new DomainError("ACCESS_DENIED", "Доступ ограничен", 403);
-    let result: Record<string, unknown>;
-    if (false && user.platformRole !== "user" && user.totpEnabledAt) {
-      result = {
-        status: "two_factor",
-        requiresTwoFactor: true,
-        challengeToken: await reply.jwtSign(
-          { scope: "platform_2fa", userId: user.id, nonce: crypto.randomUUID() },
-          { expiresIn: 300 },
-        ),
-        expiresIn: 300,
-      };
-    } else {
-      result = {
-        status: "complete",
-        accessToken: await reply.jwtSign(platformSessionPayload(user, false), {
-          expiresIn: config.ACCESS_TOKEN_TTL_SECONDS,
-        }),
+    const result: Record<string, unknown> = {
+      status: "complete",
+      accessToken: await reply.jwtSign(platformSessionPayload(user, false), {
         expiresIn: config.ACCESS_TOKEN_TTL_SECONDS,
-      };
-    }
+      }),
+      expiresIn: config.ACCESS_TOKEN_TTL_SECONDS,
+    };
     await Promise.all([
       redis.set(cacheKey, JSON.stringify(result), "EX", 90),
       prisma.auditEvent.create({ data: {
@@ -1030,16 +1021,14 @@ app.get(
     const user = await prisma.user.findUnique({ where: { id: intent.userId } });
     if (!user || user.status !== "active" || user.platformRole !== "platform_owner")
       return reply.redirect("/platform-login?error=denied");
-    if (intent.status === "claimed") {
-      const consumed = await prisma.webLoginIntent.updateMany({
-        where: { id: intent.id, status: "claimed", expiresAt: { gt: new Date() } },
-        data: { status: "consumed", consumedAt: new Date() },
-      });
-      if (consumed.count !== 1)
-        return reply.redirect("/platform-login?error=used");
-    } else if (intent.status !== "consumed") {
+    if (intent.status !== "claimed")
       return reply.redirect("/platform-login?error=used");
-    }
+    const consumed = await prisma.webLoginIntent.updateMany({
+      where: { id: intent.id, status: "claimed", expiresAt: { gt: new Date() } },
+      data: { status: "consumed", consumedAt: new Date() },
+    });
+    if (consumed.count !== 1)
+      return reply.redirect("/platform-login?error=used");
     const accessToken = await reply.jwtSign(platformSessionPayload(user, false), {
       expiresIn: config.ACCESS_TOKEN_TTL_SECONDS,
     });
@@ -1151,18 +1140,6 @@ app.post(
       "EX",
       config.TELEGRAM_INIT_DATA_MAX_AGE_SECONDS,
     );
-    if (false && user.platformRole !== "user" && user.totpEnabledAt) {
-      const challengeToken = await reply.jwtSign(
-        { scope: "platform_2fa", userId: user.id, nonce: crypto.randomUUID() },
-        { expiresIn: 300 },
-      );
-      return {
-        requiresTwoFactor: true,
-        challengeToken,
-        expiresIn: 300,
-        user: { id: user.id, firstName: user.firstName, username: user.username, platformRole: user.platformRole },
-      };
-    }
     const accessToken = await reply.jwtSign(platformSessionPayload(user, false), {
       expiresIn: config.ACCESS_TOKEN_TTL_SECONDS,
     });

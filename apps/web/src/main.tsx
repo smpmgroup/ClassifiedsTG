@@ -7,6 +7,7 @@ import "./wizard.css";
 import "./admin.css";
 import "./public.css";
 import "./legal.css";
+import "./enhancements.css";
 import { App } from "./App";
 declare global {
   interface Window {

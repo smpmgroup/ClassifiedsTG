@@ -927,8 +927,47 @@ nav .active {
 .dashboard-nav > div { display: flex; align-items: center; gap: 18px; }
 .dashboard-nav > div a { color: inherit; text-decoration: none; }
 .dashboard-nav button { border: 0; background: transparent; color: #a23b35; cursor: pointer; }
+.workspace-nav {
+  position: sticky;
+  top: 10px;
+  z-index: 20;
+  display: flex;
+  gap: 7px;
+  margin: 0 0 26px;
+  padding: 8px;
+  overflow-x: auto;
+  border: 1px solid #dce7e1;
+  border-radius: 16px;
+  background: color-mix(in srgb, #f8faf8 92%, transparent);
+  box-shadow: 0 12px 32px rgba(25, 61, 43, .08);
+  backdrop-filter: blur(16px);
+  scrollbar-width: none;
+}
+.workspace-nav::-webkit-scrollbar { display: none; }
+.workspace-nav a {
+  flex: 0 0 auto;
+  padding: 10px 13px;
+  border-radius: 11px;
+  color: #52645a;
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 750;
+}
+.workspace-nav a:first-child,
+.workspace-nav a:hover {
+  background: #e1f3e9;
+  color: #116c40;
+}
+.platform-workspace [id] { scroll-margin-top: 90px; }
 @media (max-width: 620px) {
   .dashboard-nav > div a { display: none; }
+  .platform-workspace { padding-top: 16px; }
+  .dashboard-nav { margin-bottom: 20px; }
+  .workspace-nav {
+    top: 6px;
+    margin-inline: -8px;
+    border-radius: 13px;
+  }
 }
 .platform-header {
   align-items: flex-start;
@@ -1454,6 +1493,24 @@ nav .active {
   margin-top: 24px;
   padding-top: 24px;
   border-top: 1px solid color-mix(in srgb, var(--tg-theme-hint-color, #748078) 25%, transparent);
+}
+.platform-admin > h3 {
+  margin: 34px 0 13px;
+  padding-top: 4px;
+  font-size: 19px;
+}
+.platform-admin .platform-metrics {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.platform-admin .platform-metrics div {
+  min-height: 112px;
+  align-content: center;
+  border: 1px solid #dfebe4;
+  background: linear-gradient(145deg, #fff, #f0f8f3);
+}
+.platform-admin .platform-metrics b { font-size: 27px; }
+@media (max-width: 760px) {
+  .platform-admin .platform-metrics { grid-template-columns: 1fr 1fr; }
 }
 .platform-admin h2 {
   margin: 5px 0 16px;

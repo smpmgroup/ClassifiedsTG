@@ -291,6 +291,9 @@ function PlatformWorkspace({ platformAdminOnly = false }: { platformAdminOnly?: 
   const missingLegal = data.legalDocuments?.filter((document: any) => !document.accepted) || [];
   if (missingLegal.length)
     return <LegalAcceptance documents={missingLegal} onAccepted={load} />;
+  const ownerCommunities = data.organizations.flatMap((organization: any) => organization.communities || []);
+  const readyCommunities = ownerCommunities.filter((community: any) => community.setup?.ready).length;
+  const totalListings = ownerCommunities.reduce((sum: number, community: any) => sum + Number(community._count?.listings || 0), 0);
   return (
     <main className="platform-workspace">
       <nav className="dashboard-nav">
@@ -310,7 +313,23 @@ function PlatformWorkspace({ platformAdminOnly = false }: { platformAdminOnly?: 
           {data.user.firstName?.charAt(0).toUpperCase() || "U"}
         </div>
       </header>
-      {!platformAdminOnly && <section className="platform-intro">
+      <nav className="workspace-nav" aria-label={platformAdminOnly ? "Разделы платформы" : "Разделы кабинета"}>
+        {platformAdminOnly ? <>
+          <a href="#platform-overview">Обзор</a>
+          <a href="#platform-settings">Настройки</a>
+          <a href="#platform-health">Система</a>
+          <a href="#platform-finance">Финансы</a>
+          <a href="#platform-communities">Сообщества</a>
+          <a href="#platform-team">Команда</a>
+          <a href="#platform-support">Поддержка</a>
+        </> : <>
+          <a href="#owner-start">Старт</a>
+          <a href="#owner-communities">Мои сообщества</a>
+          <a href="#owner-finance">Stars и выплаты</a>
+          <a href="#owner-support">Поддержка</a>
+        </>}
+      </nav>
+      {!platformAdminOnly && <section className="platform-intro" id="owner-start">
         <span>🧩</span>
         <div>
           <h2>Подключите Telegram-сообщество</h2>
@@ -320,9 +339,26 @@ function PlatformWorkspace({ platformAdminOnly = false }: { platformAdminOnly?: 
           </p>
         </div>
       </section>}
+      {!platformAdminOnly && (
+        <section className="owner-overview" aria-label="Сводка кабинета">
+          <div className="owner-kpis">
+            <article><b>{data.organizations.length}</b><span>Организаций</span></article>
+            <article><b>{ownerCommunities.length}</b><span>Сообществ</span></article>
+            <article><b>{readyCommunities}</b><span>Готовы к работе</span></article>
+            <article><b>{totalListings}</b><span>Объявлений</span></article>
+          </div>
+          <div className="owner-next-step">
+            <span>{!data.organizations.length ? "1" : !ownerCommunities.length ? "2" : readyCommunities < ownerCommunities.length ? "3" : "✓"}</span>
+            <div>
+              <small>СЛЕДУЮЩИЙ ШАГ</small>
+              <b>{!data.organizations.length ? "Создайте первую организацию" : !ownerCommunities.length ? "Добавьте бота в Telegram-группу" : readyCommunities < ownerCommunities.length ? "Завершите настройку разрешений и правил" : "Доски готовы — следите за публикациями и Stars"}</b>
+            </div>
+          </div>
+        </section>
+      )}
       {error && <LoadError message={error} />}
-      {!platformAdminOnly && <div className="organization-list">
-        {data.organizations.map((organization: any) => (
+      {!platformAdminOnly && <div className="organization-list" id="owner-communities">
+        {data.organizations.map((organization: any, organizationIndex: number) => (
           <section className="organization-card" key={organization.id}>
             <div className="organization-title">
               <div>
@@ -348,8 +384,8 @@ function PlatformWorkspace({ platformAdminOnly = false }: { platformAdminOnly?: 
             {organization.role === "owner" && (
               <OwnerMonetization organization={organization} pricing={data.platformPricing} onChanged={load} />
             )}
-            <OrganizationFinance organizationId={organization.id} />
-            <OrganizationSupport organization={organization} />
+            <div id={organizationIndex === 0 ? "owner-finance" : undefined}><OrganizationFinance organizationId={organization.id} /></div>
+            <div id={organizationIndex === 0 ? "owner-support" : undefined}><OrganizationSupport organization={organization} /></div>
             {organization.role === "owner" && (
               <button
                 type="button"
@@ -914,6 +950,7 @@ function PlatformOwnerPanel({ canEdit }: { canEdit: boolean }) {
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [tonRate, setTonRate] = useState<any>();
+  const [lastLoadedAt, setLastLoadedAt] = useState<Date>();
   const load = async () => {
     const [summary, tenantItems, ledgerItems, payoutItems, reliabilityStatus, rate] = await Promise.all([
       request("/platform/admin/overview"),
@@ -934,6 +971,7 @@ function PlatformOwnerPanel({ canEdit }: { canEdit: boolean }) {
     setPayouts(payoutItems);
     setReliability(reliabilityStatus);
     setTonRate(rate);
+    setLastLoadedAt(new Date());
   };
   useEffect(() => {
     void load().catch((e) => setMessage(e.message));
@@ -1023,12 +1061,12 @@ function PlatformOwnerPanel({ canEdit }: { canEdit: boolean }) {
       setBusy(false);
     }
   };
-  if (!overview) return <section className="platform-admin"><p>Загружаем панель платформы…</p></section>;
+  if (!overview) return <section className="platform-admin">{message ? <><LoadError message={message}/><button className="primary" onClick={() => { setMessage(""); void load().catch((e) => setMessage(e.message)); }}>Повторить загрузку</button></> : <p>Загружаем панель платформы…</p>}</section>;
   const metrics = overview.metrics;
   return (
-    <section className="platform-admin">
+    <section className="platform-admin" id="platform-overview">
       <small>УПРАВЛЕНИЕ SAAS</small>
-      <h2>Панель владельца платформы</h2>
+      <div className="platform-title-row"><div><h2>Панель владельца платформы</h2>{lastLoadedAt && <small>Обновлено {lastLoadedAt.toLocaleTimeString("ru", { hour: "2-digit", minute: "2-digit" })}</small>}</div><button disabled={busy} onClick={() => void load().catch((e) => setMessage(e.message))}>↻ Обновить</button></div>
       <div className="platform-console-link">
         <b>Режимы проверки</b>
         <span><a href="/platform-owner">Платформа</a> · <a href="/owner">Владелец сообщества</a></span>
@@ -1047,7 +1085,7 @@ function PlatformOwnerPanel({ canEdit }: { canEdit: boolean }) {
       </div>
       {tonRate && <p className="platform-message">Расчётный курс: 1 ⭐ = ${tonRate.starUsd}; TON/USD ${tonRate.tonUsd?.toFixed(4) || "недоступен"} · {tonRate.source} · обновлено {new Date(tonRate.updatedAt).toLocaleString("ru")}. Фактическая выплата фиксируется отдельно.</p>}
       {canEdit && (
-        <form className="platform-settings" onSubmit={save}>
+        <form className="platform-settings" id="platform-settings" onSubmit={save}>
           <label>
             Минимальная цена публикации, Stars
             <input type="number" min="1" max="100000" value={minimumStars} onChange={(e) => setMinimumStars(Number(e.target.value))} />
@@ -1075,14 +1113,14 @@ function PlatformOwnerPanel({ canEdit }: { canEdit: boolean }) {
         </form>
       )}
       {message && <p className="platform-message">{message}</p>}
-      <h3>Надёжность системы</h3>
+      <h3 id="platform-health">Надёжность системы</h3>
       <div className="platform-tenants">
         {reliability?.jobs.map((job: any) => <div key={job.jobName}><span><b>{job.jobName}</b><small>{job.status} · обработано {job.processedCount} · {job.durationMs ?? 0} мс</small></span><time>{new Date(job.startedAt).toLocaleString("ru")}</time></div>)}
         {!reliability?.jobs.length && <p className="muted">Планировщик запускается…</p>}
       </div>
       {reliability && <p className="platform-message">Уведомления в очереди: {reliability.notifications.pending} · dead-letter: {reliability.notifications.deadLetter} · открытых алертов: {reliability.alerts.length}</p>}
       <PlatformLegalManagement canEdit={canEdit} />
-      <div className="platform-stars-tools">
+      <div className="platform-stars-tools" id="platform-finance">
         <span>
           <b>Сверка Telegram Stars</b>
           <small>Сопоставляет баланс Telegram с внутренним журналом и разблокирует созревшие начисления.</small>
@@ -1109,7 +1147,7 @@ function PlatformOwnerPanel({ canEdit }: { canEdit: boolean }) {
         ))}
         {!ledger.length && <p className="muted">Операций пока нет.</p>}
       </div>
-      <h3>Сообщества</h3>
+      <h3 id="platform-communities">Сообщества</h3>
       <div className="platform-tenants">
         {communities.map((community) => (
           <div key={community.id}>
@@ -1124,8 +1162,8 @@ function PlatformOwnerPanel({ canEdit }: { canEdit: boolean }) {
           </div>
         ))}
       </div>
-      <PlatformStaffManagement canEdit={canEdit} />
-      <PlatformSupportPanel />
+      <div id="platform-team"><PlatformStaffManagement canEdit={canEdit} /></div>
+      <div id="platform-support"><PlatformSupportPanel /></div>
     </section>
   );
 }
@@ -1858,18 +1896,33 @@ function Create() {
 }
 function Favorites() {
   const [data, setData] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   useEffect(() => {
-    request("/my/favorites").then(setData);
+    request("/my/favorites")
+      .then(setData)
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
   }, []);
   return (
     <section className="page">
       <h1>Избранное</h1>
-      {data.length ? (
-        data.map((x) => <p>{x.listing.title}</p>)
+      <p className="hint">Сохранённые объявления доступны только внутри этого сообщества.</p>
+      {error && <LoadError message={error} />}
+      {loading ? <div className="skeleton hero" /> : data.length ? (
+        <div className="favorite-list">{data.map((x) => (
+          <NavLink key={x.id} to={`/listings/${x.listing.id}`}>
+            <span className="favorite-icon">{x.listing.category?.icon || "📌"}</span>
+            <span><b>{x.listing.title}</b><small>{x.listing.category?.name || "Объявление"}{x.listing.locationText ? ` · ${x.listing.locationText}` : ""}</small></span>
+            <strong>{x.listing.price ? `${x.listing.price} ${x.listing.currency || "EUR"}` : "По договорённости"}</strong>
+          </NavLink>
+        ))}</div>
       ) : (
         <div className="empty">
           <span>♡</span>
           <h3>Здесь будут избранные объявления</h3>
+          <p>Нажмите на сердечко в карточке объявления, чтобы быстро вернуться к нему позже.</p>
+          <NavLink className="primary" to="/">Посмотреть объявления</NavLink>
         </div>
       )}
     </section>
