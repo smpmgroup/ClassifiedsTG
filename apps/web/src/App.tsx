@@ -419,7 +419,9 @@ function PlatformWorkspace({ platformAdminOnly = false }: { platformAdminOnly?: 
             >
               {busy === organization.id
                 ? "Создаём ссылку…"
-                : "＋ Добавить бота в группу"}
+                : organization.communities.some((community: any) => community.botStatus === "unavailable")
+                  ? "＋ Подключить Adnecta к группе"
+                  : "＋ Добавить Adnecta в группу"}
             </button>
           </section>
         ))}
@@ -643,7 +645,13 @@ function CommunityOperations({
         <span>
           <b>{community.name}</b>
           <small className={community.tenantStatus === "active" ? "status-active" : "status-warning"}>
-            {community.tenantStatus === "active" ? "● Работает" : community.tenantStatus === "closed" ? "● Отключено" : "● Требует внимания"}
+            {community.tenantStatus === "active"
+              ? "● Работает"
+              : community.botStatus === "unavailable"
+                ? "● Adnecta не подключена"
+                : community.tenantStatus === "closed"
+                  ? "● Отключено"
+                  : "● Требует подключения"}
           </small>
         </span>
         <i>{expanded ? "−" : "+"}</i>
