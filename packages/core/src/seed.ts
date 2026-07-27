@@ -17,7 +17,7 @@ async function seed() {
     update: {},
     create: {
       telegramChatId,
-      name: process.env.APP_NAME || "Community Board",
+      name: process.env.APP_NAME || "Adnecta",
       slug: "main",
       inviteUrl:
         process.env.TELEGRAM_GROUP_INVITE_URL || "https://t.me/example",

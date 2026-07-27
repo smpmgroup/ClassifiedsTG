@@ -297,12 +297,12 @@ function PlatformWorkspace({ platformAdminOnly = false }: { platformAdminOnly?: 
   return (
     <main className="platform-workspace">
       <nav className="dashboard-nav">
-        <a href="/"><span>CB</span><b>Community Board</b></a>
+        <a href="/"><span>AD</span><b>Adnecta</b></a>
         <div>{platformAdminOnly && <a href="/owner">Кабинет сообщества</a>}<a href="/docs">Инструкция</a><a href="/support">Поддержка</a><button onClick={() => { void logoutPlatformSession().finally(() => window.location.assign(platformAdminOnly ? "/platform-login" : "/login")); }}>Выйти</button></div>
       </nav>
       <header className="platform-header">
         <div>
-          <small>COMMUNITY BOARD SAAS</small>
+          <small>ADNECTA PLATFORM</small>
           <h1>{platformAdminOnly ? "Кабинет владельца платформы" : "Кабинет владельца"}</h1>
           <p>
             {data.user.firstName}
@@ -1190,7 +1190,7 @@ function Shell({ children }: { children: any }) {
 function Message({ text, actions }: { text: string; actions?: any }) {
   return (
     <main className="message">
-      <div className="logo">CB</div>
+      <div className="logo">AD</div>
       <h2>{text}</h2>
       <div className="actions">{actions}</div>
     </main>

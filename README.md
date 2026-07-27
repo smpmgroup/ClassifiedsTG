@@ -1,6 +1,6 @@
-# Community Board for Telegram
+# Adnecta
 
-Production-oriented classifieds board for a Telegram community: a mobile-first Mini App, verified Telegram authentication and group membership, moderated listing workflow, favorites, reports, administration and a separate notification/moderation bot.
+Marketplace infrastructure for Telegram communities: a mobile-first Mini App, verified Telegram authentication and group membership, moderated listing workflow, favorites, reports, administration and a separate notification/moderation bot.
 
 The original MIT-licensed contest project is preserved in Git history. Its product ideas and Telegram image option were retained; the unsafe CouchDB/shared-request identity and obsolete CRA runtime were replaced with Fastify, Prisma/PostgreSQL, Redis and Vite/React. See [initial audit](docs/INITIAL_AUDIT.md) and [architecture](docs/ARCHITECTURE.md).
 

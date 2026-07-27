@@ -1118,6 +1118,67 @@ bot.on("my_chat_member", async (ctx) => {
   });
 });
 const timer = setInterval(() => void poll(), 5000);
+const botProfileSetup = await Promise.allSettled([
+  bot.telegram.setMyName("Adnecta"),
+  bot.telegram.setMyDescription(
+    "Adnecta turns Telegram communities into trusted marketplaces with moderation, activity rules and Stars payments.",
+  ),
+  bot.telegram.setMyDescription(
+    "Adnecta превращает Telegram-сообщества в удобные доски объявлений с модерацией, правилами активности и оплатой в Stars.",
+    "ru",
+  ),
+  bot.telegram.setMyDescription(
+    "Adnecta turns Telegram communities into trusted marketplaces with moderation, activity rules and Stars payments.",
+    "en",
+  ),
+  bot.telegram.setMyDescription(
+    "Adnecta convierte comunidades de Telegram en marketplaces con moderación, reglas de actividad y pagos con Stars.",
+    "es",
+  ),
+  bot.telegram.setMyShortDescription(
+    "The marketplace for your Telegram community.",
+  ),
+  bot.telegram.setMyShortDescription(
+    "Доска объявлений вашего Telegram-сообщества.",
+    "ru",
+  ),
+  bot.telegram.setMyShortDescription(
+    "The marketplace for your Telegram community.",
+    "en",
+  ),
+  bot.telegram.setMyShortDescription(
+    "El marketplace de tu comunidad de Telegram.",
+    "es",
+  ),
+  bot.telegram.setChatMenuButton({
+    menuButton: {
+      type: "web_app",
+      text: "Открыть Adnecta",
+      web_app: { url: appUrl },
+    },
+  }),
+  bot.telegram.setMyDefaultAdministratorRights({
+    forChannels: false,
+    rights: {
+      is_anonymous: false,
+      can_manage_chat: true,
+      can_delete_messages: true,
+      can_manage_video_chats: false,
+      can_restrict_members: true,
+      can_promote_members: false,
+      can_change_info: false,
+      can_invite_users: true,
+      can_post_stories: false,
+      can_edit_stories: false,
+      can_delete_stories: false,
+      can_pin_messages: true,
+      can_manage_topics: false,
+    },
+  }),
+]);
+for (const result of botProfileSetup)
+  if (result.status === "rejected")
+    console.warn("Unable to apply an Adnecta bot profile setting", result.reason);
 await bot.telegram.setMyCommands([
   { command: "board", description: "Открыть доску объявлений" },
   { command: "myads", description: "Мои объявления" },

@@ -1,4 +1,4 @@
-# Community Board SaaS roadmap
+# Adnecta SaaS roadmap
 
 ## Product model
 

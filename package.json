@@ -1,5 +1,5 @@
 {
-  "name": "community-board",
+  "name": "adnecta",
   "version": "2.0.0",
   "private": true,
   "workspaces": ["apps/*", "packages/*"],

@@ -385,7 +385,7 @@ model OrganizationMember {
 
 model PlatformSetting {
   id String @id @default("global")
-  platformName String @default("Community Board")
+  platformName String @default("Adnecta")
   minimumPublicationStars Int @default(100)
   defaultCommissionBps Int @default(1500)
   freeBoardSubscriptionStars Int @default(750)

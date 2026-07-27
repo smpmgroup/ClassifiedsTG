@@ -171,7 +171,7 @@ await app.register(multipart, {
   },
 });
 await app.register(swagger, {
-  openapi: { info: { title: "Community Board API", version: "2.0.0" } },
+  openapi: { info: { title: "Adnecta API", version: "2.0.0" } },
 });
 await app.register(swaggerUi, { routePrefix: "/docs" });
 await fs.mkdir(config.UPLOAD_DIR, { recursive: true });
@@ -1519,7 +1519,7 @@ app.post(
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          title: "Бесплатная доска Community Board",
+          title: "Бесплатная доска Adnecta",
           description: "Подписка владельца: бесплатные публикации для всех участников",
           payload,
           currency: "XTR",

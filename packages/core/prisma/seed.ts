@@ -8,7 +8,7 @@ async function main() {
   const chatId = BigInt(process.env.TELEGRAM_GROUP_ID || '-1000000000000');
   const community = await db.community.upsert({
     where: { telegramChatId: chatId }, update: {},
-    create: { telegramChatId: chatId, name: process.env.APP_NAME || 'Community Board', slug: 'main', inviteUrl: process.env.TELEGRAM_GROUP_INVITE_URL || 'https://t.me/example' },
+    create: { telegramChatId: chatId, name: process.env.APP_NAME || 'Adnecta', slug: 'main', inviteUrl: process.env.TELEGRAM_GROUP_INVITE_URL || 'https://t.me/example' },
   });
   for (const [index, name] of categories.entries()) await db.category.upsert({
     where: { communityId_slug: { communityId: community.id, slug: slug(name, index) } }, update: {},
