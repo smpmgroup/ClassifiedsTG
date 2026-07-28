@@ -270,6 +270,19 @@ try {
   expectStatus("moderator queue request", moderationBefore.status, 200);
   if (moderationBefore.body.some((item: any) => item.id === pendingB.id)) throw new Error("moderation queue crossed tenant boundary");
   checks.push("moderation queue is tenant isolated");
+  const webAdminOwn = await request("/api/admin/dashboard", platformA, {
+    headers: { "x-community-id": communityA.id },
+  });
+  expectStatus("web community administrator reaches own dashboard", webAdminOwn.status, 200);
+  expectStatus(
+    "web community administrator cannot select another tenant",
+    (
+      await request("/api/admin/dashboard", platformA, {
+        headers: { "x-community-id": communityB.id },
+      })
+    ).status,
+    403,
+  );
 
   expectStatus("free active member submits listing", (await request(`/api/listings/${draftA.id}/transition`, memberA, { method: "POST", body: JSON.stringify({ status: "pending" }) })).status, 200);
   expectStatus("tenant moderator publishes listing", (await request(`/api/admin/listings/${draftA.id}/transition`, moderatorA, { method: "POST", body: JSON.stringify({ status: "published" }) })).status, 200);

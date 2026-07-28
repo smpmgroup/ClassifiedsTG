@@ -106,7 +106,7 @@ function Footer() {
   return (
     <footer className="public-footer">
       <div>
-        <b>Adnecta</b>
+        <b>Adnecta 2.0</b>
         <span>Marketplace for every community.</span>
       </div>
       <nav>
@@ -364,10 +364,11 @@ function Docs({ data }: { data: SiteData }) {
         <article>
           <b>1</b>
           <div>
-            <h2>Создайте кабинет владельца</h2>
+            <h2>Создайте кабинет администратора</h2>
             <p>
-              Подтвердите Telegram ID через бота. В кабинете владельца находятся
-              подключение групп, коммерческая модель, Stars и выплаты.
+              Подтвердите Telegram ID через бота. В кабинете администратора
+              находятся подключение групп, модерация, настройки, Stars и
+              выплаты.
             </p>
           </div>
         </article>

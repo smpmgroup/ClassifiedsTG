@@ -785,7 +785,9 @@ function PlatformWorkspace({
     "";
   const administrationTabs = new Set([
     "moderation",
+    "reports",
     "users",
+    "categories",
     "risk",
     "settings",
     "audit",
@@ -863,8 +865,14 @@ function PlatformWorkspace({
             <a href="/owner?tab=moderation">
               <span>✓</span> Модерация
             </a>
+            <a href="/owner?tab=reports">
+              <span>!</span> Жалобы
+            </a>
             <a href="/owner?tab=users">
               <span>♙</span> Люди
+            </a>
+            <a href="/owner?tab=categories">
+              <span>▦</span> Категории
             </a>
             <a href="/owner?tab=settings">
               <span>⚙</span> Настройки
@@ -941,8 +949,8 @@ function PlatformWorkspace({
         <section className="owner-overview" aria-label="Сводка кабинета">
           <div className="owner-kpis">
             <article>
-              <b>{data.organizations.length}</b>
-              <span>{t("workspaces")}</span>
+              <b>{ownerCommunities.length}</b>
+              <span>Всего сообществ</span>
             </article>
             <article>
               <b>{activeCommunities.length}</b>
@@ -974,6 +982,33 @@ function PlatformWorkspace({
                     ? t("finishBoardSettings")
                     : t("boardsReadyNext")}
               </b>
+            </div>
+          </div>
+          <div className="owner-control-center">
+            <header>
+              <div>
+                <small>ЦЕНТР УПРАВЛЕНИЯ</small>
+                <h2>Что нужно сделать</h2>
+              </div>
+              <span>Все функции разнесены по отдельным разделам</span>
+            </header>
+            <div>
+              <a href="/owner?tab=moderation">
+                <b>✓ Модерация</b>
+                <span>Проверить новые объявления и принять решение</span>
+              </a>
+              <a href="/owner?tab=users">
+                <b>♙ Люди и роли</b>
+                <span>Администраторы, ограничения и бесплатный доступ</span>
+              </a>
+              <a href="/owner?tab=settings">
+                <b>⚙ Настройки</b>
+                <span>Правила, безопасность, язык и параметры доски</span>
+              </a>
+              <a href="/owner?tab=finance">
+                <b>★ Stars и выплаты</b>
+                <span>Цены, комиссии, баланс и история операций</span>
+              </a>
             </div>
           </div>
         </section>
@@ -1214,7 +1249,9 @@ function WebCommunityAdministration({
         </label>
       </header>
       {view === "moderation" && <AdminModeration />}
+      {view === "reports" && <AdminReports />}
       {view === "users" && <AdminUsers />}
+      {view === "categories" && <AdminCategories />}
       {view === "risk" && <AdminRisk />}
       {view === "settings" && <AdminSettings />}
       {view === "audit" && <AdminAudit />}
@@ -4763,6 +4800,160 @@ function AdminModeration() {
           </div>
         </article>
       ))}
+    </div>
+  );
+}
+function AdminReports() {
+  const [items, setItems] = useState<any[]>([]);
+  const [busy, setBusy] = useState("");
+  const [error, setError] = useState("");
+  const load = () => request("/admin/reports").then(setItems);
+  useEffect(() => {
+    void load().catch((e) => setError(e.message));
+  }, []);
+  const resolve = async (item: any, status: "resolved" | "dismissed") => {
+    setBusy(item.id);
+    setError("");
+    try {
+      await request(`/admin/reports/${item.id}/resolve`, "POST", {
+        status,
+        resolution:
+          status === "resolved"
+            ? "Жалоба рассмотрена администратором"
+            : "Нарушение не подтверждено",
+      });
+      setItems((current) => current.filter((report) => report.id !== item.id));
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy("");
+    }
+  };
+  return (
+    <div className="admin-view">
+      <h2>Жалобы пользователей</h2>
+      <p className="hint">
+        Все обращения относятся только к выбранному сообществу. Решение
+        записывается в журнал действий.
+      </p>
+      {error && <LoadError message={error} />}
+      {!items.length && !error && (
+        <div className="admin-empty">Открытых жалоб нет</div>
+      )}
+      {items.map((item) => (
+        <article className="moderate" key={item.id}>
+          <h3>{item.listing?.title || "Объявление удалено"}</h3>
+          <small>
+            {item.reporter?.firstName || "Пользователь"} · {item.reason}
+          </small>
+          {item.comment && <p>{item.comment}</p>}
+          <div>
+            <button
+              disabled={busy === item.id}
+              onClick={() => void resolve(item, "dismissed")}
+            >
+              Не подтверждено
+            </button>
+            <button
+              className="primary"
+              disabled={busy === item.id}
+              onClick={() => void resolve(item, "resolved")}
+            >
+              Рассмотрено
+            </button>
+          </div>
+        </article>
+      ))}
+    </div>
+  );
+}
+function AdminCategories() {
+  const [items, setItems] = useState<any[]>([]);
+  const [busy, setBusy] = useState("");
+  const [error, setError] = useState("");
+  const load = () => request("/admin/categories").then(setItems);
+  useEffect(() => {
+    void load().catch((e) => setError(e.message));
+  }, []);
+  const update = async (item: any, patch: Record<string, unknown>) => {
+    setBusy(item.id);
+    setError("");
+    try {
+      const saved = await request(
+        `/admin/categories/${item.id}`,
+        "PATCH",
+        patch,
+      );
+      setItems((current) =>
+        current
+          .map((category) =>
+            category.id === item.id ? { ...category, ...saved } : category,
+          )
+          .sort((a, b) => Number(a.sortOrder) - Number(b.sortOrder)),
+      );
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy("");
+    }
+  };
+  return (
+    <div className="admin-view">
+      <h2>Категории и поля объявлений</h2>
+      <p className="hint">
+        Отключайте ненужные разделы и меняйте порядок. Таксономия полей
+        сохраняется отдельно для каждой категории.
+      </p>
+      {error && <LoadError message={error} />}
+      <div className="category-admin-list">
+        {items.map((item, index) => (
+          <article key={item.id}>
+            <span>{item.icon || "▦"}</span>
+            <div>
+              <b>{item.name}</b>
+              <small>
+                {Array.isArray(item.fieldSchema) ? item.fieldSchema.length : 0}{" "}
+                дополнительных полей
+              </small>
+            </div>
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={item.isActive}
+                disabled={busy === item.id}
+                onChange={(event) =>
+                  void update(item, { isActive: event.target.checked })
+                }
+              />
+              Показывать
+            </label>
+            <div className="category-order">
+              <button
+                aria-label="Поднять категорию"
+                disabled={index === 0 || Boolean(busy)}
+                onClick={() =>
+                  void update(item, {
+                    sortOrder: Math.max(0, Number(item.sortOrder) - 10),
+                  })
+                }
+              >
+                ↑
+              </button>
+              <button
+                aria-label="Опустить категорию"
+                disabled={index === items.length - 1 || Boolean(busy)}
+                onClick={() =>
+                  void update(item, {
+                    sortOrder: Number(item.sortOrder) + 10,
+                  })
+                }
+              >
+                ↓
+              </button>
+            </div>
+          </article>
+        ))}
+      </div>
     </div>
   );
 }

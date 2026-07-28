@@ -1,4 +1,5 @@
 import { Telegraf, Markup } from "telegraf";
+import { Redis } from "ioredis";
 import crypto from "node:crypto";
 import {
   prisma,
@@ -19,6 +20,9 @@ const token: string = tokenValue;
 const appUrl: string = appUrlValue;
 const botUsername: string = usernameValue;
 const bot = new Telegraf(token);
+const redis = new Redis(process.env.REDIS_URL || "redis://redis:6379", {
+  maxRetriesPerRequest: 2,
+});
 const supportedLocales = new Set([
   "en",
   "es",
@@ -43,7 +47,7 @@ const normalizeLocale = (
 const botCopy: Record<BotLocale, Record<string, string>> = {
   en: {
     open: "Open board",
-    owner: "Owner dashboard",
+    owner: "Community admin dashboard",
     board: "Community marketplace",
     intro:
       "Publish and discover trusted community listings in one place. The button opens the board directly inside Telegram.",
@@ -59,7 +63,7 @@ const botCopy: Record<BotLocale, Record<string, string>> = {
   },
   es: {
     open: "Abrir tablón",
-    owner: "Panel del propietario",
+    owner: "Panel de administración",
     board: "Tablón de la comunidad",
     intro:
       "Publica y descubre anuncios de confianza en un solo lugar. El botón abre el tablón directamente en Telegram.",
@@ -75,7 +79,7 @@ const botCopy: Record<BotLocale, Record<string, string>> = {
   },
   ca: {
     open: "Obre el tauler",
-    owner: "Tauler del propietari",
+    owner: "Panell d'administració",
     board: "Tauler de la comunitat",
     intro:
       "Publica i descobreix anuncis de confiança en un sol lloc. El botó obre el tauler directament a Telegram.",
@@ -91,7 +95,7 @@ const botCopy: Record<BotLocale, Record<string, string>> = {
   },
   ru: {
     open: "Открыть доску",
-    owner: "Кабинет владельца",
+    owner: "Кабинет администратора",
     board: "Доска объявлений сообщества",
     intro:
       "Публикуйте и находите объявления участников в одном месте. Кнопка открывает доску сразу внутри Telegram.",
@@ -107,7 +111,7 @@ const botCopy: Record<BotLocale, Record<string, string>> = {
   },
   uk: {
     open: "Відкрити дошку",
-    owner: "Кабінет власника",
+    owner: "Кабінет адміністратора",
     board: "Дошка оголошень спільноти",
     intro:
       "Публікуйте та знаходьте оголошення учасників в одному місці. Кнопка відкриває дошку прямо в Telegram.",
@@ -123,7 +127,7 @@ const botCopy: Record<BotLocale, Record<string, string>> = {
   },
   fr: {
     open: "Ouvrir le tableau",
-    owner: "Espace propriétaire",
+    owner: "Espace administrateur",
     board: "Marché de la communauté",
     intro:
       "Publiez et découvrez les annonces de la communauté. Le bouton ouvre directement le tableau dans Telegram.",
@@ -139,7 +143,7 @@ const botCopy: Record<BotLocale, Record<string, string>> = {
   },
   de: {
     open: "Pinnwand öffnen",
-    owner: "Inhaberbereich",
+    owner: "Community-Verwaltung",
     board: "Community-Marktplatz",
     intro:
       "Veröffentliche und entdecke vertrauenswürdige Anzeigen. Der Button öffnet die Pinnwand direkt in Telegram.",
@@ -155,7 +159,7 @@ const botCopy: Record<BotLocale, Record<string, string>> = {
   },
   it: {
     open: "Apri bacheca",
-    owner: "Area proprietario",
+    owner: "Area amministratore",
     board: "Mercatino della community",
     intro:
       "Pubblica e scopri annunci affidabili. Il pulsante apre la bacheca direttamente in Telegram.",
@@ -171,7 +175,7 @@ const botCopy: Record<BotLocale, Record<string, string>> = {
   },
   pt: {
     open: "Abrir quadro",
-    owner: "Painel do proprietário",
+    owner: "Painel de administração",
     board: "Mercado da comunidade",
     intro:
       "Publique e descubra anúncios de confiança. O botão abre o quadro diretamente no Telegram.",
@@ -237,7 +241,7 @@ const confirmedWebLogin = (rawToken: string, platformOwner = false) => {
   );
   return Markup.inlineKeyboard([
     Markup.button.url(
-      platformOwner ? "Продолжить вход" : "Открыть кабинет владельца",
+      platformOwner ? "Продолжить вход" : "Открыть кабинет администратора",
       url.toString(),
     ),
   ]);
@@ -565,7 +569,7 @@ bot.start(async (ctx) => {
     return ctx.reply(
       platformOwnerLogin
         ? "✅ Личность подтверждена. Вернитесь в браузер или нажмите кнопку ниже."
-        : "✅ Вход подтверждён. Откройте браузерный кабинет владельца.",
+        : "✅ Вход подтверждён. Откройте браузерный кабинет администратора сообщества.",
       confirmedWebLogin(rawToken, platformOwnerLogin),
     );
   }
@@ -669,7 +673,7 @@ bot.command("install_board", async (ctx) => {
 });
 bot.command("help", (ctx) =>
   ctx.reply(
-    "/board — открыть доску\n/install_board — установить кнопку в группе (для админов)\n/myads — мои объявления\n/rules — правила\n/connect — кабинет владельца сообщества\n/terms — условия сервиса\n/support — поддержка\n/paysupport — вопросы по оплате",
+    "/board — открыть доску\n/install_board — установить кнопку в группе (для админов)\n/myads — мои объявления\n/rules — правила\n/connect — кабинет администратора сообщества\n/terms — условия сервиса\n/support — поддержка\n/paysupport — вопросы по оплате",
   ),
 );
 bot.command("terms", async (ctx) => {
@@ -1040,7 +1044,7 @@ function notificationText(type: string, p: any) {
         tenant_permission_failure:
           "Бот удалён из группы или потерял доступ. Доска приостановлена; проверьте права бота в кабинете владельца.",
         support_reply:
-          "Поддержка ответила на ваше обращение. Откройте кабинет владельца, чтобы прочитать ответ.",
+          "Поддержка ответила на ваше обращение. Откройте кабинет администратора, чтобы прочитать ответ.",
       } as any
     )[type] || "Новое уведомление") + reason
   );
@@ -1353,64 +1357,68 @@ bot.on("my_chat_member", async (ctx) => {
   });
 });
 const timer = setInterval(() => void poll(), 5000);
-const botProfileSetup = await Promise.allSettled([
-  bot.telegram.setMyName("Adnecta"),
-  bot.telegram.setMyDescription(
-    "Adnecta turns Telegram communities into trusted marketplaces with moderation, activity rules and Stars payments.",
-  ),
-  bot.telegram.setMyDescription(
-    "Adnecta превращает Telegram-сообщества в удобные доски объявлений с модерацией, правилами активности и оплатой в Stars.",
-    "ru",
-  ),
-  bot.telegram.setMyDescription(
-    "Adnecta turns Telegram communities into trusted marketplaces with moderation, activity rules and Stars payments.",
-    "en",
-  ),
-  bot.telegram.setMyDescription(
-    "Adnecta convierte comunidades de Telegram en marketplaces con moderación, reglas de actividad y pagos con Stars.",
-    "es",
-  ),
-  bot.telegram.setMyShortDescription(
-    "The marketplace for your Telegram community.",
-  ),
-  bot.telegram.setMyShortDescription(
-    "Доска объявлений вашего Telegram-сообщества.",
-    "ru",
-  ),
-  bot.telegram.setMyShortDescription(
-    "The marketplace for your Telegram community.",
-    "en",
-  ),
-  bot.telegram.setMyShortDescription(
-    "El marketplace de tu comunidad de Telegram.",
-    "es",
-  ),
-  bot.telegram.setChatMenuButton({
-    menuButton: {
-      type: "web_app",
-      text: "Открыть Adnecta",
-      web_app: { url: appUrl },
-    },
-  }),
-  bot.telegram.setMyDefaultAdministratorRights({
-    forChannels: false,
-    rights: {
-      is_anonymous: false,
-      can_manage_chat: true,
-      can_delete_messages: true,
-      can_manage_video_chats: false,
-      can_restrict_members: true,
-      can_promote_members: false,
-      can_change_info: false,
-      can_invite_users: true,
-      can_post_stories: false,
-      can_edit_stories: false,
-      can_delete_stories: false,
-      can_pin_messages: true,
-      can_manage_topics: false,
-    },
-  }),
-]);
+const botProfileKey = "adnecta:bot-profile:v2";
+const profileNeedsSync = !(await redis.get(botProfileKey));
+const botProfileSetup = profileNeedsSync
+  ? await Promise.allSettled([
+      bot.telegram.setMyName("Adnecta"),
+      bot.telegram.setMyDescription(
+        "Adnecta turns Telegram communities into trusted marketplaces with moderation, activity rules and Stars payments.",
+      ),
+      bot.telegram.setMyDescription(
+        "Adnecta превращает Telegram-сообщества в удобные доски объявлений с модерацией, правилами активности и оплатой в Stars.",
+        "ru",
+      ),
+      bot.telegram.setMyDescription(
+        "Adnecta turns Telegram communities into trusted marketplaces with moderation, activity rules and Stars payments.",
+        "en",
+      ),
+      bot.telegram.setMyDescription(
+        "Adnecta convierte comunidades de Telegram en marketplaces con moderación, reglas de actividad y pagos con Stars.",
+        "es",
+      ),
+      bot.telegram.setMyShortDescription(
+        "The marketplace for your Telegram community.",
+      ),
+      bot.telegram.setMyShortDescription(
+        "Доска объявлений вашего Telegram-сообщества.",
+        "ru",
+      ),
+      bot.telegram.setMyShortDescription(
+        "The marketplace for your Telegram community.",
+        "en",
+      ),
+      bot.telegram.setMyShortDescription(
+        "El marketplace de tu comunidad de Telegram.",
+        "es",
+      ),
+      bot.telegram.setChatMenuButton({
+        menuButton: {
+          type: "web_app",
+          text: "Открыть Adnecta",
+          web_app: { url: appUrl },
+        },
+      }),
+      bot.telegram.setMyDefaultAdministratorRights({
+        forChannels: false,
+        rights: {
+          is_anonymous: false,
+          can_manage_chat: true,
+          can_delete_messages: true,
+          can_manage_video_chats: false,
+          can_restrict_members: true,
+          can_promote_members: false,
+          can_change_info: false,
+          can_invite_users: true,
+          can_post_stories: false,
+          can_edit_stories: false,
+          can_delete_stories: false,
+          can_pin_messages: true,
+          can_manage_topics: false,
+        },
+      }),
+    ])
+  : [];
 for (const result of botProfileSetup)
   if (result.status === "rejected")
     console.warn(
@@ -1436,17 +1444,31 @@ const privateCommands = (locale: BotLocale) => [
   },
   { command: "help", description: locale === "ru" ? "Справка" : "Help" },
 ];
-await bot.telegram.setMyCommands(privateCommands("en"));
-await Promise.allSettled(
-  [...supportedLocales].map((locale) =>
-    bot.telegram.setMyCommands(privateCommands(locale as BotLocale), {
-      language_code: locale,
-    }),
-  ),
-);
+if (profileNeedsSync) {
+  const commandSetup = await Promise.allSettled([
+    bot.telegram.setMyCommands(privateCommands("en")),
+    ...[...supportedLocales].map((locale) =>
+      bot.telegram.setMyCommands(privateCommands(locale as BotLocale), {
+        language_code: locale,
+      }),
+    ),
+  ]);
+  const failed = [...botProfileSetup, ...commandSetup].filter(
+    (result) => result.status === "rejected",
+  ).length;
+  // Avoid a restart loop hitting Telegram profile rate limits. A partial
+  // failure is retried later; a complete sync is refreshed weekly.
+  await redis.set(
+    botProfileKey,
+    String(Date.now()),
+    "EX",
+    failed ? 21_600 : 604_800,
+  );
+}
 bot.launch();
 process.once("SIGTERM", () => {
   clearInterval(timer);
   bot.stop("SIGTERM");
+  void redis.quit();
   void prisma.$disconnect();
 });
