@@ -6,3 +6,7 @@
 	}
 	reverse_proxy nginx:8080
 }
+
+www.{$PUBLIC_DOMAIN} {
+	redir https://{$PUBLIC_DOMAIN}{uri} permanent
+}
