@@ -10,6 +10,7 @@ import {
 } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { supportedLanguages } from "./i18n";
+import { LanguageSelect } from "./LanguageSelect";
 import { PublicSite } from "./PublicSite";
 import {
   activateSession,
@@ -52,18 +53,138 @@ type CommunityShowcase = {
   messagesRemaining: number;
 };
 const categoryTranslations: Record<string, Record<string, string>> = {
-  "Транспорт": { en:"Vehicles",es:"Vehículos",ca:"Vehicles",ru:"Транспорт",uk:"Транспорт",fr:"Véhicules",de:"Fahrzeuge",it:"Veicoli",pt:"Veículos" },
-  "Недвижимость": { en:"Property",es:"Inmobiliaria",ca:"Immobiliària",ru:"Недвижимость",uk:"Нерухомість",fr:"Immobilier",de:"Immobilien",it:"Immobili",pt:"Imóveis" },
-  "Электроника": { en:"Electronics",es:"Electrónica",ca:"Electrònica",ru:"Электроника",uk:"Електроніка",fr:"Électronique",de:"Elektronik",it:"Elettronica",pt:"Eletrónica" },
-  "Дом и сад": { en:"Home & garden",es:"Hogar y jardín",ca:"Llar i jardí",ru:"Дом и сад",uk:"Дім і сад",fr:"Maison et jardin",de:"Haus & Garten",it:"Casa e giardino",pt:"Casa e jardim" },
-  "Одежда и обувь": { en:"Fashion",es:"Ropa y calzado",ca:"Roba i calçat",ru:"Одежда и обувь",uk:"Одяг і взуття",fr:"Mode",de:"Mode",it:"Abbigliamento",pt:"Roupa e calçado" },
-  "Детские товары": { en:"Kids",es:"Infantil",ca:"Infantil",ru:"Детские товары",uk:"Дитячі товари",fr:"Enfants",de:"Kinder",it:"Bambini",pt:"Crianças" },
-  "Работа": { en:"Jobs",es:"Empleo",ca:"Feina",ru:"Работа",uk:"Робота",fr:"Emploi",de:"Jobs",it:"Lavoro",pt:"Emprego" },
-  "Услуги": { en:"Services",es:"Servicios",ca:"Serveis",ru:"Услуги",uk:"Послуги",fr:"Services",de:"Dienstleistungen",it:"Servizi",pt:"Serviços" },
-  "Животные": { en:"Pets",es:"Animales",ca:"Animals",ru:"Животные",uk:"Тварини",fr:"Animaux",de:"Tiere",it:"Animali",pt:"Animais" },
-  "Отдам бесплатно": { en:"Free items",es:"Gratis",ca:"Gratuït",ru:"Отдам бесплатно",uk:"Віддам безкоштовно",fr:"À donner",de:"Zu verschenken",it:"In regalo",pt:"Grátis" },
-  "Обмен": { en:"Exchange",es:"Intercambio",ca:"Intercanvi",ru:"Обмен",uk:"Обмін",fr:"Échange",de:"Tausch",it:"Scambio",pt:"Troca" },
-  "Другое": { en:"Other",es:"Otros",ca:"Altres",ru:"Другое",uk:"Інше",fr:"Autres",de:"Sonstiges",it:"Altro",pt:"Outros" },
+  Транспорт: {
+    en: "Vehicles",
+    es: "Vehículos",
+    ca: "Vehicles",
+    ru: "Транспорт",
+    uk: "Транспорт",
+    fr: "Véhicules",
+    de: "Fahrzeuge",
+    it: "Veicoli",
+    pt: "Veículos",
+  },
+  Недвижимость: {
+    en: "Property",
+    es: "Inmobiliaria",
+    ca: "Immobiliària",
+    ru: "Недвижимость",
+    uk: "Нерухомість",
+    fr: "Immobilier",
+    de: "Immobilien",
+    it: "Immobili",
+    pt: "Imóveis",
+  },
+  Электроника: {
+    en: "Electronics",
+    es: "Electrónica",
+    ca: "Electrònica",
+    ru: "Электроника",
+    uk: "Електроніка",
+    fr: "Électronique",
+    de: "Elektronik",
+    it: "Elettronica",
+    pt: "Eletrónica",
+  },
+  "Дом и сад": {
+    en: "Home & garden",
+    es: "Hogar y jardín",
+    ca: "Llar i jardí",
+    ru: "Дом и сад",
+    uk: "Дім і сад",
+    fr: "Maison et jardin",
+    de: "Haus & Garten",
+    it: "Casa e giardino",
+    pt: "Casa e jardim",
+  },
+  "Одежда и обувь": {
+    en: "Fashion",
+    es: "Ropa y calzado",
+    ca: "Roba i calçat",
+    ru: "Одежда и обувь",
+    uk: "Одяг і взуття",
+    fr: "Mode",
+    de: "Mode",
+    it: "Abbigliamento",
+    pt: "Roupa e calçado",
+  },
+  "Детские товары": {
+    en: "Kids",
+    es: "Infantil",
+    ca: "Infantil",
+    ru: "Детские товары",
+    uk: "Дитячі товари",
+    fr: "Enfants",
+    de: "Kinder",
+    it: "Bambini",
+    pt: "Crianças",
+  },
+  Работа: {
+    en: "Jobs",
+    es: "Empleo",
+    ca: "Feina",
+    ru: "Работа",
+    uk: "Робота",
+    fr: "Emploi",
+    de: "Jobs",
+    it: "Lavoro",
+    pt: "Emprego",
+  },
+  Услуги: {
+    en: "Services",
+    es: "Servicios",
+    ca: "Serveis",
+    ru: "Услуги",
+    uk: "Послуги",
+    fr: "Services",
+    de: "Dienstleistungen",
+    it: "Servizi",
+    pt: "Serviços",
+  },
+  Животные: {
+    en: "Pets",
+    es: "Animales",
+    ca: "Animals",
+    ru: "Животные",
+    uk: "Тварини",
+    fr: "Animaux",
+    de: "Tiere",
+    it: "Animali",
+    pt: "Animais",
+  },
+  "Отдам бесплатно": {
+    en: "Free items",
+    es: "Gratis",
+    ca: "Gratuït",
+    ru: "Отдам бесплатно",
+    uk: "Віддам безкоштовно",
+    fr: "À donner",
+    de: "Zu verschenken",
+    it: "In regalo",
+    pt: "Grátis",
+  },
+  Обмен: {
+    en: "Exchange",
+    es: "Intercambio",
+    ca: "Intercanvi",
+    ru: "Обмен",
+    uk: "Обмін",
+    fr: "Échange",
+    de: "Tausch",
+    it: "Scambio",
+    pt: "Troca",
+  },
+  Другое: {
+    en: "Other",
+    es: "Otros",
+    ca: "Altres",
+    ru: "Другое",
+    uk: "Інше",
+    fr: "Autres",
+    de: "Sonstiges",
+    it: "Altro",
+    pt: "Outros",
+  },
 };
 const localizedCategory = (name?: string, language?: string) =>
   name
@@ -80,14 +201,30 @@ const actualTon = (nano: string | number | bigint | null | undefined) =>
 export function App() {
   const { t } = useTranslation();
   const pathName = window.location.pathname.replace(/\/$/, "") || "/";
-  const platformAdminMode = ["/platform-admin", "/platform-owner"].includes(pathName);
+  const platformAdminMode = ["/platform-admin", "/platform-owner"].includes(
+    pathName,
+  );
   const platformMode =
     ["/dashboard", "/owner"].includes(pathName) ||
     platformAdminMode ||
     new URLSearchParams(window.location.search).get("mode") === "platform";
-  const publicPath = ["/login", "/platform-login", "/pricing", "/docs", "/terms", "/privacy", "/prohibited", "/support"].includes(pathName) ||
-    pathName.startsWith("/login/") || pathName.startsWith("/platform-login/") ||
-    (pathName === "/" && !platformMode && !new URLSearchParams(window.location.search).get("community") && !window.Telegram?.WebApp.initData);
+  const publicPath =
+    [
+      "/login",
+      "/platform-login",
+      "/pricing",
+      "/docs",
+      "/terms",
+      "/privacy",
+      "/prohibited",
+      "/support",
+    ].includes(pathName) ||
+    pathName.startsWith("/login/") ||
+    pathName.startsWith("/platform-login/") ||
+    (pathName === "/" &&
+      !platformMode &&
+      !new URLSearchParams(window.location.search).get("community") &&
+      !window.Telegram?.WebApp.initData);
   const telegramInitData = window.Telegram?.WebApp.initData || "";
   const launchCommunity = (
     new URLSearchParams(window.location.search).get("community") ||
@@ -101,10 +238,15 @@ export function App() {
     !platformMode &&
     Boolean(telegramInitData) &&
     (!activateSession("tenant") ||
-      (Boolean(launchCommunity) &&
-        launchCommunity !== storedTenantCommunity));
+      (Boolean(launchCommunity) && launchCommunity !== storedTenantCommunity));
   const [state, setState] = useState<
-    "loading" | "ready" | "outside" | "denied" | "select" | "twoFactor" | "error"
+    | "loading"
+    | "ready"
+    | "outside"
+    | "denied"
+    | "select"
+    | "twoFactor"
+    | "error"
   >(
     telegramTenantLaunchRequiresLogin
       ? "loading"
@@ -130,7 +272,9 @@ export function App() {
           setState("ready");
           return;
         } catch {
-          window.location.replace(platformAdminMode ? "/platform-login" : "/login");
+          window.location.replace(
+            platformAdminMode ? "/platform-login" : "/login",
+          );
         }
         return;
       }
@@ -149,8 +293,7 @@ export function App() {
           setState("twoFactor");
           return;
         }
-      }
-      else
+      } else
         await login(
           init,
           new URLSearchParams(window.location.search).get("community") ||
@@ -218,7 +361,16 @@ export function App() {
       />
     );
   if (state === "twoFactor")
-    return <TwoFactorLogin challengeToken={twoFactorChallenge} onComplete={() => setState("ready")} onRestart={() => { setState("loading"); void boot(); }} />;
+    return (
+      <TwoFactorLogin
+        challengeToken={twoFactorChallenge}
+        onComplete={() => setState("ready")}
+        onRestart={() => {
+          setState("loading");
+          void boot();
+        }}
+      />
+    );
   if (state === "error")
     return (
       <Message
@@ -226,7 +378,8 @@ export function App() {
         actions={<button onClick={boot}>{t("retry")}</button>}
       />
     );
-  if (platformMode) return <PlatformWorkspace platformAdminOnly={platformAdminMode} />;
+  if (platformMode)
+    return <PlatformWorkspace platformAdminOnly={platformAdminMode} />;
   return (
     <Shell key={tenantRevision}>
       <ScrollToTop />
@@ -284,35 +437,37 @@ function CommunitySwitcher({
   const current = communities.find((community) => community.current);
   return (
     <header className="tenant-community-switcher">
-      {communities.length > 1 && <label>
-        <span>{t("switchCommunity")}</span>
-        <select
-          aria-label="Переключить сообщество"
-          disabled={switching}
-          value={current?.id || ""}
-          onChange={async (event) => {
-            const target = communities.find(
-              (community) => community.id === event.target.value,
-            );
-            if (!target || target.current) return;
-            setSwitching(true);
-            setError("");
-            try {
-              await switchTenantCommunity(target.id);
-              onSwitched(target);
-            } catch (unknownError: any) {
-              setError(unknownError.message || t("switchError"));
-              setSwitching(false);
-            }
-          }}
-        >
-          {communities.map((community) => (
-            <option value={community.id} key={community.id}>
-              {community.name}
-            </option>
-          ))}
-        </select>
-      </label>}
+      {communities.length > 1 && (
+        <label>
+          <span>{t("switchCommunity")}</span>
+          <select
+            aria-label="Переключить сообщество"
+            disabled={switching}
+            value={current?.id || ""}
+            onChange={async (event) => {
+              const target = communities.find(
+                (community) => community.id === event.target.value,
+              );
+              if (!target || target.current) return;
+              setSwitching(true);
+              setError("");
+              try {
+                await switchTenantCommunity(target.id);
+                onSwitched(target);
+              } catch (unknownError: any) {
+                setError(unknownError.message || t("switchError"));
+                setSwitching(false);
+              }
+            }}
+          >
+            {communities.map((community) => (
+              <option value={community.id} key={community.id}>
+                {community.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
       <label className="tenant-language-select">
         <span>{t("language")}</span>
         <select
@@ -324,7 +479,9 @@ function CommunitySwitcher({
           }}
         >
           {supportedLanguages.map(([code, name]) => (
-            <option value={code} key={code}>{name}</option>
+            <option value={code} key={code}>
+              {name}
+            </option>
           ))}
         </select>
       </label>
@@ -334,35 +491,237 @@ function CommunitySwitcher({
   );
 }
 
-function TwoFactorLogin({ challengeToken, onComplete, onRestart }: { challengeToken: string; onComplete: () => void; onRestart: () => void }) {
+function TwoFactorLogin({
+  challengeToken,
+  onComplete,
+  onRestart,
+}: {
+  challengeToken: string;
+  onComplete: () => void;
+  onRestart: () => void;
+}) {
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  return <main className="two-factor-page"><form onSubmit={async (event) => { event.preventDefault(); setBusy(true); setError(""); try { await completePlatformTwoFactor(challengeToken, code); onComplete(); } catch (e: any) { setError(e.message); } finally { setBusy(false); } }}><small>ЗАЩИЩЁННЫЙ ВХОД</small><h1>Подтвердите вход</h1><p>Введите шестизначный код приложения-аутентификатора или один резервный код.</p><input autoFocus autoComplete="one-time-code" inputMode="numeric" value={code} onChange={(event) => setCode(event.target.value.trim())} placeholder="000000" minLength={6} maxLength={12} required />{error && <LoadError message={error}/>}<button className="primary" disabled={busy}>{busy ? "Проверяем…" : "Продолжить"}</button><button type="button" onClick={onRestart}>Начать вход заново</button></form></main>;
+  return (
+    <main className="two-factor-page">
+      <form
+        onSubmit={async (event) => {
+          event.preventDefault();
+          setBusy(true);
+          setError("");
+          try {
+            await completePlatformTwoFactor(challengeToken, code);
+            onComplete();
+          } catch (e: any) {
+            setError(e.message);
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        <small>ЗАЩИЩЁННЫЙ ВХОД</small>
+        <h1>Подтвердите вход</h1>
+        <p>
+          Введите шестизначный код приложения-аутентификатора или один резервный
+          код.
+        </p>
+        <input
+          autoFocus
+          autoComplete="one-time-code"
+          inputMode="numeric"
+          value={code}
+          onChange={(event) => setCode(event.target.value.trim())}
+          placeholder="000000"
+          minLength={6}
+          maxLength={12}
+          required
+        />
+        {error && <LoadError message={error} />}
+        <button className="primary" disabled={busy}>
+          {busy ? "Проверяем…" : "Продолжить"}
+        </button>
+        <button type="button" onClick={onRestart}>
+          Начать вход заново
+        </button>
+      </form>
+    </main>
+  );
 }
 
-function PlatformTwoFactorSecurity({ security, onChanged }: { security: any; onChanged: () => Promise<any> }) {
+function PlatformTwoFactorSecurity({
+  security,
+  onChanged,
+}: {
+  security: any;
+  onChanged: () => Promise<any>;
+}) {
   const [setup, setSetup] = useState<any>();
   const [code, setCode] = useState("");
   const [backupCodes, setBackupCodes] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const regenerate = async () => {
-    const currentCode = window.prompt("Введите текущий шестизначный код приложения-аутентификатора:");
+    const currentCode = window.prompt(
+      "Введите текущий шестизначный код приложения-аутентификатора:",
+    );
     if (!currentCode) return;
-    setBusy(true); setError("");
-    try { const result = await request("/platform/security/two-factor/backup-codes", "POST", { code: currentCode }); setBackupCodes(result.backupCodes); }
-    catch (e: any) { setError(e.message); }
-    finally { setBusy(false); }
+    setBusy(true);
+    setError("");
+    try {
+      const result = await request(
+        "/platform/security/two-factor/backup-codes",
+        "POST",
+        { code: currentCode },
+      );
+      setBackupCodes(result.backupCodes);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
   };
   if (security.enabled && !backupCodes.length)
-    return <section className="two-factor-security ready"><div><small>БЕЗОПАСНОСТЬ</small><h2>Двухфакторная защита включена</h2><p>Сессия подтверждена: {security.sessionVerified ? "да" : "нет"}. Резервных кодов: {security.backupCodesRemaining}.</p></div>{security.sessionVerified && <button disabled={busy} onClick={() => void regenerate()}>{busy ? "Создаём…" : "Заменить резервные коды"}</button>}{error && <LoadError message={error}/>}</section>;
-  const start = async () => { setBusy(true); setError(""); try { setSetup(await request("/platform/security/two-factor/setup", "POST", {})); } catch (e: any) { setError(e.message); } finally { setBusy(false); } };
-  const confirm = async (event: any) => { event.preventDefault(); setBusy(true); setError(""); try { const result = await request("/platform/security/two-factor/confirm", "POST", { code }); setPlatformToken(result.accessToken); setBackupCodes(result.backupCodes); setSetup(null); setCode(""); await onChanged(); } catch (e: any) { setError(e.message); } finally { setBusy(false); } };
-  return <section className="two-factor-security"><small>{security.required ? "ТРЕБУЕТСЯ ДЛЯ ДОСТУПА" : "РЕКОМЕНДУЕТСЯ"}</small><h2>{backupCodes.length ? "Сохраните резервные коды" : "Защитите кабинет вторым фактором"}</h2>{backupCodes.length ? <><p>Каждый код работает только один раз. Сохраните их вне Telegram — после закрытия они больше не показываются.</p><pre>{backupCodes.join("\n")}</pre><button className="primary" onClick={() => { setBackupCodes([]); void onChanged(); }}>Я надёжно сохранил коды</button></> : !setup ? <><p>Для служебных ролей вход без TOTP запрещён. Подойдёт Google Authenticator, 1Password, Microsoft Authenticator или аналог.</p><button className="primary" disabled={busy} onClick={() => void start()}>{busy ? "Создаём…" : "Настроить 2FA"}</button></> : <form onSubmit={confirm}><p>Откройте ссылку в приложении-аутентификаторе или добавьте ключ вручную.</p><a className="primary" href={setup.otpauthUrl}>Открыть в аутентификаторе</a><label>Ключ для ручного ввода<input readOnly value={setup.secret} onFocus={(event) => event.currentTarget.select()} /></label><label>Код из приложения<input autoFocus inputMode="numeric" autoComplete="one-time-code" value={code} onChange={(event) => setCode(event.target.value)} placeholder="000000" minLength={6} maxLength={6} required /></label><button className="primary" disabled={busy}>{busy ? "Проверяем…" : "Подтвердить и включить"}</button></form>}{error && <LoadError message={error}/>}</section>;
+    return (
+      <section className="two-factor-security ready">
+        <div>
+          <small>БЕЗОПАСНОСТЬ</small>
+          <h2>Двухфакторная защита включена</h2>
+          <p>
+            Сессия подтверждена: {security.sessionVerified ? "да" : "нет"}.
+            Резервных кодов: {security.backupCodesRemaining}.
+          </p>
+        </div>
+        {security.sessionVerified && (
+          <button disabled={busy} onClick={() => void regenerate()}>
+            {busy ? "Создаём…" : "Заменить резервные коды"}
+          </button>
+        )}
+        {error && <LoadError message={error} />}
+      </section>
+    );
+  const start = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      setSetup(
+        await request("/platform/security/two-factor/setup", "POST", {}),
+      );
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const confirm = async (event: any) => {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      const result = await request(
+        "/platform/security/two-factor/confirm",
+        "POST",
+        { code },
+      );
+      setPlatformToken(result.accessToken);
+      setBackupCodes(result.backupCodes);
+      setSetup(null);
+      setCode("");
+      await onChanged();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <section className="two-factor-security">
+      <small>
+        {security.required ? "ТРЕБУЕТСЯ ДЛЯ ДОСТУПА" : "РЕКОМЕНДУЕТСЯ"}
+      </small>
+      <h2>
+        {backupCodes.length
+          ? "Сохраните резервные коды"
+          : "Защитите кабинет вторым фактором"}
+      </h2>
+      {backupCodes.length ? (
+        <>
+          <p>
+            Каждый код работает только один раз. Сохраните их вне Telegram —
+            после закрытия они больше не показываются.
+          </p>
+          <pre>{backupCodes.join("\n")}</pre>
+          <button
+            className="primary"
+            onClick={() => {
+              setBackupCodes([]);
+              void onChanged();
+            }}
+          >
+            Я надёжно сохранил коды
+          </button>
+        </>
+      ) : !setup ? (
+        <>
+          <p>
+            Для служебных ролей вход без TOTP запрещён. Подойдёт Google
+            Authenticator, 1Password, Microsoft Authenticator или аналог.
+          </p>
+          <button
+            className="primary"
+            disabled={busy}
+            onClick={() => void start()}
+          >
+            {busy ? "Создаём…" : "Настроить 2FA"}
+          </button>
+        </>
+      ) : (
+        <form onSubmit={confirm}>
+          <p>
+            Откройте ссылку в приложении-аутентификаторе или добавьте ключ
+            вручную.
+          </p>
+          <a className="primary" href={setup.otpauthUrl}>
+            Открыть в аутентификаторе
+          </a>
+          <label>
+            Ключ для ручного ввода
+            <input
+              readOnly
+              value={setup.secret}
+              onFocus={(event) => event.currentTarget.select()}
+            />
+          </label>
+          <label>
+            Код из приложения
+            <input
+              autoFocus
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              value={code}
+              onChange={(event) => setCode(event.target.value)}
+              placeholder="000000"
+              minLength={6}
+              maxLength={6}
+              required
+            />
+          </label>
+          <button className="primary" disabled={busy}>
+            {busy ? "Проверяем…" : "Подтвердить и включить"}
+          </button>
+        </form>
+      )}
+      {error && <LoadError message={error} />}
+    </section>
+  );
 }
 
-function PlatformWorkspace({ platformAdminOnly = false }: { platformAdminOnly?: boolean }) {
+function PlatformWorkspace({
+  platformAdminOnly = false,
+}: {
+  platformAdminOnly?: boolean;
+}) {
+  const { t } = useTranslation();
   const [data, setData] = useState<any>();
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
@@ -390,16 +749,17 @@ function PlatformWorkspace({ platformAdminOnly = false }: { platformAdminOnly?: 
       setBusy("");
     }
   };
-  if (!data)
-    return <Message text={error || "Загружаем кабинет…"} />;
-  const missingLegal = data.legalDocuments?.filter((document: any) => !document.accepted) || [];
+  if (!data) return <Message text={error || t("loadingDashboard")} />;
+  const missingLegal =
+    data.legalDocuments?.filter((document: any) => !document.accepted) || [];
   if (missingLegal.length)
     return <LegalAcceptance documents={missingLegal} onAccepted={load} />;
-  const ownerCommunities = data.organizations.flatMap((organization: any) => organization.communities || []);
+  const ownerCommunities = data.organizations.flatMap(
+    (organization: any) => organization.communities || [],
+  );
   const activeCommunities = ownerCommunities.filter(
     (community: any) =>
-      community.tenantStatus === "active" &&
-      community.botIsAdministrator,
+      community.tenantStatus === "active" && community.botIsAdministrator,
   );
   const readyCommunities = ownerCommunities.filter(
     (community: any) =>
@@ -408,21 +768,52 @@ function PlatformWorkspace({ platformAdminOnly = false }: { platformAdminOnly?: 
       community.setup?.permissions &&
       community.setup?.rules,
   ).length;
-  const totalListings = ownerCommunities.reduce((sum: number, community: any) => sum + Number(community._count?.listings || 0), 0);
+  const totalListings = ownerCommunities.reduce(
+    (sum: number, community: any) =>
+      sum + Number(community._count?.listings || 0),
+    0,
+  );
   const firstManageableOrganization = data.organizations.find(
     (organization: any) =>
       ["owner", "administrator"].includes(organization.role),
   );
   return (
-    <main className={`platform-workspace ${platformAdminOnly ? "service-owner-workspace" : "owner-workspace"}`}>
+    <main
+      className={`platform-workspace ${platformAdminOnly ? "service-owner-workspace" : "owner-workspace"}`}
+    >
       <nav className="dashboard-nav">
-        <a href="/"><span>AD</span><b>Adnecta</b></a>
-        <div>{platformAdminOnly && <a href="/owner">Кабинет сообщества</a>}<a href="/docs">Инструкция</a><a href="/support">Поддержка</a><button onClick={() => { void logoutPlatformSession().finally(() => window.location.assign(platformAdminOnly ? "/platform-login" : "/login")); }}>Выйти</button></div>
+        <a href="/">
+          <span>AD</span>
+          <b>Adnecta</b>
+        </a>
+        <div>
+          {platformAdminOnly && (
+            <a href="/owner">{t("communityDashboardLink")}</a>
+          )}
+          <a href="/docs">{t("instruction")}</a>
+          <a href="/support">{t("support")}</a>
+          <LanguageSelect compact />
+          <button
+            onClick={() => {
+              void logoutPlatformSession().finally(() =>
+                window.location.assign(
+                  platformAdminOnly ? "/platform-login" : "/login",
+                ),
+              );
+            }}
+          >
+            {t("logout")}
+          </button>
+        </div>
       </nav>
       <header className="platform-header">
         <div>
           <small>ADNECTA PLATFORM</small>
-          <h1>{platformAdminOnly ? "Кабинет владельца платформы" : "Кабинет владельца"}</h1>
+          <h1>
+            {platformAdminOnly
+              ? t("platformOwnerDashboard")
+              : t("communityAdminDashboard")}
+          </h1>
           <p>
             {data.user.firstName}
             {data.user.username ? ` · @${data.user.username}` : ""}
@@ -432,153 +823,307 @@ function PlatformWorkspace({ platformAdminOnly = false }: { platformAdminOnly?: 
           {data.user.firstName?.charAt(0).toUpperCase() || "U"}
         </div>
       </header>
-      <nav className="workspace-nav" aria-label={platformAdminOnly ? "Разделы платформы" : "Разделы кабинета"}>
-        {platformAdminOnly ? <>
-          <a href="#platform-overview">Обзор</a>
-          <a href="#platform-settings">Настройки</a>
-          <a href="#platform-health">Система</a>
-          <a href="#platform-finance">Финансы</a>
-          <a href="#platform-communities">Сообщества</a>
-          <a href="#platform-team">Команда</a>
-          <a href="#platform-support">Поддержка</a>
-        </> : <>
-          <a href="#owner-start"><span>⌂</span> Обзор</a>
-          <a href="#owner-communities"><span>▦</span> Сообщества</a>
-          <a href="#owner-finance"><span>★</span> Stars и выплаты</a>
-          <a href="#owner-support"><span>?</span> Поддержка</a>
-        </>}
+      <nav
+        className="workspace-nav"
+        aria-label={
+          platformAdminOnly ? "Разделы платформы" : "Разделы кабинета"
+        }
+      >
+        {platformAdminOnly ? (
+          <>
+            <a href="#platform-overview">{t("overview")}</a>
+            <a href="#platform-settings">{t("settings")}</a>
+            <a href="#platform-health">{t("system")}</a>
+            <a href="#platform-finance">{t("finance")}</a>
+            <a href="#platform-communities">{t("communities")}</a>
+            <a href="#platform-team">{t("team")}</a>
+            <a href="#platform-support">{t("support")}</a>
+          </>
+        ) : (
+          <>
+            <a href="#owner-start">
+              <span>⌂</span> {t("overview")}
+            </a>
+            <a href="#owner-communities">
+              <span>▦</span> {t("communities")}
+            </a>
+            <a href="#owner-finance">
+              <span>★</span> {t("starsPayouts")}
+            </a>
+            <a href="#owner-support">
+              <span>?</span> {t("support")}
+            </a>
+          </>
+        )}
       </nav>
-      {!platformAdminOnly && <section className={`owner-connect-hub ${activeCommunities.length ? "connected" : ""}`} id="owner-start">
-        <div className="owner-connect-copy">
-          <small>{activeCommunities.length ? "ADNECTA ПОДКЛЮЧЕНА" : "БЫСТРЫЙ ЗАПУСК · ОКОЛО 2 МИНУТ"}</small>
-          <h2>{activeCommunities.length ? "Ваши доски готовы к управлению" : "Подключите Telegram-сообщество"}</h2>
-          <p>{activeCommunities.length
-            ? "Здесь находятся подключения, коммерческие настройки, выплаты и состояние каждой доски."
-            : "Выберите группу, добавьте @AdnectaBot администратором — остальные технические шаги платформа выполнит сама."}</p>
-          {!activeCommunities.length && (
-            <button
-              className="primary owner-connect-action"
-              disabled={busy === (firstManageableOrganization?.id || "new-community")}
-              onClick={() => void connect(firstManageableOrganization?.id)}
+      {!platformAdminOnly && (
+        <section
+          className={`owner-connect-hub ${activeCommunities.length ? "connected" : ""}`}
+          id="owner-start"
+        >
+          <div className="owner-connect-copy">
+            <small>
+              {activeCommunities.length
+                ? t("connectedLabel")
+                : t("quickLaunch")}
+            </small>
+            <h2>
+              {activeCommunities.length
+                ? t("boardsManageTitle")
+                : t("connectTelegramTitle")}
+            </h2>
+            <p>
+              {activeCommunities.length
+                ? t("boardsManageText")
+                : t("connectTelegramText")}
+            </p>
+            {!activeCommunities.length && (
+              <button
+                className="primary owner-connect-action"
+                disabled={
+                  busy === (firstManageableOrganization?.id || "new-community")
+                }
+                onClick={() => void connect(firstManageableOrganization?.id)}
+              >
+                {busy === (firstManageableOrganization?.id || "new-community")
+                  ? t("openingTelegram")
+                  : t("connectCommunityArrow")}
+              </button>
+            )}
+          </div>
+          <div className="owner-connect-steps" aria-label="Этапы подключения">
+            <span className="done">
+              <b>✓</b>
+              <i>{t("adminDashboardStep")}</i>
+            </span>
+            <span className={activeCommunities.length ? "done" : "current"}>
+              <b>{activeCommunities.length ? "✓" : "2"}</b>
+              <i>{t("chooseTelegramGroup")}</i>
+            </span>
+            <span
+              className={
+                readyCommunities
+                  ? "done"
+                  : activeCommunities.length
+                    ? "current"
+                    : ""
+              }
             >
-              {busy === (firstManageableOrganization?.id || "new-community") ? "Открываем Telegram…" : "Подключить сообщество →"}
-            </button>
-          )}
-        </div>
-        <div className="owner-connect-steps" aria-label="Этапы подключения">
-          <span className="done"><b>✓</b><i>Кабинет владельца</i></span>
-          <span className={activeCommunities.length ? "done" : "current"}><b>{activeCommunities.length ? "✓" : "2"}</b><i>Выбор Telegram-группы</i></span>
-          <span className={readyCommunities ? "done" : activeCommunities.length ? "current" : ""}><b>{readyCommunities ? "✓" : "3"}</b><i>Правила и запуск</i></span>
-        </div>
-      </section>}
+              <b>{readyCommunities ? "✓" : "3"}</b>
+              <i>{t("rulesAndLaunch")}</i>
+            </span>
+          </div>
+        </section>
+      )}
       {!platformAdminOnly && (
         <section className="owner-overview" aria-label="Сводка кабинета">
           <div className="owner-kpis">
-            <article><b>{data.organizations.length}</b><span>Рабочих пространств</span></article>
-            <article><b>{activeCommunities.length}</b><span>Подключено групп</span></article>
-            <article><b>{readyCommunities}</b><span>Готовы к работе</span></article>
-            <article><b>{totalListings}</b><span>Объявлений</span></article>
+            <article>
+              <b>{data.organizations.length}</b>
+              <span>{t("workspaces")}</span>
+            </article>
+            <article>
+              <b>{activeCommunities.length}</b>
+              <span>{t("connectedGroups")}</span>
+            </article>
+            <article>
+              <b>{readyCommunities}</b>
+              <span>{t("readyToWork")}</span>
+            </article>
+            <article>
+              <b>{totalListings}</b>
+              <span>{t("listings")}</span>
+            </article>
           </div>
           <div className="owner-next-step">
-            <span>{!activeCommunities.length ? "2" : readyCommunities < activeCommunities.length ? "3" : "✓"}</span>
+            <span>
+              {!activeCommunities.length
+                ? "2"
+                : readyCommunities < activeCommunities.length
+                  ? "3"
+                  : "✓"}
+            </span>
             <div>
-              <small>СЛЕДУЮЩИЙ ШАГ</small>
-              <b>{!activeCommunities.length ? "Добавьте @AdnectaBot в Telegram-группу" : readyCommunities < activeCommunities.length ? "Завершите правила и настройки доски" : "Доски готовы — следите за публикациями и Stars"}</b>
+              <small>{t("nextStep")}</small>
+              <b>
+                {!activeCommunities.length
+                  ? t("addBotNext")
+                  : readyCommunities < activeCommunities.length
+                    ? t("finishBoardSettings")
+                    : t("boardsReadyNext")}
+              </b>
             </div>
           </div>
         </section>
       )}
       {error && <LoadError message={error} />}
-      {!platformAdminOnly && <div className="organization-list" id="owner-communities">
-        {data.organizations.map((organization: any, organizationIndex: number) => (
-          <section className="organization-card" key={organization.id}>
-            <div className="organization-title">
-              <div>
-                <small>РАБОЧЕЕ ПРОСТРАНСТВО · НЕ TELEGRAM-ПОДКЛЮЧЕНИЕ</small>
-                <h2>{organization.name}</h2>
-              </div>
-              <span>{organization.role === "owner" ? "Владелец" : "Админ"}</span>
-            </div>
-            {organization.role === "owner" && <OrganizationIdentitySettings organization={organization} onChanged={load} />}
-            <div className="connected-boards">
-              {organization.communities.map((community: any) => (
-                <CommunityOperations
-                  key={community.id}
-                  community={community}
-                  canManage={["owner", "administrator"].includes(organization.role)}
-                  canDelete={organization.role === "owner"}
-                  onChanged={load}
-                />
-              ))}
-              {!organization.communities.length && (
-                <div className="owner-empty-community">
-                  <span>▦</span>
-                  <div><b>Telegram-группы не подключены</b><small>Рабочее пространство хранит настройки и финансы, но само по себе не является подключением.</small></div>
-                  {["owner", "administrator"].includes(organization.role) && <button className="primary" disabled={busy === organization.id} onClick={() => void connect(organization.id)}>{busy === organization.id ? "Открываем…" : "Подключить группу"}</button>}
+      {!platformAdminOnly && (
+        <div className="organization-list" id="owner-communities">
+          {data.organizations.map(
+            (organization: any, organizationIndex: number) => (
+              <section className="organization-card" key={organization.id}>
+                <div className="organization-title">
+                  <div>
+                    <small>{t("workspaceNotConnection")}</small>
+                    <h2>{organization.name}</h2>
+                  </div>
+                  <span>
+                    {organization.role === "owner"
+                      ? t("ownerRole")
+                      : t("administratorRole")}
+                  </span>
                 </div>
-              )}
-            </div>
-            {["owner", "administrator"].includes(organization.role) &&
-              organization.communities.length > 0 && (
-                <OwnerLocalization
-                  communities={organization.communities}
-                  onChanged={load}
-                />
-              )}
-            {organization.role === "owner" && organization.communities.length > 0 && (
-              <OwnerMonetization organization={organization} pricing={data.platformPricing} onChanged={load} />
-            )}
-            {organization.communities.length > 0 && <div id={organizationIndex === 0 ? "owner-finance" : undefined}><OrganizationFinance organizationId={organization.id} /></div>}
-            <div id={organizationIndex === 0 ? "owner-support" : undefined}><OrganizationSupport organization={organization} /></div>
-            {organization.role === "owner" && (
-              <button
-                type="button"
-                className="ownership-transfer"
-                disabled={busy === `transfer-${organization.id}`}
-                onClick={async () => {
-                  const telegramUserId = window.prompt(
-                    "Telegram ID нового владельца. Он должен сначала открыть бота.",
-                  );
-                  if (!telegramUserId) return;
-                  if (!window.confirm("После передачи вы станете администратором. Продолжить?")) return;
-                  setBusy(`transfer-${organization.id}`);
-                  setError("");
-                  try {
-                    await request(`/platform/organizations/${organization.id}/transfer-ownership`, "POST", { telegramUserId });
-                    await load();
-                  } catch (e: any) {
-                    setError(e.message);
-                  } finally {
-                    setBusy("");
-                  }
-                }}
-              >
-                Передать права владельца
-              </button>
-            )}
-            {organization.communities.length > 0 && <button
-              className="primary connect-community"
-              disabled={busy === organization.id}
-              onClick={() => void connect(organization.id)}
-            >
-              {busy === organization.id
-                ? "Создаём ссылку…"
-                : organization.communities.some((community: any) => community.botStatus === "unavailable")
-                  ? "＋ Подключить Adnecta к группе"
-                  : "＋ Добавить Adnecta в группу"}
-            </button>}
-          </section>
-        ))}
-      </div>}
-      {!platformAdminOnly && ["platform_admin", "platform_owner"].includes(data.user.platformRole) && (
-        <a className="platform-console-link" href="/platform-owner"><b>Перейти в кабинет владельца платформы</b><span>Организации, сообщества, Stars, выплаты и аудит →</span></a>
+                {organization.role === "owner" && (
+                  <OrganizationIdentitySettings
+                    organization={organization}
+                    onChanged={load}
+                  />
+                )}
+                <div className="connected-boards">
+                  {organization.communities.map((community: any) => (
+                    <CommunityOperations
+                      key={community.id}
+                      community={community}
+                      canManage={["owner", "administrator"].includes(
+                        organization.role,
+                      )}
+                      canDelete={organization.role === "owner"}
+                      onChanged={load}
+                    />
+                  ))}
+                  {!organization.communities.length && (
+                    <div className="owner-empty-community">
+                      <span>▦</span>
+                      <div>
+                        <b>{t("noTelegramGroups")}</b>
+                        <small>{t("workspaceExplanation")}</small>
+                      </div>
+                      {["owner", "administrator"].includes(
+                        organization.role,
+                      ) && (
+                        <button
+                          className="primary"
+                          disabled={busy === organization.id}
+                          onClick={() => void connect(organization.id)}
+                        >
+                          {busy === organization.id
+                            ? t("openingTelegram")
+                            : t("connectGroup")}
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+                {["owner", "administrator"].includes(organization.role) &&
+                  organization.communities.length > 0 && (
+                    <OwnerLocalization
+                      communities={organization.communities}
+                      onChanged={load}
+                    />
+                  )}
+                {organization.role === "owner" &&
+                  organization.communities.length > 0 && (
+                    <OwnerMonetization
+                      organization={organization}
+                      pricing={data.platformPricing}
+                      onChanged={load}
+                    />
+                  )}
+                {organization.communities.length > 0 && (
+                  <div
+                    id={organizationIndex === 0 ? "owner-finance" : undefined}
+                  >
+                    <OrganizationFinance organizationId={organization.id} />
+                  </div>
+                )}
+                <div id={organizationIndex === 0 ? "owner-support" : undefined}>
+                  <OrganizationSupport organization={organization} />
+                </div>
+                {organization.role === "owner" && (
+                  <button
+                    type="button"
+                    className="ownership-transfer"
+                    disabled={busy === `transfer-${organization.id}`}
+                    onClick={async () => {
+                      const telegramUserId = window.prompt(
+                        "Telegram ID нового владельца. Он должен сначала открыть бота.",
+                      );
+                      if (!telegramUserId) return;
+                      if (
+                        !window.confirm(
+                          "После передачи вы станете администратором. Продолжить?",
+                        )
+                      )
+                        return;
+                      setBusy(`transfer-${organization.id}`);
+                      setError("");
+                      try {
+                        await request(
+                          `/platform/organizations/${organization.id}/transfer-ownership`,
+                          "POST",
+                          { telegramUserId },
+                        );
+                        await load();
+                      } catch (e: any) {
+                        setError(e.message);
+                      } finally {
+                        setBusy("");
+                      }
+                    }}
+                  >
+                    Передать права владельца
+                  </button>
+                )}
+                {organization.communities.length > 0 && (
+                  <button
+                    className="primary connect-community"
+                    disabled={busy === organization.id}
+                    onClick={() => void connect(organization.id)}
+                  >
+                    {busy === organization.id
+                      ? "Создаём ссылку…"
+                      : organization.communities.some(
+                            (community: any) =>
+                              community.botStatus === "unavailable",
+                          )
+                        ? "＋ Подключить Adnecta к группе"
+                        : "＋ Добавить Adnecta в группу"}
+                  </button>
+                )}
+              </section>
+            ),
+          )}
+        </div>
       )}
-      {platformAdminOnly && ["platform_admin", "platform_owner"].includes(
-        data.user.platformRole,
-      ) && <PlatformOwnerPanel canEdit={data.user.platformRole === "platform_owner"} />}
-      {platformAdminOnly && data.user.platformRole === "support" && <PlatformSupportPanel />}
-      {platformAdminOnly && data.user.platformRole === "finance" && <PlatformFinancePanel />}
-      {platformAdminOnly && !["platform_admin", "platform_owner", "support", "finance"].includes(data.user.platformRole) && <LoadError message="Этот отдельный кабинет доступен только владельцу и сотрудникам платформы." />}
+      {!platformAdminOnly &&
+        ["platform_admin", "platform_owner"].includes(
+          data.user.platformRole,
+        ) && (
+          <a className="platform-console-link" href="/platform-owner">
+            <b>Перейти в кабинет владельца платформы</b>
+            <span>Организации, сообщества, Stars, выплаты и аудит →</span>
+          </a>
+        )}
+      {platformAdminOnly &&
+        ["platform_admin", "platform_owner"].includes(
+          data.user.platformRole,
+        ) && (
+          <PlatformOwnerPanel
+            canEdit={data.user.platformRole === "platform_owner"}
+          />
+        )}
+      {platformAdminOnly && data.user.platformRole === "support" && (
+        <PlatformSupportPanel />
+      )}
+      {platformAdminOnly && data.user.platformRole === "finance" && (
+        <PlatformFinancePanel />
+      )}
+      {platformAdminOnly &&
+        !["platform_admin", "platform_owner", "support", "finance"].includes(
+          data.user.platformRole,
+        ) && (
+          <LoadError message="Этот отдельный кабинет доступен только владельцу и сотрудникам платформы." />
+        )}
     </main>
   );
 }
@@ -642,7 +1187,9 @@ function OwnerLocalization({
               }
             >
               {supportedLanguages.map(([code, name]) => (
-                <option value={code} key={code}>{name}</option>
+                <option value={code} key={code}>
+                  {name}
+                </option>
               ))}
             </select>
           </label>
@@ -719,12 +1266,31 @@ function OrganizationIdentitySettings({
           <button className="primary" disabled={Boolean(busy)}>
             {busy === "rename" ? "Сохраняем…" : "Сохранить"}
           </button>
-          <button type="button" onClick={() => { setName(organization.name); setEditing(false); }}>Отмена</button>
+          <button
+            type="button"
+            onClick={() => {
+              setName(organization.name);
+              setEditing(false);
+            }}
+          >
+            Отмена
+          </button>
         </form>
       ) : (
         <div>
-          <button type="button" onClick={() => setEditing(true)}>✎ Переименовать</button>
-          {!organization.communities.length && <button type="button" className="danger-link" disabled={Boolean(busy)} onClick={() => void remove()}>{busy === "delete" ? "Удаляем…" : "Удалить пустую запись"}</button>}
+          <button type="button" onClick={() => setEditing(true)}>
+            ✎ Переименовать
+          </button>
+          {!organization.communities.length && (
+            <button
+              type="button"
+              className="danger-link"
+              disabled={Boolean(busy)}
+              onClick={() => void remove()}
+            >
+              {busy === "delete" ? "Удаляем…" : "Удалить пустую запись"}
+            </button>
+          )}
         </div>
       )}
       {error && <LoadError message={error} />}
@@ -732,22 +1298,95 @@ function OrganizationIdentitySettings({
   );
 }
 
-function LegalAcceptance({ documents, onAccepted }: { documents: any[]; onAccepted: () => Promise<any> }) {
+function LegalAcceptance({
+  documents,
+  onAccepted,
+}: {
+  documents: any[];
+  onAccepted: () => Promise<any>;
+}) {
   const [confirmed, setConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  return <main className="legal-acceptance"><section><small>ВАЖНО</small><h1>Условия закрытой beta</h1><p>Перед созданием и управлением сообществом ознакомьтесь с актуальными документами.</p><div>{documents.map((document) => <a key={document.id} href={`/${document.type}`} target="_blank" rel="noreferrer"><span>{document.title}</span><small>Версия {document.version} ↗</small></a>)}</div><label><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} />Я прочитал(а) и принимаю все указанные документы</label>{error && <LoadError message={error}/>}<button className="primary" disabled={!confirmed || busy} onClick={async () => { setBusy(true); setError(""); try { await request("/platform/legal/accept", "POST", { documentIds: documents.map((document) => document.id) }); await onAccepted(); } catch (e: any) { setError(e.message); } finally { setBusy(false); } }}>{busy ? "Сохраняем…" : "Принять и продолжить"}</button></section></main>;
+  return (
+    <main className="legal-acceptance">
+      <section>
+        <small>ВАЖНО</small>
+        <h1>Условия закрытой beta</h1>
+        <p>
+          Перед созданием и управлением сообществом ознакомьтесь с актуальными
+          документами.
+        </p>
+        <div>
+          {documents.map((document) => (
+            <a
+              key={document.id}
+              href={`/${document.type}`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              <span>{document.title}</span>
+              <small>Версия {document.version} ↗</small>
+            </a>
+          ))}
+        </div>
+        <label>
+          <input
+            type="checkbox"
+            checked={confirmed}
+            onChange={(event) => setConfirmed(event.target.checked)}
+          />
+          Я прочитал(а) и принимаю все указанные документы
+        </label>
+        {error && <LoadError message={error} />}
+        <button
+          className="primary"
+          disabled={!confirmed || busy}
+          onClick={async () => {
+            setBusy(true);
+            setError("");
+            try {
+              await request("/platform/legal/accept", "POST", {
+                documentIds: documents.map((document) => document.id),
+              });
+              await onAccepted();
+            } catch (e: any) {
+              setError(e.message);
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          {busy ? "Сохраняем…" : "Принять и продолжить"}
+        </button>
+      </section>
+    </main>
+  );
 }
 
-function OwnerMonetization({ organization, pricing, onChanged }: { organization: any; pricing: any; onChanged: () => Promise<any> }) {
+function OwnerMonetization({
+  organization,
+  pricing,
+  onChanged,
+}: {
+  organization: any;
+  pricing: any;
+  onChanged: () => Promise<any>;
+}) {
   const [drafts, setDrafts] = useState<Record<string, any>>(
-    Object.fromEntries(organization.communities.map((community: any) => [community.id, {
-      monetizationMode: community.monetizationMode || "hybrid",
-      publicationPriceStars: community.publicationPriceStars || pricing.minimumPublicationStars,
-      minMonthlyMessagesForFree: community.minMonthlyMessagesForFree || 10,
-      activityWindowDays: community.activityWindowDays || 30,
-      allowPaidNonMembers: community.allowPaidNonMembers ?? true,
-    }])),
+    Object.fromEntries(
+      organization.communities.map((community: any) => [
+        community.id,
+        {
+          monetizationMode: community.monetizationMode || "hybrid",
+          publicationPriceStars:
+            community.publicationPriceStars || pricing.minimumPublicationStars,
+          minMonthlyMessagesForFree: community.minMonthlyMessagesForFree || 10,
+          activityWindowDays: community.activityWindowDays || 30,
+          allowPaidNonMembers: community.allowPaidNonMembers ?? true,
+        },
+      ]),
+    ),
   );
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
@@ -761,46 +1400,166 @@ function OwnerMonetization({ organization, pricing, onChanged }: { organization:
       [communityId]: { ...current[communityId], ...patch },
     }));
   const subscribe = async () => {
-    setBusy("subscription"); setMessage("");
+    setBusy("subscription");
+    setMessage("");
     try {
-      const result = await request(`/platform/organizations/${organization.id}/stars-subscription-link`, "POST", {});
+      const result = await request(
+        `/platform/organizations/${organization.id}/stars-subscription-link`,
+        "POST",
+        {},
+      );
       window.location.href = result.invoiceUrl;
-    } catch (e: any) { setMessage(e.message); setBusy(""); }
+    } catch (e: any) {
+      setMessage(e.message);
+      setBusy("");
+    }
   };
   const save = async (communityId: string) => {
-    setBusy(communityId); setMessage("");
+    setBusy(communityId);
+    setMessage("");
     try {
-      await request(`/platform/communities/${communityId}/monetization`, "PATCH", drafts[communityId]);
+      await request(
+        `/platform/communities/${communityId}/monetization`,
+        "PATCH",
+        drafts[communityId],
+      );
       setMessage("✓ Модель публикаций сохранена");
       await onChanged();
-    } catch (e: any) { setMessage(e.message); }
-    finally { setBusy(""); }
+    } catch (e: any) {
+      setMessage(e.message);
+    } finally {
+      setBusy("");
+    }
   };
   return (
     <section className="organization-billing">
       <div className="finance-summary">
-        <span><small>МОНЕТИЗАЦИЯ В STARS</small><b>15% платформе · 85% сообществу</b></span>
+        <span>
+          <small>МОНЕТИЗАЦИЯ В STARS</small>
+          <b>15% платформе · 85% сообществу</b>
+        </span>
       </div>
       <div className="billing-details">
         <div className="connect-status">
           <b>Подписка бесплатной доски</b>
-          <small>{subscriptionActive
-            ? `Активна до ${new Date(organization.starsSubscriptionExpiresAt).toLocaleDateString("ru")}`
-            : "Нужна только если публикации бесплатны абсолютно для всех"}</small>
+          <small>
+            {subscriptionActive
+              ? `Активна до ${new Date(organization.starsSubscriptionExpiresAt).toLocaleDateString("ru")}`
+              : "Нужна только если публикации бесплатны абсолютно для всех"}
+          </small>
           <strong>{pricing.freeBoardSubscriptionStars} ⭐ / 30 дней</strong>
-          {!subscriptionActive && <button className="primary" disabled={Boolean(busy)} onClick={() => void subscribe()}>{busy === "subscription" ? "Создаём счёт…" : "Оформить подписку"}</button>}
+          {!subscriptionActive && (
+            <button
+              className="primary"
+              disabled={Boolean(busy)}
+              onClick={() => void subscribe()}
+            >
+              {busy === "subscription" ? "Создаём счёт…" : "Оформить подписку"}
+            </button>
+          )}
         </div>
         {organization.communities.map((community: any) => {
           const draft = drafts[community.id];
           if (!draft) return null;
-          return <form key={community.id} className="platform-settings" onSubmit={(event) => { event.preventDefault(); void save(community.id); }}>
-            <h4>{community.name}</h4>
-            <label>Кто оплачивает публикацию<select value={draft.monetizationMode} onChange={(e) => update(community.id, { monetizationMode: e.target.value })}><option value="paid_all">Все пользователи платят</option><option value="hybrid">Активные бесплатно, остальные платят</option><option value="free_subscription" disabled={!subscriptionActive}>Бесплатно всем — по подписке владельца</option></select></label>
-            {draft.monetizationMode !== "free_subscription" && <label>Цена публикации, Stars<input type="number" min={pricing.minimumPublicationStars} max="10000" value={draft.publicationPriceStars} onChange={(e) => update(community.id, { publicationPriceStars: Number(e.target.value) })}/><small>Минимум платформы — {pricing.minimumPublicationStars} ⭐</small></label>}
-            {draft.monetizationMode === "hybrid" && <><label>Сообщений для бесплатной публикации<input type="number" min="1" max="10000" value={draft.minMonthlyMessagesForFree} onChange={(e) => update(community.id, { minMonthlyMessagesForFree: Number(e.target.value) })}/></label><label>Период активности<select value={draft.activityWindowDays} onChange={(e) => update(community.id, { activityWindowDays: Number(e.target.value) })}><option value={7}>7 дней</option><option value={30}>30 дней</option><option value={90}>90 дней</option></select></label></>}
-            <label className="check"><input type="checkbox" checked={draft.allowPaidNonMembers} onChange={(e) => update(community.id, { allowPaidNonMembers: e.target.checked })}/>Разрешить платные объявления людям не из группы</label>
-            <button className="primary" disabled={Boolean(busy)}>{busy === community.id ? "Сохраняем…" : "Сохранить модель"}</button>
-          </form>;
+          return (
+            <form
+              key={community.id}
+              className="platform-settings"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void save(community.id);
+              }}
+            >
+              <h4>{community.name}</h4>
+              <label>
+                Кто оплачивает публикацию
+                <select
+                  value={draft.monetizationMode}
+                  onChange={(e) =>
+                    update(community.id, { monetizationMode: e.target.value })
+                  }
+                >
+                  <option value="paid_all">Все пользователи платят</option>
+                  <option value="hybrid">
+                    Активные бесплатно, остальные платят
+                  </option>
+                  <option
+                    value="free_subscription"
+                    disabled={!subscriptionActive}
+                  >
+                    Бесплатно всем — по подписке владельца
+                  </option>
+                </select>
+              </label>
+              {draft.monetizationMode !== "free_subscription" && (
+                <label>
+                  Цена публикации, Stars
+                  <input
+                    type="number"
+                    min={pricing.minimumPublicationStars}
+                    max="10000"
+                    value={draft.publicationPriceStars}
+                    onChange={(e) =>
+                      update(community.id, {
+                        publicationPriceStars: Number(e.target.value),
+                      })
+                    }
+                  />
+                  <small>
+                    Минимум платформы — {pricing.minimumPublicationStars} ⭐
+                  </small>
+                </label>
+              )}
+              {draft.monetizationMode === "hybrid" && (
+                <>
+                  <label>
+                    Сообщений для бесплатной публикации
+                    <input
+                      type="number"
+                      min="1"
+                      max="10000"
+                      value={draft.minMonthlyMessagesForFree}
+                      onChange={(e) =>
+                        update(community.id, {
+                          minMonthlyMessagesForFree: Number(e.target.value),
+                        })
+                      }
+                    />
+                  </label>
+                  <label>
+                    Период активности
+                    <select
+                      value={draft.activityWindowDays}
+                      onChange={(e) =>
+                        update(community.id, {
+                          activityWindowDays: Number(e.target.value),
+                        })
+                      }
+                    >
+                      <option value={7}>7 дней</option>
+                      <option value={30}>30 дней</option>
+                      <option value={90}>90 дней</option>
+                    </select>
+                  </label>
+                </>
+              )}
+              <label className="check">
+                <input
+                  type="checkbox"
+                  checked={draft.allowPaidNonMembers}
+                  onChange={(e) =>
+                    update(community.id, {
+                      allowPaidNonMembers: e.target.checked,
+                    })
+                  }
+                />
+                Разрешить платные объявления людям не из группы
+              </label>
+              <button className="primary" disabled={Boolean(busy)}>
+                {busy === community.id ? "Сохраняем…" : "Сохранить модель"}
+              </button>
+            </form>
+          );
         })}
         {message && <p className="platform-message">{message}</p>}
       </div>
@@ -814,8 +1573,12 @@ function OrganizationBilling({ organization }: { organization: any }) {
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const load = () =>
-    request(`/platform/organizations/${organization.id}/billing`).then(setBilling);
-  useEffect(() => { void load().catch((e) => setError(e.message)); }, [organization.id]);
+    request(`/platform/organizations/${organization.id}/billing`).then(
+      setBilling,
+    );
+  useEffect(() => {
+    void load().catch((e) => setError(e.message));
+  }, [organization.id]);
   const openExternal = (url: string) => {
     if (window.Telegram?.WebApp.openLink) window.Telegram.WebApp.openLink(url);
     else window.location.href = url;
@@ -836,25 +1599,148 @@ function OrganizationBilling({ organization }: { organization: any }) {
   if (!billing && !error) return null;
   return (
     <section className="organization-billing">
-      <button type="button" className="finance-summary" onClick={() => setExpanded((value) => !value)}>
-        <span><small>STRIPE BILLING</small><b>{billing?.subscription.status === "active" ? `Тариф ${billing.subscription.planKey || "active"}` : "Без подписки"}</b></span><i>{expanded ? "−" : "+"}</i>
+      <button
+        type="button"
+        className="finance-summary"
+        onClick={() => setExpanded((value) => !value)}
+      >
+        <span>
+          <small>STRIPE BILLING</small>
+          <b>
+            {billing?.subscription.status === "active"
+              ? `Тариф ${billing.subscription.planKey || "active"}`
+              : "Без подписки"}
+          </b>
+        </span>
+        <i>{expanded ? "−" : "+"}</i>
       </button>
       {expanded && (
         <div className="billing-details">
           {error && <LoadError message={error} />}
-          {!billing?.configured && <div className="billing-unavailable"><b>Stripe готов к подключению</b><small>Владелец платформы должен добавить API ключи и Price ID.</small></div>}
+          {!billing?.configured && (
+            <div className="billing-unavailable">
+              <b>Stripe готов к подключению</b>
+              <small>
+                Владелец платформы должен добавить API ключи и Price ID.
+              </small>
+            </div>
+          )}
           {billing?.plans.map((plan: any) => (
             <article className="billing-plan" key={plan.id}>
-              <span><b>{plan.name}</b><small>{plan.description}</small><strong>{(plan.unitAmount / 100).toLocaleString("ru", { style: "currency", currency: plan.currency.toUpperCase() })} / {plan.interval === "month" ? "месяц" : plan.interval}</strong></span>
-              <ul>{(plan.features || []).map((feature: string) => <li key={feature}>✓ {feature}</li>)}</ul>
-              {organization.role === "owner" && <button className="primary" disabled={Boolean(busy) || !plan.available || ["active", "trialing"].includes(billing.subscription.status)} onClick={() => void action(plan.key, `/platform/organizations/${organization.id}/billing/checkout`, { planKey: plan.key })}>{busy === plan.key ? "Открываем…" : "Выбрать"}</button>}
+              <span>
+                <b>{plan.name}</b>
+                <small>{plan.description}</small>
+                <strong>
+                  {(plan.unitAmount / 100).toLocaleString("ru", {
+                    style: "currency",
+                    currency: plan.currency.toUpperCase(),
+                  })}{" "}
+                  / {plan.interval === "month" ? "месяц" : plan.interval}
+                </strong>
+              </span>
+              <ul>
+                {(plan.features || []).map((feature: string) => (
+                  <li key={feature}>✓ {feature}</li>
+                ))}
+              </ul>
+              {organization.role === "owner" && (
+                <button
+                  className="primary"
+                  disabled={
+                    Boolean(busy) ||
+                    !plan.available ||
+                    ["active", "trialing"].includes(billing.subscription.status)
+                  }
+                  onClick={() =>
+                    void action(
+                      plan.key,
+                      `/platform/organizations/${organization.id}/billing/checkout`,
+                      { planKey: plan.key },
+                    )
+                  }
+                >
+                  {busy === plan.key ? "Открываем…" : "Выбрать"}
+                </button>
+              )}
             </article>
           ))}
-          {organization.role === "owner" && billing?.subscription.customerReady && <button disabled={Boolean(busy)} onClick={() => void action("portal", `/platform/organizations/${organization.id}/billing/portal`)}>Управлять подпиской в Stripe</button>}
-          <div className="connect-status"><b>Выплаты сообществу</b><small>{billing?.connect.payoutsEnabled ? "✓ Stripe Connect готов к выплатам" : billing?.connect.detailsSubmitted ? "Stripe проверяет данные" : "Пройдите защищённую проверку Stripe"}</small>{billing?.connect.requirementsDue?.length > 0 && <small>Нужно заполнить: {billing.connect.requirementsDue.length}</small>}</div>
-          {organization.role === "owner" && <button className="primary" disabled={Boolean(busy) || !billing?.configured} onClick={() => void action("connect", `/platform/organizations/${organization.id}/connect/onboarding`)}>{billing?.connect.accountCreated ? "Продолжить проверку Stripe" : "Подключить Stripe Connect"}</button>}
-          {billing?.connect.accountCreated && <button disabled={Boolean(busy) || !billing?.configured} onClick={() => void action("refresh", `/platform/organizations/${organization.id}/connect/refresh`)}>Обновить статус</button>}
-          {billing?.invoices.length > 0 && <div className="billing-invoices"><b>Счета</b>{billing.invoices.map((invoice: any) => <p key={invoice.id}><span>{new Date(invoice.createdAt).toLocaleDateString("ru")} · {invoice.status}</span><b>{(invoice.amountPaid / 100).toLocaleString("ru", { style: "currency", currency: invoice.currency.toUpperCase() })}</b></p>)}</div>}
+          {organization.role === "owner" &&
+            billing?.subscription.customerReady && (
+              <button
+                disabled={Boolean(busy)}
+                onClick={() =>
+                  void action(
+                    "portal",
+                    `/platform/organizations/${organization.id}/billing/portal`,
+                  )
+                }
+              >
+                Управлять подпиской в Stripe
+              </button>
+            )}
+          <div className="connect-status">
+            <b>Выплаты сообществу</b>
+            <small>
+              {billing?.connect.payoutsEnabled
+                ? "✓ Stripe Connect готов к выплатам"
+                : billing?.connect.detailsSubmitted
+                  ? "Stripe проверяет данные"
+                  : "Пройдите защищённую проверку Stripe"}
+            </small>
+            {billing?.connect.requirementsDue?.length > 0 && (
+              <small>
+                Нужно заполнить: {billing.connect.requirementsDue.length}
+              </small>
+            )}
+          </div>
+          {organization.role === "owner" && (
+            <button
+              className="primary"
+              disabled={Boolean(busy) || !billing?.configured}
+              onClick={() =>
+                void action(
+                  "connect",
+                  `/platform/organizations/${organization.id}/connect/onboarding`,
+                )
+              }
+            >
+              {billing?.connect.accountCreated
+                ? "Продолжить проверку Stripe"
+                : "Подключить Stripe Connect"}
+            </button>
+          )}
+          {billing?.connect.accountCreated && (
+            <button
+              disabled={Boolean(busy) || !billing?.configured}
+              onClick={() =>
+                void action(
+                  "refresh",
+                  `/platform/organizations/${organization.id}/connect/refresh`,
+                )
+              }
+            >
+              Обновить статус
+            </button>
+          )}
+          {billing?.invoices.length > 0 && (
+            <div className="billing-invoices">
+              <b>Счета</b>
+              {billing.invoices.map((invoice: any) => (
+                <p key={invoice.id}>
+                  <span>
+                    {new Date(invoice.createdAt).toLocaleDateString("ru")} ·{" "}
+                    {invoice.status}
+                  </span>
+                  <b>
+                    {(invoice.amountPaid / 100).toLocaleString("ru", {
+                      style: "currency",
+                      currency: invoice.currency.toUpperCase(),
+                    })}
+                  </b>
+                </p>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </section>
@@ -901,8 +1787,12 @@ function CommunityOperations({
     setBusy("export");
     setError("");
     try {
-      const data = await request(`/platform/communities/${community.id}/export`);
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const data = await request(
+        `/platform/communities/${community.id}/export`,
+      );
+      const blob = new Blob([JSON.stringify(data, null, 2)], {
+        type: "application/json",
+      });
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;
@@ -918,10 +1808,20 @@ function CommunityOperations({
   };
   return (
     <article className="community-operations">
-      <button className="community-summary" type="button" onClick={() => setExpanded((value) => !value)}>
+      <button
+        className="community-summary"
+        type="button"
+        onClick={() => setExpanded((value) => !value)}
+      >
         <span>
           <b>{community.name}</b>
-          <small className={community.tenantStatus === "active" ? "status-active" : "status-warning"}>
+          <small
+            className={
+              community.tenantStatus === "active"
+                ? "status-active"
+                : "status-warning"
+            }
+          >
             {community.tenantStatus === "active"
               ? "● Работает"
               : community.botStatus === "unavailable"
@@ -935,32 +1835,128 @@ function CommunityOperations({
       </button>
       {expanded && (
         <div className="community-details">
-          <div className="setup-progress"><span><b>Готовность</b><small>{completed} из {setupItems.length} шагов</small></span><strong>{Math.round((completed / setupItems.length) * 100)}%</strong></div>
-          <div className="setup-list">
-            {setupItems.map(([done, label]) => <span key={String(label)} className={done ? "done" : ""}>{done ? "✓" : "·"} {label}</span>)}
+          <div className="setup-progress">
+            <span>
+              <b>Готовность</b>
+              <small>
+                {completed} из {setupItems.length} шагов
+              </small>
+            </span>
+            <strong>
+              {Math.round((completed / setupItems.length) * 100)}%
+            </strong>
           </div>
-          <div className="community-numbers"><span>{community._count?.members || 0}<small>Участников</small></span><span>{community._count?.listings || 0}<small>Объявлений</small></span></div>
-          {community.tenantStatus === "active" && setup.connected
-            ? <a className="open-board-link" href={`/?community=${encodeURIComponent(community.slug)}`}>Открыть доску →</a>
-            : <div className="community-reconnect-note"><b>Telegram-подключение отсутствует</b><small>Нажмите «Подключить Adnecta к группе» ниже и выберите эту же группу. Настройки и объявления сохранятся.</small></div>}
+          <div className="setup-list">
+            {setupItems.map(([done, label]) => (
+              <span key={String(label)} className={done ? "done" : ""}>
+                {done ? "✓" : "·"} {label}
+              </span>
+            ))}
+          </div>
+          <div className="community-numbers">
+            <span>
+              {community._count?.members || 0}
+              <small>Участников</small>
+            </span>
+            <span>
+              {community._count?.listings || 0}
+              <small>Объявлений</small>
+            </span>
+          </div>
+          {community.tenantStatus === "active" && setup.connected ? (
+            <a
+              className="open-board-link"
+              href={`/?community=${encodeURIComponent(community.slug)}`}
+            >
+              Открыть доску →
+            </a>
+          ) : (
+            <div className="community-reconnect-note">
+              <b>Telegram-подключение отсутствует</b>
+              <small>
+                Нажмите «Подключить Adnecta к группе» ниже и выберите эту же
+                группу. Настройки и объявления сохранятся.
+              </small>
+            </div>
+          )}
           {error && <LoadError message={error} />}
           {community.deletionScheduledFor && (
             <div className="deletion-warning">
               <b>Удаление запланировано</b>
-              <small>Данные будут удалены не ранее {new Date(community.deletionScheduledFor).toLocaleDateString("ru")}.</small>
-              {canDelete && <button disabled={Boolean(busy)} onClick={() => void run("cancel-delete", `/platform/communities/${community.id}/cancel-deletion`)}>Отменить удаление</button>}
+              <small>
+                Данные будут удалены не ранее{" "}
+                {new Date(community.deletionScheduledFor).toLocaleDateString(
+                  "ru",
+                )}
+                .
+              </small>
+              {canDelete && (
+                <button
+                  disabled={Boolean(busy)}
+                  onClick={() =>
+                    void run(
+                      "cancel-delete",
+                      `/platform/communities/${community.id}/cancel-deletion`,
+                    )
+                  }
+                >
+                  Отменить удаление
+                </button>
+              )}
             </div>
           )}
           {canManage && (
             <div className="community-tools">
-              <button disabled={Boolean(busy)} onClick={() => void run("check", `/platform/communities/${community.id}/connection-check`)}>{busy === "check" ? "Проверяем…" : "Проверить бота"}</button>
-              <button disabled={Boolean(busy)} onClick={() => void exportData()}>{busy === "export" ? "Готовим…" : "Скачать экспорт"}</button>
-              {community.botStatus === "unavailable" ? null : community.tenantStatus === "closed" ? (
-                <button className="primary" disabled={Boolean(busy)} onClick={() => void run("reconnect", `/platform/communities/${community.id}/reconnect`)}>Включить снова</button>
+              <button
+                disabled={Boolean(busy)}
+                onClick={() =>
+                  void run(
+                    "check",
+                    `/platform/communities/${community.id}/connection-check`,
+                  )
+                }
+              >
+                {busy === "check" ? "Проверяем…" : "Проверить бота"}
+              </button>
+              <button
+                disabled={Boolean(busy)}
+                onClick={() => void exportData()}
+              >
+                {busy === "export" ? "Готовим…" : "Скачать экспорт"}
+              </button>
+              {community.botStatus ===
+              "unavailable" ? null : community.tenantStatus === "closed" ? (
+                <button
+                  className="primary"
+                  disabled={Boolean(busy)}
+                  onClick={() =>
+                    void run(
+                      "reconnect",
+                      `/platform/communities/${community.id}/reconnect`,
+                    )
+                  }
+                >
+                  Включить снова
+                </button>
               ) : (
-                <button className="danger-soft" disabled={Boolean(busy)} onClick={() => {
-                  if (window.confirm("Доска перестанет обслуживать группу. Данные сохранятся. Отключить?")) void run("disconnect", `/platform/communities/${community.id}/disconnect`, { confirmation: "DISCONNECT" });
-                }}>Отключить доску</button>
+                <button
+                  className="danger-soft"
+                  disabled={Boolean(busy)}
+                  onClick={() => {
+                    if (
+                      window.confirm(
+                        "Доска перестанет обслуживать группу. Данные сохранятся. Отключить?",
+                      )
+                    )
+                      void run(
+                        "disconnect",
+                        `/platform/communities/${community.id}/disconnect`,
+                        { confirmation: "DISCONNECT" },
+                      );
+                  }}
+                >
+                  Отключить доску
+                </button>
               )}
               {canDelete && !community.deletionScheduledFor && (
                 <button
@@ -968,10 +1964,19 @@ function CommunityOperations({
                   disabled={Boolean(busy) || !exported}
                   title={exported ? "" : "Сначала скачайте экспорт"}
                   onClick={() => {
-                    const confirmation = window.prompt("Данные будут удалены через 30 дней. Введите DELETE:");
-                    if (confirmation === "DELETE") void run("delete", `/platform/communities/${community.id}/request-deletion`, { confirmation, exportAcknowledged: true });
+                    const confirmation = window.prompt(
+                      "Данные будут удалены через 30 дней. Введите DELETE:",
+                    );
+                    if (confirmation === "DELETE")
+                      void run(
+                        "delete",
+                        `/platform/communities/${community.id}/request-deletion`,
+                        { confirmation, exportAcknowledged: true },
+                      );
                   }}
-                >Запросить удаление</button>
+                >
+                  Запросить удаление
+                </button>
               )}
             </div>
           )}
@@ -986,7 +1991,10 @@ function OrganizationFinance({ organizationId }: { organizationId: string }) {
   const [expanded, setExpanded] = useState(false);
   const [amount, setAmount] = useState("");
   const [message, setMessage] = useState("");
-  const load = () => request(`/platform/organizations/${organizationId}/finance`).then(setFinance);
+  const load = () =>
+    request(`/platform/organizations/${organizationId}/finance`).then(
+      setFinance,
+    );
   useEffect(() => {
     load().catch(() => undefined);
   }, [organizationId]);
@@ -1006,33 +2014,144 @@ function OrganizationFinance({ organizationId }: { organizationId: string }) {
       </button>
       {expanded && (
         <div className="finance-details">
-          <div><span>Ожидает разблокировки</span><b>{finance.balances.pending} ⭐ <small>≈ {estimatedTon(finance.balances.pending, finance.tonRate)}</small></b></div>
-          <p className="muted">Холд Telegram: {finance.holdDays} день. После этой даты подтверждённые начисления автоматически переходят в доступные.</p>
-          <div><span>Доступно к выплате</span><b>{finance.balances.available} ⭐ <small>≈ {estimatedTon(finance.balances.available, finance.tonRate)}</small></b></div>
-          <div><span>Зарезервировано</span><b>{finance.balances.reserved} ⭐ <small>≈ {estimatedTon(finance.balances.reserved, finance.tonRate)}</small></b></div>
-          <div><span>Выплачено</span><b>{finance.balances.paidOut} ⭐ <small>по фактическим TON-переводам</small></b></div>
-          <p className="muted">Оценка: 1 ⭐ = ${finance.tonRate.starUsd} вознаграждения, TON/USD = ${finance.tonRate.tonUsd?.toFixed(4) || "—"}. Обновлено {new Date(finance.tonRate.updatedAt).toLocaleString("ru")}. Финальная сумма фиксируется при выплате.</p>
+          <div>
+            <span>Ожидает разблокировки</span>
+            <b>
+              {finance.balances.pending} ⭐{" "}
+              <small>
+                ≈ {estimatedTon(finance.balances.pending, finance.tonRate)}
+              </small>
+            </b>
+          </div>
+          <p className="muted">
+            Холд Telegram: {finance.holdDays} день. После этой даты
+            подтверждённые начисления автоматически переходят в доступные.
+          </p>
+          <div>
+            <span>Доступно к выплате</span>
+            <b>
+              {finance.balances.available} ⭐{" "}
+              <small>
+                ≈ {estimatedTon(finance.balances.available, finance.tonRate)}
+              </small>
+            </b>
+          </div>
+          <div>
+            <span>Зарезервировано</span>
+            <b>
+              {finance.balances.reserved} ⭐{" "}
+              <small>
+                ≈ {estimatedTon(finance.balances.reserved, finance.tonRate)}
+              </small>
+            </b>
+          </div>
+          <div>
+            <span>Выплачено</span>
+            <b>
+              {finance.balances.paidOut} ⭐{" "}
+              <small>по фактическим TON-переводам</small>
+            </b>
+          </div>
+          <p className="muted">
+            Оценка: 1 ⭐ = ${finance.tonRate.starUsd} вознаграждения, TON/USD =
+            ${finance.tonRate.tonUsd?.toFixed(4) || "—"}. Обновлено{" "}
+            {new Date(finance.tonRate.updatedAt).toLocaleString("ru")}.
+            Финальная сумма фиксируется при выплате.
+          </p>
           {finance.payoutsEnabled ? (
-            <form className="payout-request" onSubmit={async (event) => {
-              event.preventDefault(); setMessage("");
-              try { await request(`/platform/organizations/${organizationId}/payouts`, "POST", { amountStars: Number(amount) }); setAmount(""); setMessage("✓ Заявка создана, Stars зарезервированы"); await load(); }
-              catch (e: any) { setMessage(e.message); }
-            }}>
-              <label>Запросить выплату<input type="number" min={finance.minimumPayoutStars} max={finance.balances.available} placeholder={`от ${finance.minimumPayoutStars} Stars`} value={amount} onChange={(e) => setAmount(e.target.value)} /></label>
-              <button className="primary" disabled={!amount || Number(amount) > finance.balances.available}>Отправить заявку</button>
+            <form
+              className="payout-request"
+              onSubmit={async (event) => {
+                event.preventDefault();
+                setMessage("");
+                try {
+                  await request(
+                    `/platform/organizations/${organizationId}/payouts`,
+                    "POST",
+                    { amountStars: Number(amount) },
+                  );
+                  setAmount("");
+                  setMessage("✓ Заявка создана, Stars зарезервированы");
+                  await load();
+                } catch (e: any) {
+                  setMessage(e.message);
+                }
+              }}
+            >
+              <label>
+                Запросить выплату
+                <input
+                  type="number"
+                  min={finance.minimumPayoutStars}
+                  max={finance.balances.available}
+                  placeholder={`от ${finance.minimumPayoutStars} Stars`}
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                />
+              </label>
+              <button
+                className="primary"
+                disabled={
+                  !amount || Number(amount) > finance.balances.available
+                }
+              >
+                Отправить заявку
+              </button>
             </form>
-          ) : <p className="muted">Выплаты откроются после проверки платёжного контура платформы.</p>}
+          ) : (
+            <p className="muted">
+              Выплаты откроются после проверки платёжного контура платформы.
+            </p>
+          )}
           {message && <p className="platform-message">{message}</p>}
           <h4>Заявки на выплату</h4>
-          {finance.payouts.map((payout: any) => <p key={payout.id}><span>{payout.status}<small>{new Date(payout.requestedAt).toLocaleDateString("ru")}{payout.tonTransactionHash ? ` · TON tx ${payout.tonTransactionHash}` : ""}</small></span><b>{payout.amountStars} ⭐ <small>{payout.settlementTonNano ? `→ ${actualTon(payout.settlementTonNano)}` : `≈ ${estimatedTon(payout.amountStars, finance.tonRate)}`}</small></b></p>)}
+          {finance.payouts.map((payout: any) => (
+            <p key={payout.id}>
+              <span>
+                {payout.status}
+                <small>
+                  {new Date(payout.requestedAt).toLocaleDateString("ru")}
+                  {payout.tonTransactionHash
+                    ? ` · TON tx ${payout.tonTransactionHash}`
+                    : ""}
+                </small>
+              </span>
+              <b>
+                {payout.amountStars} ⭐{" "}
+                <small>
+                  {payout.settlementTonNano
+                    ? `→ ${actualTon(payout.settlementTonNano)}`
+                    : `≈ ${estimatedTon(payout.amountStars, finance.tonRate)}`}
+                </small>
+              </b>
+            </p>
+          ))}
           <h4>Последние операции</h4>
           {finance.transactions.slice(0, 10).map((transaction: any) => (
             <p key={transaction.id}>
-              <span>{transaction.community?.name || "Сообщество"}<small>{transaction.status === "pending_settlement" ? `Доступно с ${new Date(transaction.availableAt).toLocaleDateString("ru")}` : new Date(transaction.occurredAt).toLocaleDateString("ru")}</small></span>
-              <b>+{transaction.payment?.communityShareStars || 0} ⭐ <small>≈ {estimatedTon(transaction.payment?.communityShareStars || 0, finance.tonRate)}</small></b>
+              <span>
+                {transaction.community?.name || "Сообщество"}
+                <small>
+                  {transaction.status === "pending_settlement"
+                    ? `Доступно с ${new Date(transaction.availableAt).toLocaleDateString("ru")}`
+                    : new Date(transaction.occurredAt).toLocaleDateString("ru")}
+                </small>
+              </span>
+              <b>
+                +{transaction.payment?.communityShareStars || 0} ⭐{" "}
+                <small>
+                  ≈{" "}
+                  {estimatedTon(
+                    transaction.payment?.communityShareStars || 0,
+                    finance.tonRate,
+                  )}
+                </small>
+              </b>
             </p>
           ))}
-          {!finance.transactions.length && <p className="muted">Платных публикаций пока нет.</p>}
+          {!finance.transactions.length && (
+            <p className="muted">Платных публикаций пока нет.</p>
+          )}
         </div>
       )}
     </section>
@@ -1047,7 +2166,9 @@ function OrganizationSupport({ organization }: { organization: any }) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const load = () =>
-    request(`/platform/organizations/${organization.id}/support`).then(setTickets);
+    request(`/platform/organizations/${organization.id}/support`).then(
+      setTickets,
+    );
   useEffect(() => {
     void load().catch(() => undefined);
   }, [organization.id]);
@@ -1056,11 +2177,15 @@ function OrganizationSupport({ organization }: { organization: any }) {
     setBusy(true);
     setError("");
     try {
-      await request(`/platform/organizations/${organization.id}/support`, "POST", {
-        subject,
-        message,
-        communityId: organization.communities[0]?.id,
-      });
+      await request(
+        `/platform/organizations/${organization.id}/support`,
+        "POST",
+        {
+          subject,
+          message,
+          communityId: organization.communities[0]?.id,
+        },
+      );
       setSubject("");
       setMessage("");
       await load();
@@ -1075,7 +2200,9 @@ function OrganizationSupport({ organization }: { organization: any }) {
     if (!text) return;
     setBusy(true);
     try {
-      await request(`/platform/support/${ticket.id}/messages`, "POST", { message: text });
+      await request(`/platform/support/${ticket.id}/messages`, "POST", {
+        message: text,
+      });
       await load();
     } catch (e: any) {
       setError(e.message);
@@ -1085,8 +2212,22 @@ function OrganizationSupport({ organization }: { organization: any }) {
   };
   return (
     <section className="organization-support">
-      <button type="button" className="finance-summary" onClick={() => setExpanded((value) => !value)}>
-        <span><small>ПОДДЕРЖКА</small><b>{tickets.filter((ticket) => !["resolved", "closed"].includes(ticket.status)).length} активных</b></span>
+      <button
+        type="button"
+        className="finance-summary"
+        onClick={() => setExpanded((value) => !value)}
+      >
+        <span>
+          <small>ПОДДЕРЖКА</small>
+          <b>
+            {
+              tickets.filter(
+                (ticket) => !["resolved", "closed"].includes(ticket.status),
+              ).length
+            }{" "}
+            активных
+          </b>
+        </span>
         <i>{expanded ? "−" : "+"}</i>
       </button>
       {expanded && (
@@ -1094,16 +2235,46 @@ function OrganizationSupport({ organization }: { organization: any }) {
           {error && <LoadError message={error} />}
           {tickets.map((ticket) => (
             <article className="support-ticket" key={ticket.id}>
-              <header><b>{ticket.subject}</b><small>{ticket.status}</small></header>
-              {ticket.messages.map((item: any) => <p key={item.id}><b>{item.author.firstName}</b><span>{item.body}</span><small>{new Date(item.createdAt).toLocaleString("ru")}</small></p>)}
-              {!['resolved', 'closed'].includes(ticket.status) && <button disabled={busy} onClick={() => void reply(ticket)}>Ответить</button>}
+              <header>
+                <b>{ticket.subject}</b>
+                <small>{ticket.status}</small>
+              </header>
+              {ticket.messages.map((item: any) => (
+                <p key={item.id}>
+                  <b>{item.author.firstName}</b>
+                  <span>{item.body}</span>
+                  <small>{new Date(item.createdAt).toLocaleString("ru")}</small>
+                </p>
+              ))}
+              {!["resolved", "closed"].includes(ticket.status) && (
+                <button disabled={busy} onClick={() => void reply(ticket)}>
+                  Ответить
+                </button>
+              )}
             </article>
           ))}
           <form className="support-form" onSubmit={create}>
             <b>Новое обращение</b>
-            <input value={subject} maxLength={160} minLength={3} required placeholder="Тема" onChange={(event) => setSubject(event.target.value)} />
-            <textarea value={message} maxLength={5000} minLength={5} required rows={4} placeholder="Опишите вопрос" onChange={(event) => setMessage(event.target.value)} />
-            <button className="primary" disabled={busy}>{busy ? "Отправляем…" : "Отправить"}</button>
+            <input
+              value={subject}
+              maxLength={160}
+              minLength={3}
+              required
+              placeholder="Тема"
+              onChange={(event) => setSubject(event.target.value)}
+            />
+            <textarea
+              value={message}
+              maxLength={5000}
+              minLength={5}
+              required
+              rows={4}
+              placeholder="Опишите вопрос"
+              onChange={(event) => setMessage(event.target.value)}
+            />
+            <button className="primary" disabled={busy}>
+              {busy ? "Отправляем…" : "Отправить"}
+            </button>
           </form>
         </div>
       )}
@@ -1123,7 +2294,10 @@ function PlatformSupportPanel() {
     setBusy(ticket.id);
     setError("");
     try {
-      await request(`/platform/admin/support/${ticket.id}`, "PATCH", { status, assignToMe: true });
+      await request(`/platform/admin/support/${ticket.id}`, "PATCH", {
+        status,
+        assignToMe: true,
+      });
       await load();
     } catch (e: any) {
       setError(e.message);
@@ -1136,7 +2310,9 @@ function PlatformSupportPanel() {
     if (!message) return;
     setBusy(ticket.id);
     try {
-      await request(`/platform/support/${ticket.id}/messages`, "POST", { message });
+      await request(`/platform/support/${ticket.id}/messages`, "POST", {
+        message,
+      });
       await update(ticket, "waiting_customer");
     } catch (e: any) {
       setError(e.message);
@@ -1145,16 +2321,55 @@ function PlatformSupportPanel() {
   };
   return (
     <section className="platform-admin platform-support">
-      <small>СЕРВИС</small><h2>Обращения клиентов</h2>
+      <small>СЕРВИС</small>
+      <h2>Обращения клиентов</h2>
       {error && <LoadError message={error} />}
       {tickets.map((ticket) => (
         <article className="staff-ticket" key={ticket.id}>
-          <header><span><b>{ticket.subject}</b><small>{ticket.organization.name} · {ticket.priority} · {ticket.status}</small></span></header>
-          <div>{ticket.messages.map((item: any) => !item.internal && <p key={item.id}><b>{item.author.firstName}</b><span>{item.body}</span></p>)}</div>
-          <footer><button disabled={busy === ticket.id} onClick={() => void update(ticket, "in_progress")}>Взять</button><button disabled={busy === ticket.id} onClick={() => void reply(ticket)}>Ответить</button><button disabled={busy === ticket.id} onClick={() => void update(ticket, "resolved")}>Решено</button></footer>
+          <header>
+            <span>
+              <b>{ticket.subject}</b>
+              <small>
+                {ticket.organization.name} · {ticket.priority} · {ticket.status}
+              </small>
+            </span>
+          </header>
+          <div>
+            {ticket.messages.map(
+              (item: any) =>
+                !item.internal && (
+                  <p key={item.id}>
+                    <b>{item.author.firstName}</b>
+                    <span>{item.body}</span>
+                  </p>
+                ),
+            )}
+          </div>
+          <footer>
+            <button
+              disabled={busy === ticket.id}
+              onClick={() => void update(ticket, "in_progress")}
+            >
+              Взять
+            </button>
+            <button
+              disabled={busy === ticket.id}
+              onClick={() => void reply(ticket)}
+            >
+              Ответить
+            </button>
+            <button
+              disabled={busy === ticket.id}
+              onClick={() => void update(ticket, "resolved")}
+            >
+              Решено
+            </button>
+          </footer>
         </article>
       ))}
-      {!tickets.length && !error && <p className="muted">Обращений пока нет.</p>}
+      {!tickets.length && !error && (
+        <p className="muted">Обращений пока нет.</p>
+      )}
     </section>
   );
 }
@@ -1169,21 +2384,60 @@ function PlatformFinancePanel() {
       request("/platform/admin/ledger?limit=100"),
       request("/platform/admin/payouts"),
       request("/public/ton-rate"),
-    ]).then(([ledgerItems, payoutItems, rate]) => {
-      setLedger(ledgerItems);
-      setPayouts(payoutItems);
-      setTonRate(rate);
-    }).catch((e) => setError(e.message));
+    ])
+      .then(([ledgerItems, payoutItems, rate]) => {
+        setLedger(ledgerItems);
+        setPayouts(payoutItems);
+        setTonRate(rate);
+      })
+      .catch((e) => setError(e.message));
   }, []);
   return (
     <section className="platform-admin">
-      <small>ФИНАНСЫ</small><h2>Финансовый контроль</h2>
+      <small>ФИНАНСЫ</small>
+      <h2>Финансовый контроль</h2>
       {error && <LoadError message={error} />}
       <h3>Telegram Stars ledger</h3>
-      <div className="global-audit">{ledger.map((item) => <p key={item.id}><span><b>{item.type}</b><small>{item.organization?.name || "Платформа"} · {item.status}</small></span><time>{item.grossAmount} ⭐ <small>≈ {estimatedTon(item.grossAmount, tonRate)}</small></time></p>)}</div>
+      <div className="global-audit">
+        {ledger.map((item) => (
+          <p key={item.id}>
+            <span>
+              <b>{item.type}</b>
+              <small>
+                {item.organization?.name || "Платформа"} · {item.status}
+              </small>
+            </span>
+            <time>
+              {item.grossAmount} ⭐{" "}
+              <small>≈ {estimatedTon(item.grossAmount, tonRate)}</small>
+            </time>
+          </p>
+        ))}
+      </div>
       <h3>Заявки на выплату</h3>
-      <div className="global-audit">{payouts.map((item) => <p key={item.id}><span><b>{item.organization.name}</b><small>{item.status} · {item.rail}</small></span><time>{item.amountStars} ⭐ <small>{item.settlementTonNano ? actualTon(item.settlementTonNano) : `≈ ${estimatedTon(item.amountStars, tonRate)}`}</small></time></p>)}</div>
-      {!ledger.length && !error && <p className="muted">Финансовых событий пока нет.</p>}
+      <div className="global-audit">
+        {payouts.map((item) => (
+          <p key={item.id}>
+            <span>
+              <b>{item.organization.name}</b>
+              <small>
+                {item.status} · {item.rail}
+              </small>
+            </span>
+            <time>
+              {item.amountStars} ⭐{" "}
+              <small>
+                {item.settlementTonNano
+                  ? actualTon(item.settlementTonNano)
+                  : `≈ ${estimatedTon(item.amountStars, tonRate)}`}
+              </small>
+            </time>
+          </p>
+        ))}
+      </div>
+      {!ledger.length && !error && (
+        <p className="muted">Финансовых событий пока нет.</p>
+      )}
     </section>
   );
 }
@@ -1195,34 +2449,95 @@ function PlatformStaffManagement({ canEdit }: { canEdit: boolean }) {
   const [error, setError] = useState("");
   const load = async (query = "") => {
     const [userItems, auditItems] = await Promise.all([
-      request(`/platform/admin/users${query ? `?search=${encodeURIComponent(query)}` : ""}`),
+      request(
+        `/platform/admin/users${query ? `?search=${encodeURIComponent(query)}` : ""}`,
+      ),
       request("/platform/admin/audit?limit=50"),
     ]);
     setUsers(userItems);
     setAudit(auditItems);
   };
-  useEffect(() => { void load().catch((e) => setError(e.message)); }, []);
-  const find = async (event: any) => { event.preventDefault(); setError(""); try { await load(search); } catch (e: any) { setError(e.message); } };
+  useEffect(() => {
+    void load().catch((e) => setError(e.message));
+  }, []);
+  const find = async (event: any) => {
+    event.preventDefault();
+    setError("");
+    try {
+      await load(search);
+    } catch (e: any) {
+      setError(e.message);
+    }
+  };
   const changeRole = async (user: any, platformRole: string) => {
     setError("");
     try {
-      await request(`/platform/admin/users/${user.id}/role`, "PATCH", { platformRole });
+      await request(`/platform/admin/users/${user.id}/role`, "PATCH", {
+        platformRole,
+      });
       await load(search);
-    } catch (e: any) { setError(e.message); }
+    } catch (e: any) {
+      setError(e.message);
+    }
   };
   return (
     <>
       <h3>Сотрудники платформы</h3>
-      <form className="staff-search" onSubmit={find}><input value={search} placeholder="Имя, @username или Telegram ID" onChange={(event) => setSearch(event.target.value)} /><button>Найти</button></form>
+      <form className="staff-search" onSubmit={find}>
+        <input
+          value={search}
+          placeholder="Имя, @username или Telegram ID"
+          onChange={(event) => setSearch(event.target.value)}
+        />
+        <button>Найти</button>
+      </form>
       {error && <LoadError message={error} />}
-      <div className="staff-list">{users.map((user) => <div key={user.id}><span><b>{user.firstName} {user.lastName || ""}</b><small>@{user.username || "без username"} · {user.telegramUserId}</small></span><select disabled={!canEdit} value={user.platformRole} onChange={(event) => void changeRole(user, event.target.value)}><option value="user">Пользователь</option><option value="support">Поддержка</option><option value="finance">Финансы</option><option value="platform_admin">Админ</option><option value="platform_owner">Владелец</option></select></div>)}</div>
+      <div className="staff-list">
+        {users.map((user) => (
+          <div key={user.id}>
+            <span>
+              <b>
+                {user.firstName} {user.lastName || ""}
+              </b>
+              <small>
+                @{user.username || "без username"} · {user.telegramUserId}
+              </small>
+            </span>
+            <select
+              disabled={!canEdit}
+              value={user.platformRole}
+              onChange={(event) => void changeRole(user, event.target.value)}
+            >
+              <option value="user">Пользователь</option>
+              <option value="support">Поддержка</option>
+              <option value="finance">Финансы</option>
+              <option value="platform_admin">Админ</option>
+              <option value="platform_owner">Владелец</option>
+            </select>
+          </div>
+        ))}
+      </div>
       <h3>Глобальный журнал</h3>
-      <div className="global-audit">{audit.map((item) => <p key={item.id}><span><b>{item.action}</b><small>{item.actor?.firstName || "Система"} · {item.community?.name || item.scope}</small></span><time>{new Date(item.createdAt).toLocaleString("ru")}</time></p>)}</div>
+      <div className="global-audit">
+        {audit.map((item) => (
+          <p key={item.id}>
+            <span>
+              <b>{item.action}</b>
+              <small>
+                {item.actor?.firstName || "Система"} ·{" "}
+                {item.community?.name || item.scope}
+              </small>
+            </span>
+            <time>{new Date(item.createdAt).toLocaleString("ru")}</time>
+          </p>
+        ))}
+      </div>
     </>
   );
 }
 
 function PlatformOwnerPanel({ canEdit }: { canEdit: boolean }) {
+  const { t, i18n } = useTranslation();
   const [overview, setOverview] = useState<any>();
   const [communities, setCommunities] = useState<any[]>([]);
   const [minimumStars, setMinimumStars] = useState(100);
@@ -1239,7 +2554,14 @@ function PlatformOwnerPanel({ canEdit }: { canEdit: boolean }) {
   const [tonRate, setTonRate] = useState<any>();
   const [lastLoadedAt, setLastLoadedAt] = useState<Date>();
   const load = async () => {
-    const [summary, tenantItems, ledgerItems, payoutItems, reliabilityStatus, rate] = await Promise.all([
+    const [
+      summary,
+      tenantItems,
+      ledgerItems,
+      payoutItems,
+      reliabilityStatus,
+      rate,
+    ] = await Promise.all([
       request("/platform/admin/overview"),
       request("/platform/admin/communities"),
       request("/platform/admin/ledger?limit=50"),
@@ -1287,7 +2609,11 @@ function PlatformOwnerPanel({ canEdit }: { canEdit: boolean }) {
     setBusy(true);
     setMessage("");
     try {
-      const result = await request("/platform/admin/stars/reconcile", "POST", {});
+      const result = await request(
+        "/platform/admin/stars/reconcile",
+        "POST",
+        {},
+      );
       setReconciliation(result);
       setMessage("✓ Telegram Stars сверены");
       await request("/platform/admin/stars/settle", "POST", {});
@@ -1304,7 +2630,9 @@ function PlatformOwnerPanel({ canEdit }: { canEdit: boolean }) {
     setBusy(true);
     setMessage("");
     try {
-      await request(`/platform/admin/payments/${payment.id}/refund`, "POST", { reason });
+      await request(`/platform/admin/payments/${payment.id}/refund`, "POST", {
+        reason,
+      });
       setMessage("✓ Stars возвращены, объявление скрыто");
       await load();
     } catch (e: any) {
@@ -1334,13 +2662,21 @@ function PlatformOwnerPanel({ canEdit }: { canEdit: boolean }) {
   };
   const finalizeDeletion = async (community: any) => {
     if (!canEdit) return;
-    const confirmation = window.prompt(`Необратимая финализация. Введите ID:\n${community.id}`);
+    const confirmation = window.prompt(
+      `Необратимая финализация. Введите ID:\n${community.id}`,
+    );
     if (confirmation !== community.id) return;
     setBusy(true);
     setMessage("");
     try {
-      await request(`/platform/admin/communities/${community.id}/finalize-deletion`, "POST", { confirmation });
-      setMessage("✓ Персональные данные сообщества удалены, финансовый аудит сохранён");
+      await request(
+        `/platform/admin/communities/${community.id}/finalize-deletion`,
+        "POST",
+        { confirmation },
+      );
+      setMessage(
+        "✓ Персональные данные сообщества удалены, финансовый аудит сохранён",
+      );
       await load();
     } catch (e: any) {
       setMessage(e.message);
@@ -1348,34 +2684,129 @@ function PlatformOwnerPanel({ canEdit }: { canEdit: boolean }) {
       setBusy(false);
     }
   };
-  if (!overview) return <section className="platform-admin">{message ? <><LoadError message={message}/><button className="primary" onClick={() => { setMessage(""); void load().catch((e) => setMessage(e.message)); }}>Повторить загрузку</button></> : <p>Загружаем панель платформы…</p>}</section>;
+  if (!overview)
+    return (
+      <section className="platform-admin">
+        {message ? (
+          <>
+            <LoadError message={message} />
+            <button
+              className="primary"
+              onClick={() => {
+                setMessage("");
+                void load().catch((e) => setMessage(e.message));
+              }}
+            >
+              Повторить загрузку
+            </button>
+          </>
+        ) : (
+          <p>Загружаем панель платформы…</p>
+        )}
+      </section>
+    );
   const metrics = overview.metrics;
   return (
     <section className="platform-admin" id="platform-overview">
-      <small>УПРАВЛЕНИЕ SAAS</small>
-      <div className="platform-title-row"><div><h2>Панель владельца платформы</h2>{lastLoadedAt && <small>Обновлено {lastLoadedAt.toLocaleTimeString("ru", { hour: "2-digit", minute: "2-digit" })}</small>}</div><button disabled={busy} onClick={() => void load().catch((e) => setMessage(e.message))}>↻ Обновить</button></div>
+      <small>{t("platformManagement")}</small>
+      <div className="platform-title-row">
+        <div>
+          <h2>{t("platformPanel")}</h2>
+          {lastLoadedAt && (
+            <small>
+              {t("refreshed")}{" "}
+              {lastLoadedAt.toLocaleTimeString(i18n.language, {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+            </small>
+          )}
+        </div>
+        <button
+          disabled={busy}
+          onClick={() => void load().catch((e) => setMessage(e.message))}
+        >
+          ↻ {t("refresh")}
+        </button>
+      </div>
       <div className="platform-console-link">
-        <b>Режимы проверки</b>
-        <span><a href="/platform-owner">Платформа</a> · <a href="/owner">Владелец сообщества</a></span>
+        <b>{t("reviewModes")}</b>
+        <span>
+          <a href="/platform-owner">{t("platform")}</a> ·{" "}
+          <a href="/owner">{t("communityAdminDashboard")}</a>
+        </span>
       </div>
       <div className="platform-metrics">
-        <div><b>{metrics.organizations}</b><span>Организаций</span></div>
-        <div><b>{metrics.activeCommunities}</b><span>Активных досок</span></div>
-        <div><b>{metrics.users}</b><span>Пользователей</span></div>
-        <div><b>{metrics.grossStars} ⭐</b><span>Валовый оборот</span></div>
+        <div>
+          <b>{metrics.organizations}</b>
+          <span>Организаций</span>
+        </div>
+        <div>
+          <b>{metrics.activeCommunities}</b>
+          <span>Активных досок</span>
+        </div>
+        <div>
+          <b>{metrics.users}</b>
+          <span>Пользователей</span>
+        </div>
+        <div>
+          <b>{metrics.grossStars} ⭐</b>
+          <span>Валовый оборот</span>
+        </div>
       </div>
       <div className="platform-metrics">
-        <div><b>{overview.finance.communityPendingStars} ⭐</b><small>≈ {estimatedTon(overview.finance.communityPendingStars, tonRate)}</small><span>На холде 21 день</span></div>
-        <div><b>{overview.finance.communityAvailableStars} ⭐</b><small>≈ {estimatedTon(overview.finance.communityAvailableStars, tonRate)}</small><span>Доступно владельцам</span></div>
-        <div><b>{overview.finance.communityReservedStars} ⭐</b><small>≈ {estimatedTon(overview.finance.communityReservedStars, tonRate)}</small><span>В заявках</span></div>
-        <div><b>{overview.finance.platformAvailableStars} ⭐</b><small>≈ {estimatedTon(overview.finance.platformAvailableStars, tonRate)}</small><span>Доход платформы</span></div>
+        <div>
+          <b>{overview.finance.communityPendingStars} ⭐</b>
+          <small>
+            ≈ {estimatedTon(overview.finance.communityPendingStars, tonRate)}
+          </small>
+          <span>На холде 21 день</span>
+        </div>
+        <div>
+          <b>{overview.finance.communityAvailableStars} ⭐</b>
+          <small>
+            ≈ {estimatedTon(overview.finance.communityAvailableStars, tonRate)}
+          </small>
+          <span>Доступно владельцам</span>
+        </div>
+        <div>
+          <b>{overview.finance.communityReservedStars} ⭐</b>
+          <small>
+            ≈ {estimatedTon(overview.finance.communityReservedStars, tonRate)}
+          </small>
+          <span>В заявках</span>
+        </div>
+        <div>
+          <b>{overview.finance.platformAvailableStars} ⭐</b>
+          <small>
+            ≈ {estimatedTon(overview.finance.platformAvailableStars, tonRate)}
+          </small>
+          <span>Доход платформы</span>
+        </div>
       </div>
-      {tonRate && <p className="platform-message">Расчётный курс: 1 ⭐ = ${tonRate.starUsd}; TON/USD ${tonRate.tonUsd?.toFixed(4) || "недоступен"} · {tonRate.source} · обновлено {new Date(tonRate.updatedAt).toLocaleString("ru")}. Фактическая выплата фиксируется отдельно.</p>}
+      {tonRate && (
+        <p className="platform-message">
+          Расчётный курс: 1 ⭐ = ${tonRate.starUsd}; TON/USD $
+          {tonRate.tonUsd?.toFixed(4) || "недоступен"} · {tonRate.source} ·
+          обновлено {new Date(tonRate.updatedAt).toLocaleString("ru")}.
+          Фактическая выплата фиксируется отдельно.
+        </p>
+      )}
       {canEdit && (
-        <form className="platform-settings" id="platform-settings" onSubmit={save}>
+        <form
+          className="platform-settings"
+          id="platform-settings"
+          onSubmit={save}
+        >
           <label>
             Минимальная цена публикации, Stars
-            <input type="number" min="1" max="100000" value={minimumStars} onChange={(e) => setMinimumStars(Number(e.target.value))} />
+            <input
+              type="number"
+              min="1"
+              max="100000"
+              value={minimumStars}
+              onChange={(e) => setMinimumStars(Number(e.target.value))}
+            />
           </label>
           <label>
             Комиссия платформы, %
@@ -1384,52 +2815,191 @@ function PlatformOwnerPanel({ canEdit }: { canEdit: boolean }) {
           </label>
           <label>
             Срок разблокировки Stars, дней
-            <input type="number" min="0" max="90" value={holdDays} onChange={(e) => setHoldDays(Number(e.target.value))} />
+            <input
+              type="number"
+              min="0"
+              max="90"
+              value={holdDays}
+              onChange={(e) => setHoldDays(Number(e.target.value))}
+            />
           </label>
           <label>
             Минимум для выплаты, Stars
-            <input type="number" min="1" max="10000000" value={minimumPayout} onChange={(e) => setMinimumPayout(Number(e.target.value))} />
+            <input
+              type="number"
+              min="1"
+              max="10000000"
+              value={minimumPayout}
+              onChange={(e) => setMinimumPayout(Number(e.target.value))}
+            />
           </label>
           <label>
             Бесплатная доска, Stars / 30 дней
-            <input type="number" value={overview.settings.freeBoardSubscriptionStars} disabled readOnly />
+            <input
+              type="number"
+              value={overview.settings.freeBoardSubscriptionStars}
+              disabled
+              readOnly
+            />
             <small>Фиксированный тариф: 750 ⭐</small>
           </label>
-          <label className="check"><input type="checkbox" checked={payoutsEnabled} onChange={(e) => setPayoutsEnabled(e.target.checked)} />Разрешить новые заявки на выплату</label>
-          <button className="primary" disabled={busy}>{busy ? "Сохраняем…" : "Сохранить"}</button>
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={payoutsEnabled}
+              onChange={(e) => setPayoutsEnabled(e.target.checked)}
+            />
+            Разрешить новые заявки на выплату
+          </label>
+          <button className="primary" disabled={busy}>
+            {busy ? "Сохраняем…" : "Сохранить"}
+          </button>
         </form>
       )}
       {message && <p className="platform-message">{message}</p>}
       <h3 id="platform-health">Надёжность системы</h3>
       <div className="platform-tenants">
-        {reliability?.jobs.map((job: any) => <div key={job.jobName}><span><b>{job.jobName}</b><small>{job.status} · обработано {job.processedCount} · {job.durationMs ?? 0} мс</small></span><time>{new Date(job.startedAt).toLocaleString("ru")}</time></div>)}
-        {!reliability?.jobs.length && <p className="muted">Планировщик запускается…</p>}
+        {reliability?.jobs.map((job: any) => (
+          <div key={job.jobName}>
+            <span>
+              <b>{job.jobName}</b>
+              <small>
+                {job.status} · обработано {job.processedCount} ·{" "}
+                {job.durationMs ?? 0} мс
+              </small>
+            </span>
+            <time>{new Date(job.startedAt).toLocaleString("ru")}</time>
+          </div>
+        ))}
+        {!reliability?.jobs.length && (
+          <p className="muted">Планировщик запускается…</p>
+        )}
       </div>
-      {reliability && <p className="platform-message">Уведомления в очереди: {reliability.notifications.pending} · dead-letter: {reliability.notifications.deadLetter} · открытых алертов: {reliability.alerts.length}</p>}
+      {reliability && (
+        <p className="platform-message">
+          Уведомления в очереди: {reliability.notifications.pending} ·
+          dead-letter: {reliability.notifications.deadLetter} · открытых
+          алертов: {reliability.alerts.length}
+        </p>
+      )}
       <PlatformLegalManagement canEdit={canEdit} />
       <div className="platform-stars-tools" id="platform-finance">
         <span>
           <b>Сверка Telegram Stars</b>
-          <small>Сопоставляет баланс Telegram с внутренним журналом и разблокирует созревшие начисления.</small>
+          <small>
+            Сопоставляет баланс Telegram с внутренним журналом и разблокирует
+            созревшие начисления.
+          </small>
         </span>
-        <button className="secondary" disabled={busy} onClick={() => void reconcile()}>Сверить</button>
+        <button
+          className="secondary"
+          disabled={busy}
+          onClick={() => void reconcile()}
+        >
+          Сверить
+        </button>
       </div>
       {reconciliation && (
-        <p className="platform-message">Баланс: {reconciliation.balance.amount} ⭐ · Операций: {reconciliation.remoteCount} · Не сопоставлено: {reconciliation.unknownIncoming}</p>
+        <p className="platform-message">
+          Баланс: {reconciliation.balance.amount} ⭐ · Операций:{" "}
+          {reconciliation.remoteCount} · Не сопоставлено:{" "}
+          {reconciliation.unknownIncoming}
+        </p>
       )}
       <h3>Заявки на выплату</h3>
       <div className="platform-tenants">
-        {payouts.map((payout) => <div key={payout.id}><span><b>{payout.organization.name} · {payout.amountStars} ⭐</b><small>{payout.status} · {payout.settlementTonNano ? actualTon(payout.settlementTonNano) : `оценка ${estimatedTon(payout.amountStars, tonRate)}`}{payout.tonTransactionHash ? ` · tx ${payout.tonTransactionHash}` : ""}</small></span>{canEdit && payout.status === "requested" && <button onClick={async () => { const suggested = tonRate?.tonPerStar ? (payout.amountStars * tonRate.tonPerStar).toFixed(9) : ""; const settlementTon = window.prompt("Фактическая сумма выплаты в TON:", suggested); if (!settlementTon) return; try { await request(`/platform/admin/payouts/${payout.id}/review`, "POST", { decision: "approve", settlementTon }); await load(); } catch (e: any) { setMessage(e.message); } }}>Согласовать TON</button>}{canEdit && ["approved", "failed"].includes(payout.status) && <button className="primary" onClick={async () => { const externalReference = window.prompt("Hash выполненной TON-транзакции:"); if (!externalReference) return; try { await request(`/platform/admin/payouts/${payout.id}/execute`, "POST", { externalReference }); await load(); } catch (e: any) { setMessage(e.message); } }}>Подтвердить TON-выплату</button>}</div>)}
+        {payouts.map((payout) => (
+          <div key={payout.id}>
+            <span>
+              <b>
+                {payout.organization.name} · {payout.amountStars} ⭐
+              </b>
+              <small>
+                {payout.status} ·{" "}
+                {payout.settlementTonNano
+                  ? actualTon(payout.settlementTonNano)
+                  : `оценка ${estimatedTon(payout.amountStars, tonRate)}`}
+                {payout.tonTransactionHash
+                  ? ` · tx ${payout.tonTransactionHash}`
+                  : ""}
+              </small>
+            </span>
+            {canEdit && payout.status === "requested" && (
+              <button
+                onClick={async () => {
+                  const suggested = tonRate?.tonPerStar
+                    ? (payout.amountStars * tonRate.tonPerStar).toFixed(9)
+                    : "";
+                  const settlementTon = window.prompt(
+                    "Фактическая сумма выплаты в TON:",
+                    suggested,
+                  );
+                  if (!settlementTon) return;
+                  try {
+                    await request(
+                      `/platform/admin/payouts/${payout.id}/review`,
+                      "POST",
+                      { decision: "approve", settlementTon },
+                    );
+                    await load();
+                  } catch (e: any) {
+                    setMessage(e.message);
+                  }
+                }}
+              >
+                Согласовать TON
+              </button>
+            )}
+            {canEdit && ["approved", "failed"].includes(payout.status) && (
+              <button
+                className="primary"
+                onClick={async () => {
+                  const externalReference = window.prompt(
+                    "Hash выполненной TON-транзакции:",
+                  );
+                  if (!externalReference) return;
+                  try {
+                    await request(
+                      `/platform/admin/payouts/${payout.id}/execute`,
+                      "POST",
+                      { externalReference },
+                    );
+                    await load();
+                  } catch (e: any) {
+                    setMessage(e.message);
+                  }
+                }}
+              >
+                Подтвердить TON-выплату
+              </button>
+            )}
+          </div>
+        ))}
         {!payouts.length && <p className="muted">Заявок пока нет.</p>}
       </div>
       <h3>Финансовые операции</h3>
       <div className="platform-tenants">
         {ledger.slice(0, 15).map((transaction) => (
           <div key={transaction.id}>
-            <span><b>{transaction.type.replaceAll("_", " ")}</b><small>{transaction.organization?.name || "Платформа"} · {new Date(transaction.occurredAt).toLocaleString("ru")} · {transaction.grossAmount} ⭐ ≈ {estimatedTon(transaction.grossAmount, tonRate)}</small></span>
-            {transaction.type === "stars_publication_paid" && transaction.payment?.status === "paid" && (
-              <button className="danger-soft" disabled={busy} onClick={() => void refund(transaction.payment)}>Вернуть</button>
-            )}
+            <span>
+              <b>{transaction.type.replaceAll("_", " ")}</b>
+              <small>
+                {transaction.organization?.name || "Платформа"} ·{" "}
+                {new Date(transaction.occurredAt).toLocaleString("ru")} ·{" "}
+                {transaction.grossAmount} ⭐ ≈{" "}
+                {estimatedTon(transaction.grossAmount, tonRate)}
+              </small>
+            </span>
+            {transaction.type === "stars_publication_paid" &&
+              transaction.payment?.status === "paid" && (
+                <button
+                  className="danger-soft"
+                  disabled={busy}
+                  onClick={() => void refund(transaction.payment)}
+                >
+                  Вернуть
+                </button>
+              )}
           </div>
         ))}
         {!ledger.length && <p className="muted">Операций пока нет.</p>}
@@ -1438,19 +3008,71 @@ function PlatformOwnerPanel({ canEdit }: { canEdit: boolean }) {
       <div className="platform-tenants">
         {communities.map((community) => (
           <div key={community.id}>
-            <span><b>{community.name}</b><small>{community.organization?.name} · {community._count.members} участников · {community._count.listings} объявлений{community.deletionScheduledFor ? ` · удаление ${new Date(community.deletionScheduledFor).toLocaleDateString("ru")}` : ""}</small><small><a href={`https://t.me/${overview.botUsername}?start=moderate_${community.slug}`} target="_blank" rel="noreferrer">Модератор ↗</a> · <a href={`https://t.me/${overview.botUsername}?start=community_${community.slug}`} target="_blank" rel="noreferrer">Пользователь ↗</a></small></span>
-            {community.deletionScheduledFor && !community.deletionFinalizedAt ? (
-              <button className="danger-soft" disabled={!canEdit || new Date(community.deletionScheduledFor) > new Date()} onClick={() => void finalizeDeletion(community)}>Финализировать</button>
+            <span>
+              <b>{community.name}</b>
+              <small>
+                {community.organization?.name} · {community._count.members}{" "}
+                участников · {community._count.listings} объявлений
+                {community.deletionScheduledFor
+                  ? ` · удаление ${new Date(community.deletionScheduledFor).toLocaleDateString("ru")}`
+                  : ""}
+              </small>
+              <small>
+                <a
+                  href={`https://t.me/${overview.botUsername}?start=moderate_${community.slug}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Модератор ↗
+                </a>{" "}
+                ·{" "}
+                <a
+                  href={`https://t.me/${overview.botUsername}?start=community_${community.slug}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Пользователь ↗
+                </a>
+              </small>
+            </span>
+            {community.deletionScheduledFor &&
+            !community.deletionFinalizedAt ? (
+              <button
+                className="danger-soft"
+                disabled={
+                  !canEdit ||
+                  new Date(community.deletionScheduledFor) > new Date()
+                }
+                onClick={() => void finalizeDeletion(community)}
+              >
+                Финализировать
+              </button>
             ) : (
-              <button disabled={Boolean(community.deletionFinalizedAt)} className={community.tenantStatus === "active" ? "danger-soft" : "primary"} onClick={() => void toggleTenant(community)}>
-                {community.deletionFinalizedAt ? "Удалено" : community.tenantStatus === "active" ? "Приостановить" : "Включить"}
+              <button
+                disabled={Boolean(community.deletionFinalizedAt)}
+                className={
+                  community.tenantStatus === "active"
+                    ? "danger-soft"
+                    : "primary"
+                }
+                onClick={() => void toggleTenant(community)}
+              >
+                {community.deletionFinalizedAt
+                  ? "Удалено"
+                  : community.tenantStatus === "active"
+                    ? "Приостановить"
+                    : "Включить"}
               </button>
             )}
           </div>
         ))}
       </div>
-      <div id="platform-team"><PlatformStaffManagement canEdit={canEdit} /></div>
-      <div id="platform-support"><PlatformSupportPanel /></div>
+      <div id="platform-team">
+        <PlatformStaffManagement canEdit={canEdit} />
+      </div>
+      <div id="platform-support">
+        <PlatformSupportPanel />
+      </div>
     </section>
   );
 }
@@ -1458,11 +3080,129 @@ function PlatformOwnerPanel({ canEdit }: { canEdit: boolean }) {
 function PlatformLegalManagement({ canEdit }: { canEdit: boolean }) {
   const [documents, setDocuments] = useState<any[]>([]);
   const [conversions, setConversions] = useState<any>();
-  const [draft, setDraft] = useState({ type: "terms", version: "", title: "", body: "", required: true });
+  const [draft, setDraft] = useState({
+    type: "terms",
+    version: "",
+    title: "",
+    body: "",
+    required: true,
+  });
   const [message, setMessage] = useState("");
-  const load = () => Promise.all([request("/platform/admin/legal-documents"), request("/platform/admin/conversions")]).then(([items, metrics]) => { setDocuments(items); setConversions(metrics); });
-  useEffect(() => { void load().catch(() => undefined); }, []);
-  return <section className="platform-legal"><h3>Документы и конверсия</h3>{conversions && <div className="platform-metrics"><div><b>{conversions.uniqueVisitors}</b><span>Посетителей, 30 дней</span></div><div><b>{conversions.events.telegram_cta || 0}</b><span>Переходов в Telegram</span></div><div><b>{conversions.events.pricing_view || 0}</b><span>Просмотров тарифов</span></div></div>}<div className="global-audit">{documents.slice(0, 6).map((document) => <p key={document.id}><span><b>{document.title}</b><small>{document.type} · {document.version} · согласий {document._count.acceptances}</small></span><time>{document.required ? "Обязательный" : "Справочный"}</time></p>)}</div>{canEdit && <details><summary>Опубликовать новую редакцию</summary><form className="legal-editor" onSubmit={async (event) => { event.preventDefault(); setMessage(""); try { await request("/platform/admin/legal-documents", "POST", draft); setDraft({ type: draft.type, version: "", title: "", body: "", required: draft.required }); setMessage("✓ Новая редакция опубликована"); await load(); } catch (e: any) { setMessage(e.message); } }}><select value={draft.type} onChange={(e) => setDraft({ ...draft, type: e.target.value })}><option value="terms">Условия</option><option value="privacy">Конфиденциальность</option><option value="prohibited">Запрещённые товары</option></select><input required placeholder="Версия, например beta-2" value={draft.version} onChange={(e) => setDraft({ ...draft, version: e.target.value })}/><input required placeholder="Заголовок" value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })}/><textarea required minLength={100} rows={12} placeholder="Полный текст новой редакции" value={draft.body} onChange={(e) => setDraft({ ...draft, body: e.target.value })}/><label className="check"><input type="checkbox" checked={draft.required} onChange={(e) => setDraft({ ...draft, required: e.target.checked })}/>Требовать новое согласие</label><button className="primary">Опубликовать неизменяемую редакцию</button></form></details>}{message && <p className="platform-message">{message}</p>}</section>;
+  const load = () =>
+    Promise.all([
+      request("/platform/admin/legal-documents"),
+      request("/platform/admin/conversions"),
+    ]).then(([items, metrics]) => {
+      setDocuments(items);
+      setConversions(metrics);
+    });
+  useEffect(() => {
+    void load().catch(() => undefined);
+  }, []);
+  return (
+    <section className="platform-legal">
+      <h3>Документы и конверсия</h3>
+      {conversions && (
+        <div className="platform-metrics">
+          <div>
+            <b>{conversions.uniqueVisitors}</b>
+            <span>Посетителей, 30 дней</span>
+          </div>
+          <div>
+            <b>{conversions.events.telegram_cta || 0}</b>
+            <span>Переходов в Telegram</span>
+          </div>
+          <div>
+            <b>{conversions.events.pricing_view || 0}</b>
+            <span>Просмотров тарифов</span>
+          </div>
+        </div>
+      )}
+      <div className="global-audit">
+        {documents.slice(0, 6).map((document) => (
+          <p key={document.id}>
+            <span>
+              <b>{document.title}</b>
+              <small>
+                {document.type} · {document.version} · согласий{" "}
+                {document._count.acceptances}
+              </small>
+            </span>
+            <time>{document.required ? "Обязательный" : "Справочный"}</time>
+          </p>
+        ))}
+      </div>
+      {canEdit && (
+        <details>
+          <summary>Опубликовать новую редакцию</summary>
+          <form
+            className="legal-editor"
+            onSubmit={async (event) => {
+              event.preventDefault();
+              setMessage("");
+              try {
+                await request("/platform/admin/legal-documents", "POST", draft);
+                setDraft({
+                  type: draft.type,
+                  version: "",
+                  title: "",
+                  body: "",
+                  required: draft.required,
+                });
+                setMessage("✓ Новая редакция опубликована");
+                await load();
+              } catch (e: any) {
+                setMessage(e.message);
+              }
+            }}
+          >
+            <select
+              value={draft.type}
+              onChange={(e) => setDraft({ ...draft, type: e.target.value })}
+            >
+              <option value="terms">Условия</option>
+              <option value="privacy">Конфиденциальность</option>
+              <option value="prohibited">Запрещённые товары</option>
+            </select>
+            <input
+              required
+              placeholder="Версия, например beta-2"
+              value={draft.version}
+              onChange={(e) => setDraft({ ...draft, version: e.target.value })}
+            />
+            <input
+              required
+              placeholder="Заголовок"
+              value={draft.title}
+              onChange={(e) => setDraft({ ...draft, title: e.target.value })}
+            />
+            <textarea
+              required
+              minLength={100}
+              rows={12}
+              placeholder="Полный текст новой редакции"
+              value={draft.body}
+              onChange={(e) => setDraft({ ...draft, body: e.target.value })}
+            />
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={draft.required}
+                onChange={(e) =>
+                  setDraft({ ...draft, required: e.target.checked })
+                }
+              />
+              Требовать новое согласие
+            </label>
+            <button className="primary">
+              Опубликовать неизменяемую редакцию
+            </button>
+          </form>
+        </details>
+      )}
+      {message && <p className="platform-message">{message}</p>}
+    </section>
+  );
 }
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -1537,11 +3277,9 @@ function Catalog() {
               return "";
             }
           })();
-          const automatic = (
-            rawTelegramLanguage ||
-            navigator.language ||
-            ""
-          ).slice(0, 2).toLowerCase();
+          const automatic = (rawTelegramLanguage || navigator.language || "")
+            .slice(0, 2)
+            .toLowerCase();
           const supported = supportedLanguages.some(
             ([code]) => code === automatic,
           );
@@ -1604,19 +3342,27 @@ function Catalog() {
         </header>
         <p className="community-description">{community?.description}</p>
         {community && (
-          <div className={`access-note ${community.freeForUser ? "free" : "paid"}`}>
+          <div
+            className={`access-note ${community.freeForUser ? "free" : "paid"}`}
+          >
             <span>{community.freeForUser ? "✓" : "⭐"}</span>
             <div>
               <b>
                 {community.freeForUser
                   ? t("freeForYou")
-                  : t("publicationPrice", { count: community.publicationPriceStars })}
+                  : t("publicationPrice", {
+                      count: community.publicationPriceStars,
+                    })}
               </b>
               <small>
                 {community.isPrivileged
                   ? t("adminFree")
                   : community.freeForUser
-                    ? t("activity", { count: community.messageCount, required: community.minMonthlyMessagesForFree, days: community.activityWindowDays })
+                    ? t("activity", {
+                        count: community.messageCount,
+                        required: community.minMonthlyMessagesForFree,
+                        days: community.activityWindowDays,
+                      })
                     : t("remaining", { count: community.messagesRemaining })}
               </small>
             </div>
@@ -1627,7 +3373,10 @@ function Catalog() {
         </button>
       </section>
       <div className="category-chips" aria-label="Категории">
-        <button className={!categoryId ? "active" : ""} onClick={() => applyQuery({ categoryId: "" })}>
+        <button
+          className={!categoryId ? "active" : ""}
+          onClick={() => applyQuery({ categoryId: "" })}
+        >
           {t("all")}
         </button>
         {categories.map((category) => (
@@ -1636,7 +3385,8 @@ function Catalog() {
             className={categoryId === category.id ? "active" : ""}
             onClick={() => applyQuery({ categoryId: category.id })}
           >
-          <span>{category.icon || "◻"}</span> {localizedCategory(category.name, i18n.resolvedLanguage)}
+            <span>{category.icon || "◻"}</span>{" "}
+            {localizedCategory(category.name, i18n.resolvedLanguage)}
           </button>
         ))}
       </div>
@@ -1654,17 +3404,37 @@ function Catalog() {
           placeholder={t("search")}
         />
         {search && (
-          <button type="button" className="search-clear" onClick={() => { setSearch(""); applyQuery({ search: "" }); }}>
+          <button
+            type="button"
+            className="search-clear"
+            onClick={() => {
+              setSearch("");
+              applyQuery({ search: "" });
+            }}
+          >
             ×
           </button>
         )}
       </form>
       <div className="catalog-heading">
         <div>
-          <small>{String(categoryId ? t("selectedCategory") : t("freshListings")).toLocaleUpperCase()}</small>
-          <h2>{loading ? t("loading") : t("listings", { count: items.length })}</h2>
+          <small>
+            {String(
+              categoryId ? t("selectedCategory") : t("freshListings"),
+            ).toLocaleUpperCase()}
+          </small>
+          <h2>
+            {loading ? t("loading") : t("listings", { count: items.length })}
+          </h2>
         </div>
-        <select value={sort} onChange={(e) => { setSort(e.target.value); applyQuery({ sort: e.target.value }); }} aria-label="Сортировка">
+        <select
+          value={sort}
+          onChange={(e) => {
+            setSort(e.target.value);
+            applyQuery({ sort: e.target.value });
+          }}
+          aria-label="Сортировка"
+        >
           <option value="newest">{t("sortNewest")}</option>
           <option value="popular">{t("sortPopular")}</option>
           <option value="price_asc">{t("sortPriceAsc")}</option>
@@ -1686,8 +3456,14 @@ function Catalog() {
                 className="photo"
                 style={{ backgroundImage: `url(${item.images[0]?.url || ""})` }}
               >
-                {!item.images[0]?.url && <span className="photo-placeholder">{item.category?.icon || "📦"}</span>}
-                {Boolean(item.imageCount) && <span className="photo-count">📷 {item.imageCount}</span>}
+                {!item.images[0]?.url && (
+                  <span className="photo-placeholder">
+                    {item.category?.icon || "📦"}
+                  </span>
+                )}
+                {Boolean(item.imageCount) && (
+                  <span className="photo-count">📷 {item.imageCount}</span>
+                )}
                 <button
                   aria-label="Добавить в избранное"
                   className={item.isFavorite ? "favorite active" : "favorite"}
@@ -1696,7 +3472,10 @@ function Catalog() {
                   {item.isFavorite ? "♥" : "♡"}
                 </button>
               </div>
-              <small className="listing-category">{item.category?.icon} {localizedCategory(item.category?.name, i18n.resolvedLanguage)}</small>
+              <small className="listing-category">
+                {item.category?.icon}{" "}
+                {localizedCategory(item.category?.name, i18n.resolvedLanguage)}
+              </small>
               <h3>{item.title}</h3>
               <strong>
                 {item.priceType === "free"
@@ -1748,15 +3527,19 @@ function Categories() {
       <h1>{t("categories")}</h1>
       <p className="hint">{t("categoriesHint")}</p>
       {error && <LoadError message={error} />}
-      {loading ? <div className="skeleton hero" /> : <div className="category-list">
-        {data.map((c) => (
-          <button key={c.id} onClick={() => nav(`/?categoryId=${c.id}`)}>
-            <span>{c.icon || "◻"}</span>
-            {localizedCategory(c.name, i18n.resolvedLanguage)}
-            <b>›</b>
-          </button>
-        ))}
-      </div>}
+      {loading ? (
+        <div className="skeleton hero" />
+      ) : (
+        <div className="category-list">
+          {data.map((c) => (
+            <button key={c.id} onClick={() => nav(`/?categoryId=${c.id}`)}>
+              <span>{c.icon || "◻"}</span>
+              {localizedCategory(c.name, i18n.resolvedLanguage)}
+              <b>›</b>
+            </button>
+          ))}
+        </div>
+      )}
     </section>
   );
 }
@@ -1819,7 +3602,8 @@ function ListingDetail() {
         </div>
       )}
       <small>
-        {item.category?.icon} {localizedCategory(item.category?.name, i18n.resolvedLanguage)}
+        {item.category?.icon}{" "}
+        {localizedCategory(item.category?.name, i18n.resolvedLanguage)}
       </small>
       <h1>{item.title}</h1>
       <strong className="detail-price">
@@ -2054,9 +3838,7 @@ function Create() {
         </label>
       )}
       {!fieldSchema.length && !conditionEnabled && (
-        <p className="hint">
-          {t("noExtraFields")}
-        </p>
+        <p className="hint">{t("noExtraFields")}</p>
       )}
     </div>,
     <textarea
@@ -2224,22 +4006,45 @@ function Favorites() {
   return (
     <section className="page">
       <h1>Избранное</h1>
-      <p className="hint">Сохранённые объявления доступны только внутри этого сообщества.</p>
+      <p className="hint">
+        Сохранённые объявления доступны только внутри этого сообщества.
+      </p>
       {error && <LoadError message={error} />}
-      {loading ? <div className="skeleton hero" /> : data.length ? (
-        <div className="favorite-list">{data.map((x) => (
-          <NavLink key={x.id} to={`/listings/${x.listing.id}`}>
-            <span className="favorite-icon">{x.listing.category?.icon || "📌"}</span>
-            <span><b>{x.listing.title}</b><small>{x.listing.category?.name || "Объявление"}{x.listing.locationText ? ` · ${x.listing.locationText}` : ""}</small></span>
-            <strong>{x.listing.price ? `${x.listing.price} ${x.listing.currency || "EUR"}` : "По договорённости"}</strong>
-          </NavLink>
-        ))}</div>
+      {loading ? (
+        <div className="skeleton hero" />
+      ) : data.length ? (
+        <div className="favorite-list">
+          {data.map((x) => (
+            <NavLink key={x.id} to={`/listings/${x.listing.id}`}>
+              <span className="favorite-icon">
+                {x.listing.category?.icon || "📌"}
+              </span>
+              <span>
+                <b>{x.listing.title}</b>
+                <small>
+                  {x.listing.category?.name || "Объявление"}
+                  {x.listing.locationText ? ` · ${x.listing.locationText}` : ""}
+                </small>
+              </span>
+              <strong>
+                {x.listing.price
+                  ? `${x.listing.price} ${x.listing.currency || "EUR"}`
+                  : "По договорённости"}
+              </strong>
+            </NavLink>
+          ))}
+        </div>
       ) : (
         <div className="empty">
           <span>♡</span>
           <h3>Здесь будут избранные объявления</h3>
-          <p>Нажмите на сердечко в карточке объявления, чтобы быстро вернуться к нему позже.</p>
-          <NavLink className="primary" to="/">Посмотреть объявления</NavLink>
+          <p>
+            Нажмите на сердечко в карточке объявления, чтобы быстро вернуться к
+            нему позже.
+          </p>
+          <NavLink className="primary" to="/">
+            Посмотреть объявления
+          </NavLink>
         </div>
       )}
     </section>
@@ -2662,14 +4467,96 @@ function AdminRisk() {
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const load = () => request("/admin/abuse").then(setItems);
-  useEffect(() => { void load().catch((e) => setError(e.message)); }, []);
+  useEffect(() => {
+    void load().catch((e) => setError(e.message));
+  }, []);
   const resolve = async (id: string, resolution: string) => {
-    setBusy(id); setError("");
-    try { await request(`/admin/abuse/${id}/resolve`, "POST", { resolution }); await load(); }
-    catch (e: any) { setError(e.message); } finally { setBusy(""); }
+    setBusy(id);
+    setError("");
+    try {
+      await request(`/admin/abuse/${id}/resolve`, "POST", { resolution });
+      await load();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy("");
+    }
   };
-  const labels: Record<string, string> = { prohibited_content: "Запрещённый контент", probable_duplicate: "Вероятный дубликат", similar_listing: "Похожее объявление", new_account: "Новый аккаунт", many_external_links: "Много ссылок", low_information: "Мало полезной информации", invoice_velocity: "Слишком много счетов", risky_listing: "Риск объявления" };
-  return <div className="admin-view"><h2>Риск-контроль</h2><p className="hint">Автоматические сигналы не банят пользователя: администратор видит причины и принимает решение.</p>{error && <LoadError message={error}/>} {!items.length && !error && <div className="admin-empty">Открытых риск-событий нет</div>}{items.map((item) => <article className="risk-card" key={item.id}><header><span><b>{item.type === "payment_risk" ? "Проверка оплаты" : "Проверка объявления"}</b><small>{item.user?.firstName || "Пользователь"} · риск {item.score}/100</small></span><strong>{item.severity}</strong></header>{item.listing && <div><b>{item.listing.title}</b><p>{item.listing.description}</p></div>}<ul>{item.reasons.map((reason: string) => <li key={reason}>{labels[reason] || reason}</li>)}</ul><footer><button disabled={busy === item.id} onClick={() => void resolve(item.id, "false_positive")}>Ложное срабатывание</button>{item.payment && <button className="primary" disabled={busy === item.id} onClick={() => void resolve(item.id, "approved")}>Разрешить оплату</button>}<button className="danger-soft" disabled={busy === item.id} onClick={() => void resolve(item.id, "blocked")}>Подтвердить риск</button></footer></article>)}</div>;
+  const labels: Record<string, string> = {
+    prohibited_content: "Запрещённый контент",
+    probable_duplicate: "Вероятный дубликат",
+    similar_listing: "Похожее объявление",
+    new_account: "Новый аккаунт",
+    many_external_links: "Много ссылок",
+    low_information: "Мало полезной информации",
+    invoice_velocity: "Слишком много счетов",
+    risky_listing: "Риск объявления",
+  };
+  return (
+    <div className="admin-view">
+      <h2>Риск-контроль</h2>
+      <p className="hint">
+        Автоматические сигналы не банят пользователя: администратор видит
+        причины и принимает решение.
+      </p>
+      {error && <LoadError message={error} />}{" "}
+      {!items.length && !error && (
+        <div className="admin-empty">Открытых риск-событий нет</div>
+      )}
+      {items.map((item) => (
+        <article className="risk-card" key={item.id}>
+          <header>
+            <span>
+              <b>
+                {item.type === "payment_risk"
+                  ? "Проверка оплаты"
+                  : "Проверка объявления"}
+              </b>
+              <small>
+                {item.user?.firstName || "Пользователь"} · риск {item.score}/100
+              </small>
+            </span>
+            <strong>{item.severity}</strong>
+          </header>
+          {item.listing && (
+            <div>
+              <b>{item.listing.title}</b>
+              <p>{item.listing.description}</p>
+            </div>
+          )}
+          <ul>
+            {item.reasons.map((reason: string) => (
+              <li key={reason}>{labels[reason] || reason}</li>
+            ))}
+          </ul>
+          <footer>
+            <button
+              disabled={busy === item.id}
+              onClick={() => void resolve(item.id, "false_positive")}
+            >
+              Ложное срабатывание
+            </button>
+            {item.payment && (
+              <button
+                className="primary"
+                disabled={busy === item.id}
+                onClick={() => void resolve(item.id, "approved")}
+              >
+                Разрешить оплату
+              </button>
+            )}
+            <button
+              className="danger-soft"
+              disabled={busy === item.id}
+              onClick={() => void resolve(item.id, "blocked")}
+            >
+              Подтвердить риск
+            </button>
+          </footer>
+        </article>
+      ))}
+    </div>
+  );
 }
 function LoadError({ message }: { message: string }) {
   return <div className="form-error">{message}</div>;
@@ -2762,7 +4649,11 @@ function AdminModeration() {
           <small>
             {x.category?.icon} {x.category?.name} · {x.author?.firstName}
           </small>
-          {x.riskScore > 0 && <div className="moderation-risk">🛡 Риск {x.riskScore}/100 · {(x.riskReasons || []).join(", ")}</div>}
+          {x.riskScore > 0 && (
+            <div className="moderation-risk">
+              🛡 Риск {x.riskScore}/100 · {(x.riskReasons || []).join(", ")}
+            </div>
+          )}
           <p>{x.description}</p>
           <div>
             <button
@@ -2824,25 +4715,49 @@ function AdminUsers() {
     }
   };
   const changeAccess = async (member: any, status: string) => {
-    const reason = status === "active" ? "" : window.prompt("Причина ограничения:") || "Решение администратора";
+    const reason =
+      status === "active"
+        ? ""
+        : window.prompt("Причина ограничения:") || "Решение администратора";
     try {
-      await request(`/admin/users/${member.userId}`, "PATCH", { status, reason });
-      setUsers((current) => current.map((item) => item.id === member.id ? { ...item, enforcementStatus: status, enforcementReason: reason } : item));
-      setSaved(`Доступ ${member.user.firstName} обновлён только для этого сообщества`);
-    } catch (e: any) { setError(e.message); }
+      await request(`/admin/users/${member.userId}`, "PATCH", {
+        status,
+        reason,
+      });
+      setUsers((current) =>
+        current.map((item) =>
+          item.id === member.id
+            ? { ...item, enforcementStatus: status, enforcementReason: reason }
+            : item,
+        ),
+      );
+      setSaved(
+        `Доступ ${member.user.firstName} обновлён только для этого сообщества`,
+      );
+    } catch (e: any) {
+      setError(e.message);
+    }
   };
   const changeFreeAccess = async (member: any, enabled: boolean) => {
     try {
       await request(`/admin/users/${member.userId}`, "PATCH", {
         freePublicationOverride: enabled,
       });
-      setUsers((current) => current.map((item) =>
-        item.id === member.id ? { ...item, freePublicationOverride: enabled } : item,
-      ));
-      setSaved(enabled
-        ? `${member.user.firstName} добавлен в бесплатный список`
-        : `${member.user.firstName} удалён из бесплатного списка`);
-    } catch (e: any) { setError(e.message); }
+      setUsers((current) =>
+        current.map((item) =>
+          item.id === member.id
+            ? { ...item, freePublicationOverride: enabled }
+            : item,
+        ),
+      );
+      setSaved(
+        enabled
+          ? `${member.user.firstName} добавлен в бесплатный список`
+          : `${member.user.firstName} удалён из бесплатного списка`,
+      );
+    } catch (e: any) {
+      setError(e.message);
+    }
   };
   return (
     <div className="admin-view">
@@ -2892,9 +4807,25 @@ function AdminUsers() {
               <option value="admin">Админ</option>
               <option value="owner">Владелец</option>
             </select>
-            <select aria-label={`Доступ ${member.user.firstName}`} value={member.enforcementStatus || "active"} onChange={(event) => void changeAccess(member, event.target.value)}><option value="active">Доступ разрешён</option><option value="restricted">Ограничить</option><option value="banned">Заблокировать в доске</option></select>
+            <select
+              aria-label={`Доступ ${member.user.firstName}`}
+              value={member.enforcementStatus || "active"}
+              onChange={(event) =>
+                void changeAccess(member, event.target.value)
+              }
+            >
+              <option value="active">Доступ разрешён</option>
+              <option value="restricted">Ограничить</option>
+              <option value="banned">Заблокировать в доске</option>
+            </select>
             <label className="check">
-              <input type="checkbox" checked={Boolean(member.freePublicationOverride)} onChange={(event) => void changeFreeAccess(member, event.target.checked)} />
+              <input
+                type="checkbox"
+                checked={Boolean(member.freePublicationOverride)}
+                onChange={(event) =>
+                  void changeFreeAccess(member, event.target.checked)
+                }
+              />
               Бесплатные публикации вручную
             </label>
           </div>
@@ -2968,15 +4899,92 @@ function AdminSettings() {
             />
             <small>Показывается на главной и завершает настройку бренда.</small>
           </label>
-          <fieldset className="abuse-settings"><legend>Защита от злоупотреблений</legend><label><span>Режим</span><select value={settings.abuseProtectionMode} onChange={(e) => setSettings({ ...settings, abuseProtectionMode: e.target.value })}><option value="enforce">Защищать</option><option value="observe">Только наблюдать</option><option value="off">Выключено</option></select></label>{[
-            ["minQualifiedMessageChars", "Минимум символов в полезном сообщении", 1, 500],
-            ["maxLinksPerQualifiedMessage", "Максимум ссылок в сообщении", 0, 10],
-            ["maxListingsPerDay", "Объявлений пользователя за 24 часа", 1, 100],
-            ["duplicateWindowDays", "Окно поиска дубликатов, дней", 1, 365],
-            ["duplicateSimilarityPercent", "Сходство для дубликата, %", 50, 100],
-            ["riskyListingThreshold", "Порог ручной проверки, баллов", 1, 100],
-            ["maxPaidInvoicesPerDay", "Платёжных счетов за 24 часа", 1, 100],
-          ].map(([key, label, min, max]) => <label key={String(key)}><span>{label}</span><input type="number" min={Number(min)} max={Number(max)} value={settings[String(key)]} onChange={(e) => setSettings({ ...settings, [String(key)]: Number(e.target.value) })}/></label>)}<label><span>Запрещённые слова и фразы, по одной в строке</span><textarea rows={5} value={(settings.prohibitedWords || []).join("\n")} onChange={(e) => setSettings({ ...settings, prohibitedWords: e.target.value.split("\n").map((value) => value.trim()).filter(Boolean).slice(0, 200) })}/></label></fieldset>
+          <fieldset className="abuse-settings">
+            <legend>Защита от злоупотреблений</legend>
+            <label>
+              <span>Режим</span>
+              <select
+                value={settings.abuseProtectionMode}
+                onChange={(e) =>
+                  setSettings({
+                    ...settings,
+                    abuseProtectionMode: e.target.value,
+                  })
+                }
+              >
+                <option value="enforce">Защищать</option>
+                <option value="observe">Только наблюдать</option>
+                <option value="off">Выключено</option>
+              </select>
+            </label>
+            {[
+              [
+                "minQualifiedMessageChars",
+                "Минимум символов в полезном сообщении",
+                1,
+                500,
+              ],
+              [
+                "maxLinksPerQualifiedMessage",
+                "Максимум ссылок в сообщении",
+                0,
+                10,
+              ],
+              [
+                "maxListingsPerDay",
+                "Объявлений пользователя за 24 часа",
+                1,
+                100,
+              ],
+              ["duplicateWindowDays", "Окно поиска дубликатов, дней", 1, 365],
+              [
+                "duplicateSimilarityPercent",
+                "Сходство для дубликата, %",
+                50,
+                100,
+              ],
+              [
+                "riskyListingThreshold",
+                "Порог ручной проверки, баллов",
+                1,
+                100,
+              ],
+              ["maxPaidInvoicesPerDay", "Платёжных счетов за 24 часа", 1, 100],
+            ].map(([key, label, min, max]) => (
+              <label key={String(key)}>
+                <span>{label}</span>
+                <input
+                  type="number"
+                  min={Number(min)}
+                  max={Number(max)}
+                  value={settings[String(key)]}
+                  onChange={(e) =>
+                    setSettings({
+                      ...settings,
+                      [String(key)]: Number(e.target.value),
+                    })
+                  }
+                />
+              </label>
+            ))}
+            <label>
+              <span>Запрещённые слова и фразы, по одной в строке</span>
+              <textarea
+                rows={5}
+                value={(settings.prohibitedWords || []).join("\n")}
+                onChange={(e) =>
+                  setSettings({
+                    ...settings,
+                    prohibitedWords: e.target.value
+                      .split("\n")
+                      .map((value) => value.trim())
+                      .filter(Boolean)
+                      .slice(0, 200),
+                  })
+                }
+              />
+            </label>
+          </fieldset>
           <label className="rules-editor">
             <span>Правила сообщества</span>
             <textarea
@@ -2994,9 +5002,7 @@ function AdminSettings() {
           </label>
           <button
             type="button"
-            disabled={
-              saving
-            }
+            disabled={saving}
             className="primary save-settings"
             onClick={() => void save()}
           >

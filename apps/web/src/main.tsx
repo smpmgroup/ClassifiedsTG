@@ -34,6 +34,10 @@ declare global {
 }
 window.Telegram?.WebApp.ready();
 window.Telegram?.WebApp.expand();
+document.documentElement.lang =
+  localStorage.getItem("adnecta-language") ||
+  navigator.language.slice(0, 2) ||
+  "en";
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <BrowserRouter>
