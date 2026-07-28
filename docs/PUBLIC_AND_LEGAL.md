@@ -4,10 +4,10 @@ The website root is public when it is opened outside Telegram without a communit
 context. Mini App launches keep their existing tenant routing. Public routes are
 `/pricing`, `/docs`, `/terms`, `/privacy`, `/prohibited` and `/support`.
 
-Authentication intentionally starts in the platform-owned Telegram bot during the
-IP/nip.io beta. The bot opens the signed Mini App owner session, avoiding a second
-password database. A domain-based Telegram Login Widget can be added only after the
-final domain is registered with BotFather.
+Authentication starts in the platform-owned Telegram bot on the production origin
+`https://adnecta.com`. The bot opens the signed owner session without maintaining a
+second password database. Telegram Mini App, browser handoff and API callbacks use
+the same HTTPS origin.
 
 Legal documents are append-only versions. The latest effective published `terms` and
 `privacy` versions are required. Users must accept each exact document ID before they

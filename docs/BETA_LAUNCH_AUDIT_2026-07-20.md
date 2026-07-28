@@ -2,10 +2,14 @@
 
 ## Verified engineering gates
 
-- Production origin: `https://93-93-116-147.nip.io`; HTTP redirects to HTTPS, HSTS and a Telegram-compatible CSP are active.
+- Production origin migrated to `https://adnecta.com` on 2026-07-28; Let's Encrypt
+  certificates for the root and `www` host, HTTP/2, HSTS and a Telegram-compatible
+  CSP are active.
 - Public port `8080` is bound to loopback and is unreachable from outside the VPS.
 - PostgreSQL contains 18 completed migrations, one current real community and three current real users.
-- Bot identity is `@ITTarragonaadsbot`, it can join groups, and all eight Compose services are running; backend, frontend, Nginx, PostgreSQL, Redis and worker health checks are green.
+- Bot identity is `@AdnectaBot`, it can join groups, and all eight Compose services
+  are running; backend, frontend, Nginx, PostgreSQL, Redis and worker health checks
+  are green.
 - The self-cleaning closed-beta runner passed 47 API checks with two temporary tenants and a user belonging to both. It verified listing/favourite/moderation isolation, cross-tenant mutation denial, role boundaries, finance and support isolation, suspension, tenant-local enforcement, protected media delivery, platform-staff MFA and website-originated Telegram registration. Cleanup returned the database to one community and three users.
 - Root, API and worker builds passed; 17 unit tests and the GitHub Actions workflow passed for commits `d8d7487` and `fb00987`.
 - Load smoke passed twice with 300 requests and concurrency 30: public landing p95 552 ms, health p95 822 ms, zero failed requests.
@@ -33,4 +37,6 @@
 - Backups are verified but still stored on the same VPS. Encrypted off-host replication needs an S3-compatible bucket or another owner-approved destination.
 - SSH still permits root password authentication. A deploy account/key and recovery procedure should be confirmed before password login is disabled.
 - The current platform owner must complete the guided authenticator enrollment and store the one-time recovery codes before the 2FA launch gate is operationally accepted.
-- The final product domain and BotFather Web App/Login domain remain deliberately deferred until the final launch stage.
+- The product domain and runtime Mini App URL are active on `adnecta.com`. BotFather
+  Main Mini App and Login Widget domain settings must remain aligned with this
+  production origin.
