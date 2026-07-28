@@ -21,6 +21,7 @@ import {
   completePlatformTwoFactor,
   logoutPlatformSession,
   request,
+  setAdminCommunityId,
   setPlatformToken,
   switchTenantCommunity,
 } from "./api";
@@ -400,7 +401,6 @@ export function App() {
         <Route path="/favorites" element={<Favorites />} />
         <Route path="/listings/:id" element={<ListingDetail />} />
         <Route path="/profile" element={<Profile />} />
-        <Route path="/admin/*" element={<Admin />} />
       </Routes>
       <nav>
         {[
@@ -777,6 +777,19 @@ function PlatformWorkspace({
     (organization: any) =>
       ["owner", "administrator"].includes(organization.role),
   );
+  const ownerTab =
+    new URLSearchParams(window.location.search).get("tab") || "overview";
+  const selectedCommunityId =
+    new URLSearchParams(window.location.search).get("community") ||
+    ownerCommunities[0]?.id ||
+    "";
+  const administrationTabs = new Set([
+    "moderation",
+    "users",
+    "risk",
+    "settings",
+    "audit",
+  ]);
   return (
     <main
       className={`platform-workspace ${platformAdminOnly ? "service-owner-workspace" : "owner-workspace"}`}
@@ -841,22 +854,31 @@ function PlatformWorkspace({
           </>
         ) : (
           <>
-            <a href="#owner-start">
+            <a href="/owner?tab=overview">
               <span>⌂</span> {t("overview")}
             </a>
-            <a href="#owner-communities">
+            <a href="/owner?tab=communities">
               <span>▦</span> {t("communities")}
             </a>
-            <a href="#owner-finance">
+            <a href="/owner?tab=moderation">
+              <span>✓</span> Модерация
+            </a>
+            <a href="/owner?tab=users">
+              <span>♙</span> Люди
+            </a>
+            <a href="/owner?tab=settings">
+              <span>⚙</span> Настройки
+            </a>
+            <a href="/owner?tab=finance">
               <span>★</span> {t("starsPayouts")}
             </a>
-            <a href="#owner-support">
+            <a href="/owner?tab=support">
               <span>?</span> {t("support")}
             </a>
           </>
         )}
       </nav>
-      {!platformAdminOnly && (
+      {!platformAdminOnly && ownerTab === "overview" && (
         <section
           className={`owner-connect-hub ${activeCommunities.length ? "connected" : ""}`}
           id="owner-start"
@@ -915,7 +937,7 @@ function PlatformWorkspace({
           </div>
         </section>
       )}
-      {!platformAdminOnly && (
+      {!platformAdminOnly && ownerTab === "overview" && (
         <section className="owner-overview" aria-label="Сводка кабинета">
           <div className="owner-kpis">
             <article>
@@ -957,151 +979,164 @@ function PlatformWorkspace({
         </section>
       )}
       {error && <LoadError message={error} />}
-      {!platformAdminOnly && (
-        <div className="organization-list" id="owner-communities">
-          {data.organizations.map(
-            (organization: any, organizationIndex: number) => (
-              <section className="organization-card" key={organization.id}>
-                <div className="organization-title">
-                  <div>
-                    <small>{t("workspaceNotConnection")}</small>
-                    <h2>{organization.name}</h2>
+      {!platformAdminOnly && administrationTabs.has(ownerTab) && (
+        <WebCommunityAdministration
+          view={ownerTab}
+          communities={ownerCommunities}
+          selectedCommunityId={selectedCommunityId}
+        />
+      )}
+      {!platformAdminOnly &&
+        ["communities", "finance", "support"].includes(ownerTab) && (
+          <div className="organization-list" id="owner-communities">
+            {data.organizations.map(
+              (organization: any, organizationIndex: number) => (
+                <section className="organization-card" key={organization.id}>
+                  <div className="organization-title">
+                    <div>
+                      <small>УПРАВЛЕНИЕ ПОДКЛЮЧЕНИЯМИ</small>
+                      <h2>Сообщества</h2>
+                    </div>
                   </div>
-                  <span>
-                    {organization.role === "owner"
-                      ? t("ownerRole")
-                      : t("administratorRole")}
-                  </span>
-                </div>
-                {organization.role === "owner" && (
-                  <OrganizationIdentitySettings
-                    organization={organization}
-                    onChanged={load}
-                  />
-                )}
-                <div className="connected-boards">
-                  {organization.communities.map((community: any) => (
-                    <CommunityOperations
-                      key={community.id}
-                      community={community}
-                      canManage={["owner", "administrator"].includes(
-                        organization.role,
-                      )}
-                      canDelete={organization.role === "owner"}
-                      onChanged={load}
-                    />
-                  ))}
-                  {!organization.communities.length && (
-                    <div className="owner-empty-community">
-                      <span>▦</span>
-                      <div>
-                        <b>{t("noTelegramGroups")}</b>
-                        <small>{t("workspaceExplanation")}</small>
-                      </div>
-                      {["owner", "administrator"].includes(
-                        organization.role,
-                      ) && (
-                        <button
-                          className="primary"
-                          disabled={busy === organization.id}
-                          onClick={() => void connect(organization.id)}
-                        >
-                          {busy === organization.id
-                            ? t("openingTelegram")
-                            : t("connectGroup")}
-                        </button>
+                  {ownerTab === "communities" && (
+                    <div className="connected-boards">
+                      {organization.communities.map((community: any) => (
+                        <CommunityOperations
+                          key={community.id}
+                          community={community}
+                          canManage={["owner", "administrator"].includes(
+                            organization.role,
+                          )}
+                          canDelete={organization.role === "owner"}
+                          onChanged={load}
+                        />
+                      ))}
+                      {!organization.communities.length && (
+                        <div className="owner-empty-community">
+                          <span>▦</span>
+                          <div>
+                            <b>{t("noTelegramGroups")}</b>
+                            <small>
+                              Подключите первую Telegram-группу — отдельное
+                              рабочее пространство создавать не нужно.
+                            </small>
+                          </div>
+                          {["owner", "administrator"].includes(
+                            organization.role,
+                          ) && (
+                            <button
+                              className="primary"
+                              disabled={busy === organization.id}
+                              onClick={() => void connect(organization.id)}
+                            >
+                              {busy === organization.id
+                                ? t("openingTelegram")
+                                : t("connectGroup")}
+                            </button>
+                          )}
+                        </div>
                       )}
                     </div>
                   )}
-                </div>
-                {["owner", "administrator"].includes(organization.role) &&
-                  organization.communities.length > 0 && (
-                    <OwnerLocalization
-                      communities={organization.communities}
-                      onChanged={load}
-                    />
+                  {["owner", "administrator"].includes(organization.role) &&
+                    ownerTab === "communities" &&
+                    organization.communities.length > 0 && (
+                      <OwnerLocalization
+                        communities={organization.communities}
+                        onChanged={load}
+                      />
+                    )}
+                  {organization.role === "owner" &&
+                    ownerTab === "finance" &&
+                    organization.communities.length > 0 && (
+                      <OwnerMonetization
+                        organization={organization}
+                        pricing={data.platformPricing}
+                        onChanged={load}
+                      />
+                    )}
+                  {ownerTab === "finance" &&
+                    organization.communities.length > 0 && (
+                      <div
+                        id={
+                          organizationIndex === 0 ? "owner-finance" : undefined
+                        }
+                      >
+                        <OrganizationFinance organizationId={organization.id} />
+                      </div>
+                    )}
+                  {ownerTab === "support" && (
+                    <div
+                      id={organizationIndex === 0 ? "owner-support" : undefined}
+                    >
+                      <OrganizationSupport organization={organization} />
+                    </div>
                   )}
-                {organization.role === "owner" &&
-                  organization.communities.length > 0 && (
-                    <OwnerMonetization
-                      organization={organization}
-                      pricing={data.platformPricing}
-                      onChanged={load}
-                    />
-                  )}
-                {organization.communities.length > 0 && (
-                  <div
-                    id={organizationIndex === 0 ? "owner-finance" : undefined}
-                  >
-                    <OrganizationFinance organizationId={organization.id} />
-                  </div>
-                )}
-                <div id={organizationIndex === 0 ? "owner-support" : undefined}>
-                  <OrganizationSupport organization={organization} />
-                </div>
-                {organization.role === "owner" && (
-                  <button
-                    type="button"
-                    className="ownership-transfer"
-                    disabled={busy === `transfer-${organization.id}`}
-                    onClick={async () => {
-                      const telegramUserId = window.prompt(
-                        "Telegram ID нового владельца. Он должен сначала открыть бота.",
-                      );
-                      if (!telegramUserId) return;
-                      if (
-                        !window.confirm(
-                          "После передачи вы станете администратором. Продолжить?",
-                        )
-                      )
-                        return;
-                      setBusy(`transfer-${organization.id}`);
-                      setError("");
-                      try {
-                        await request(
-                          `/platform/organizations/${organization.id}/transfer-ownership`,
-                          "POST",
-                          { telegramUserId },
-                        );
-                        await load();
-                      } catch (e: any) {
-                        setError(e.message);
-                      } finally {
-                        setBusy("");
-                      }
-                    }}
-                  >
-                    Передать права владельца
-                  </button>
-                )}
-                {organization.communities.length > 0 && (
-                  <button
-                    className="primary connect-community"
-                    disabled={busy === organization.id}
-                    onClick={() => void connect(organization.id)}
-                  >
-                    {busy === organization.id
-                      ? "Создаём ссылку…"
-                      : organization.communities.some(
-                            (community: any) =>
-                              community.botStatus === "unavailable",
+                  {ownerTab === "communities" &&
+                    organization.role === "owner" && (
+                      <button
+                        type="button"
+                        className="ownership-transfer"
+                        disabled={busy === `transfer-${organization.id}`}
+                        onClick={async () => {
+                          const telegramUserId = window.prompt(
+                            "Telegram ID нового владельца. Он должен сначала открыть бота.",
+                          );
+                          if (!telegramUserId) return;
+                          if (
+                            !window.confirm(
+                              "После передачи вы станете администратором. Продолжить?",
+                            )
                           )
-                        ? "＋ Подключить Adnecta к группе"
-                        : "＋ Добавить Adnecta в группу"}
-                  </button>
-                )}
-              </section>
-            ),
-          )}
-        </div>
-      )}
+                            return;
+                          setBusy(`transfer-${organization.id}`);
+                          setError("");
+                          try {
+                            await request(
+                              `/platform/organizations/${organization.id}/transfer-ownership`,
+                              "POST",
+                              { telegramUserId },
+                            );
+                            await load();
+                          } catch (e: any) {
+                            setError(e.message);
+                          } finally {
+                            setBusy("");
+                          }
+                        }}
+                      >
+                        Передать права владельца
+                      </button>
+                    )}
+                  {ownerTab === "communities" &&
+                    organization.communities.length > 0 && (
+                      <button
+                        className="primary connect-community"
+                        disabled={busy === organization.id}
+                        onClick={() => void connect(organization.id)}
+                      >
+                        {busy === organization.id
+                          ? "Создаём ссылку…"
+                          : organization.communities.some(
+                                (community: any) =>
+                                  community.botStatus === "unavailable",
+                              )
+                            ? "＋ Подключить Adnecta к группе"
+                            : "＋ Добавить Adnecta в группу"}
+                      </button>
+                    )}
+                </section>
+              ),
+            )}
+          </div>
+        )}
       {!platformAdminOnly &&
         ["platform_admin", "platform_owner"].includes(
           data.user.platformRole,
         ) && (
           <a className="platform-console-link" href="/platform-owner">
             <b>Перейти в кабинет владельца платформы</b>
-            <span>Организации, сообщества, Stars, выплаты и аудит →</span>
+            <span>Сообщества, Stars, выплаты и аудит →</span>
           </a>
         )}
       {platformAdminOnly &&
@@ -1125,6 +1160,65 @@ function PlatformWorkspace({
           <LoadError message="Этот отдельный кабинет доступен только владельцу и сотрудникам платформы." />
         )}
     </main>
+  );
+}
+
+function WebCommunityAdministration({
+  view,
+  communities,
+  selectedCommunityId,
+}: {
+  view: string;
+  communities: any[];
+  selectedCommunityId: string;
+}) {
+  useEffect(() => {
+    setAdminCommunityId(selectedCommunityId);
+    return () => setAdminCommunityId("");
+  }, [selectedCommunityId]);
+  if (!communities.length)
+    return (
+      <section className="web-community-admin admin-page">
+        <div className="admin-empty">
+          Сначала подключите Telegram-сообщество в разделе «Сообщества».
+        </div>
+      </section>
+    );
+  return (
+    <section className="web-community-admin admin-page">
+      <header className="admin-header web-admin-header">
+        <div>
+          <small>АДМИНИСТРИРОВАНИЕ СООБЩЕСТВА</small>
+          <h2>
+            {communities.find(
+              (community) => community.id === selectedCommunityId,
+            )?.name || "Сообщество"}
+          </h2>
+        </div>
+        <label>
+          <span>Сообщество</span>
+          <select
+            value={selectedCommunityId}
+            onChange={(event) => {
+              const url = new URL(window.location.href);
+              url.searchParams.set("community", event.target.value);
+              window.location.assign(url.toString());
+            }}
+          >
+            {communities.map((community) => (
+              <option value={community.id} key={community.id}>
+                {community.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      </header>
+      {view === "moderation" && <AdminModeration />}
+      {view === "users" && <AdminUsers />}
+      {view === "risk" && <AdminRisk />}
+      {view === "settings" && <AdminSettings />}
+      {view === "audit" && <AdminAudit />}
+    </section>
   );
 }
 
@@ -2739,7 +2833,7 @@ function PlatformOwnerPanel({ canEdit }: { canEdit: boolean }) {
       <div className="platform-metrics">
         <div>
           <b>{metrics.organizations}</b>
-          <span>Организаций</span>
+          <span>Кабинетов клиентов</span>
         </div>
         <div>
           <b>{metrics.activeCommunities}</b>
@@ -4085,15 +4179,6 @@ function Profile() {
         </div>
       </div>
       {error && <LoadError message={error} />}
-      {["moderator", "admin", "owner"].includes(me?.role) && (
-        <NavLink className="admin admin-prominent" to="/admin">
-          <span>
-            <b>Панель администратора</b>
-            <small>Модерация, люди и настройки</small>
-          </span>
-          <b>›</b>
-        </NavLink>
-      )}
       <div className="profile-shortcuts">
         <button
           className={view === "listings" ? "active" : ""}

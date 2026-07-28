@@ -1,5 +1,10 @@
 const base = "/api";
 let token: string | null = null;
+let adminCommunityId = "";
+
+export function setAdminCommunityId(value: string) {
+  adminCommunityId = value;
+}
 
 export function activateSession(scope: "tenant" | "platform") {
   token = sessionStorage.getItem(`${scope}Token`);
@@ -13,6 +18,7 @@ export function activateSession(scope: "tenant" | "platform") {
 function authenticatedHeaders(initial?: HeadersInit) {
   const headers = new Headers(initial);
   if (token) headers.set("authorization", `Bearer ${token}`);
+  if (adminCommunityId) headers.set("x-community-id", adminCommunityId);
   return headers;
 }
 
@@ -26,10 +32,11 @@ export async function api<T>(
   const response = await fetch(base + path, { ...options, headers });
   const body = await response.json().catch(() => ({}));
   if (!response.ok)
-    throw Object.assign(
-      new Error(body.error?.message || "Request failed"),
-      { code: body.error?.code, status: response.status, body },
-    );
+    throw Object.assign(new Error(body.error?.message || "Request failed"), {
+      code: body.error?.code,
+      status: response.status,
+      body,
+    });
   return body;
 }
 
@@ -88,7 +95,10 @@ export async function logoutPlatformSession() {
   clearPlatformSession();
 }
 
-export async function completePlatformTwoFactor(challengeToken: string, code: string) {
+export async function completePlatformTwoFactor(
+  challengeToken: string,
+  code: string,
+) {
   const result = await api<any>("/auth/platform/two-factor", {
     method: "POST",
     body: JSON.stringify({ challengeToken, code }),
@@ -97,7 +107,9 @@ export async function completePlatformTwoFactor(challengeToken: string, code: st
   return result;
 }
 
-export async function startPlatformWebLogin(destination: "owner" | "platform_owner" = "owner") {
+export async function startPlatformWebLogin(
+  destination: "owner" | "platform_owner" = "owner",
+) {
   return api<any>("/auth/platform/web/start", {
     method: "POST",
     body: JSON.stringify({ destination }),

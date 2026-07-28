@@ -20,34 +20,183 @@ const appUrl: string = appUrlValue;
 const botUsername: string = usernameValue;
 const bot = new Telegraf(token);
 const supportedLocales = new Set([
-  "en", "es", "ca", "ru", "uk", "fr", "de", "it", "pt",
+  "en",
+  "es",
+  "ca",
+  "ru",
+  "uk",
+  "fr",
+  "de",
+  "it",
+  "pt",
 ]);
 type BotLocale = "en" | "es" | "ca" | "ru" | "uk" | "fr" | "de" | "it" | "pt";
 const normalizeLocale = (
   value?: string | null,
   fallback: BotLocale = "en",
 ): BotLocale => {
-  const locale = String(value || "").toLowerCase().slice(0, 2);
+  const locale = String(value || "")
+    .toLowerCase()
+    .slice(0, 2);
   return supportedLocales.has(locale) ? (locale as BotLocale) : fallback;
 };
 const botCopy: Record<BotLocale, Record<string, string>> = {
-  en: { open:"Open board", owner:"Owner dashboard", board:"Community marketplace", intro:"Publish and discover trusted community listings in one place. The button opens the board directly inside Telegram.", boardCommand:"Open community marketplace", rulesCommand:"Community rules", installCommand:"Install board button (admins)", installed:"The board button was published but could not be pinned. Give the bot permission to pin messages and run /install_board again.", choose:"Choose a community board:", listings:"Open listings:", privateIntro:"Welcome to the community marketplace.", myAds:"My listings" },
-  es: { open:"Abrir tablón",owner:"Panel del propietario",board:"Tablón de la comunidad",intro:"Publica y descubre anuncios de confianza en un solo lugar. El botón abre el tablón directamente en Telegram.",boardCommand:"Abrir tablón de anuncios",rulesCommand:"Reglas de la comunidad",installCommand:"Instalar botón (administradores)",installed:"El botón se publicó, pero no se pudo fijar. Da permiso para fijar mensajes y ejecuta /install_board de nuevo.",choose:"Elige un tablón:",listings:"Abrir anuncios:",privateIntro:"Bienvenido al tablón de la comunidad.",myAds:"Mis anuncios" },
-  ca: { open:"Obre el tauler",owner:"Tauler del propietari",board:"Tauler de la comunitat",intro:"Publica i descobreix anuncis de confiança en un sol lloc. El botó obre el tauler directament a Telegram.",boardCommand:"Obre el tauler d'anuncis",rulesCommand:"Normes de la comunitat",installCommand:"Instal·la el botó (administradors)",installed:"El botó s'ha publicat però no s'ha pogut fixar. Dona permís per fixar missatges i torna a executar /install_board.",choose:"Tria un tauler:",listings:"Obre els anuncis:",privateIntro:"Benvingut al tauler de la comunitat.",myAds:"Els meus anuncis" },
-  ru: { open:"Открыть доску",owner:"Кабинет владельца",board:"Доска объявлений сообщества",intro:"Публикуйте и находите объявления участников в одном месте. Кнопка открывает доску сразу внутри Telegram.",boardCommand:"Открыть доску объявлений",rulesCommand:"Правила сообщества",installCommand:"Установить кнопку доски (для админов)",installed:"Кнопка опубликована, но её не удалось закрепить. Выдайте боту право закреплять сообщения и повторите /install_board.",choose:"Выберите доску сообщества:",listings:"Открыть объявления:",privateIntro:"Добро пожаловать на доску объявлений сообщества.",myAds:"Мои объявления" },
-  uk: { open:"Відкрити дошку",owner:"Кабінет власника",board:"Дошка оголошень спільноти",intro:"Публікуйте та знаходьте оголошення учасників в одному місці. Кнопка відкриває дошку прямо в Telegram.",boardCommand:"Відкрити дошку оголошень",rulesCommand:"Правила спільноти",installCommand:"Встановити кнопку (для адміністраторів)",installed:"Кнопку опубліковано, але не закріплено. Надайте право закріплювати повідомлення та повторіть /install_board.",choose:"Оберіть дошку спільноти:",listings:"Відкрити оголошення:",privateIntro:"Ласкаво просимо на дошку спільноти.",myAds:"Мої оголошення" },
-  fr: { open:"Ouvrir le tableau",owner:"Espace propriétaire",board:"Marché de la communauté",intro:"Publiez et découvrez les annonces de la communauté. Le bouton ouvre directement le tableau dans Telegram.",boardCommand:"Ouvrir le marché",rulesCommand:"Règles de la communauté",installCommand:"Installer le bouton (admins)",installed:"Le bouton a été publié mais n'a pas pu être épinglé. Autorisez le bot à épingler puis relancez /install_board.",choose:"Choisissez une communauté :",listings:"Ouvrir les annonces :",privateIntro:"Bienvenue sur le marché de la communauté.",myAds:"Mes annonces" },
-  de: { open:"Pinnwand öffnen",owner:"Inhaberbereich",board:"Community-Marktplatz",intro:"Veröffentliche und entdecke vertrauenswürdige Anzeigen. Der Button öffnet die Pinnwand direkt in Telegram.",boardCommand:"Marktplatz öffnen",rulesCommand:"Community-Regeln",installCommand:"Pinnwand-Button installieren (Admins)",installed:"Der Button wurde veröffentlicht, aber nicht angeheftet. Erteile die Berechtigung und führe /install_board erneut aus.",choose:"Community auswählen:",listings:"Anzeigen öffnen:",privateIntro:"Willkommen auf dem Community-Marktplatz.",myAds:"Meine Anzeigen" },
-  it: { open:"Apri bacheca",owner:"Area proprietario",board:"Mercatino della community",intro:"Pubblica e scopri annunci affidabili. Il pulsante apre la bacheca direttamente in Telegram.",boardCommand:"Apri mercatino",rulesCommand:"Regole della community",installCommand:"Installa pulsante (amministratori)",installed:"Il pulsante è stato pubblicato ma non fissato. Concedi il permesso e ripeti /install_board.",choose:"Scegli una community:",listings:"Apri annunci:",privateIntro:"Benvenuto nel mercatino della community.",myAds:"I miei annunci" },
-  pt: { open:"Abrir quadro",owner:"Painel do proprietário",board:"Mercado da comunidade",intro:"Publique e descubra anúncios de confiança. O botão abre o quadro diretamente no Telegram.",boardCommand:"Abrir mercado",rulesCommand:"Regras da comunidade",installCommand:"Instalar botão (administradores)",installed:"O botão foi publicado, mas não foi afixado. Dê permissão e execute /install_board novamente.",choose:"Escolha uma comunidade:",listings:"Abrir anúncios:",privateIntro:"Bem-vindo ao mercado da comunidade.",myAds:"Meus anúncios" },
+  en: {
+    open: "Open board",
+    owner: "Owner dashboard",
+    board: "Community marketplace",
+    intro:
+      "Publish and discover trusted community listings in one place. The button opens the board directly inside Telegram.",
+    boardCommand: "Open community marketplace",
+    rulesCommand: "Community rules",
+    installCommand: "Install board button (admins)",
+    installed:
+      "The board button was published but could not be pinned. Give the bot permission to pin messages and run /install_board again.",
+    choose: "Choose a community board:",
+    listings: "Open listings:",
+    privateIntro: "Welcome to the community marketplace.",
+    myAds: "My listings",
+  },
+  es: {
+    open: "Abrir tablón",
+    owner: "Panel del propietario",
+    board: "Tablón de la comunidad",
+    intro:
+      "Publica y descubre anuncios de confianza en un solo lugar. El botón abre el tablón directamente en Telegram.",
+    boardCommand: "Abrir tablón de anuncios",
+    rulesCommand: "Reglas de la comunidad",
+    installCommand: "Instalar botón (administradores)",
+    installed:
+      "El botón se publicó, pero no se pudo fijar. Da permiso para fijar mensajes y ejecuta /install_board de nuevo.",
+    choose: "Elige un tablón:",
+    listings: "Abrir anuncios:",
+    privateIntro: "Bienvenido al tablón de la comunidad.",
+    myAds: "Mis anuncios",
+  },
+  ca: {
+    open: "Obre el tauler",
+    owner: "Tauler del propietari",
+    board: "Tauler de la comunitat",
+    intro:
+      "Publica i descobreix anuncis de confiança en un sol lloc. El botó obre el tauler directament a Telegram.",
+    boardCommand: "Obre el tauler d'anuncis",
+    rulesCommand: "Normes de la comunitat",
+    installCommand: "Instal·la el botó (administradors)",
+    installed:
+      "El botó s'ha publicat però no s'ha pogut fixar. Dona permís per fixar missatges i torna a executar /install_board.",
+    choose: "Tria un tauler:",
+    listings: "Obre els anuncis:",
+    privateIntro: "Benvingut al tauler de la comunitat.",
+    myAds: "Els meus anuncis",
+  },
+  ru: {
+    open: "Открыть доску",
+    owner: "Кабинет владельца",
+    board: "Доска объявлений сообщества",
+    intro:
+      "Публикуйте и находите объявления участников в одном месте. Кнопка открывает доску сразу внутри Telegram.",
+    boardCommand: "Открыть доску объявлений",
+    rulesCommand: "Правила сообщества",
+    installCommand: "Установить кнопку доски (для админов)",
+    installed:
+      "Кнопка опубликована, но её не удалось закрепить. Выдайте боту право закреплять сообщения и повторите /install_board.",
+    choose: "Выберите доску сообщества:",
+    listings: "Открыть объявления:",
+    privateIntro: "Добро пожаловать на доску объявлений сообщества.",
+    myAds: "Мои объявления",
+  },
+  uk: {
+    open: "Відкрити дошку",
+    owner: "Кабінет власника",
+    board: "Дошка оголошень спільноти",
+    intro:
+      "Публікуйте та знаходьте оголошення учасників в одному місці. Кнопка відкриває дошку прямо в Telegram.",
+    boardCommand: "Відкрити дошку оголошень",
+    rulesCommand: "Правила спільноти",
+    installCommand: "Встановити кнопку (для адміністраторів)",
+    installed:
+      "Кнопку опубліковано, але не закріплено. Надайте право закріплювати повідомлення та повторіть /install_board.",
+    choose: "Оберіть дошку спільноти:",
+    listings: "Відкрити оголошення:",
+    privateIntro: "Ласкаво просимо на дошку спільноти.",
+    myAds: "Мої оголошення",
+  },
+  fr: {
+    open: "Ouvrir le tableau",
+    owner: "Espace propriétaire",
+    board: "Marché de la communauté",
+    intro:
+      "Publiez et découvrez les annonces de la communauté. Le bouton ouvre directement le tableau dans Telegram.",
+    boardCommand: "Ouvrir le marché",
+    rulesCommand: "Règles de la communauté",
+    installCommand: "Installer le bouton (admins)",
+    installed:
+      "Le bouton a été publié mais n'a pas pu être épinglé. Autorisez le bot à épingler puis relancez /install_board.",
+    choose: "Choisissez une communauté :",
+    listings: "Ouvrir les annonces :",
+    privateIntro: "Bienvenue sur le marché de la communauté.",
+    myAds: "Mes annonces",
+  },
+  de: {
+    open: "Pinnwand öffnen",
+    owner: "Inhaberbereich",
+    board: "Community-Marktplatz",
+    intro:
+      "Veröffentliche und entdecke vertrauenswürdige Anzeigen. Der Button öffnet die Pinnwand direkt in Telegram.",
+    boardCommand: "Marktplatz öffnen",
+    rulesCommand: "Community-Regeln",
+    installCommand: "Pinnwand-Button installieren (Admins)",
+    installed:
+      "Der Button wurde veröffentlicht, aber nicht angeheftet. Erteile die Berechtigung und führe /install_board erneut aus.",
+    choose: "Community auswählen:",
+    listings: "Anzeigen öffnen:",
+    privateIntro: "Willkommen auf dem Community-Marktplatz.",
+    myAds: "Meine Anzeigen",
+  },
+  it: {
+    open: "Apri bacheca",
+    owner: "Area proprietario",
+    board: "Mercatino della community",
+    intro:
+      "Pubblica e scopri annunci affidabili. Il pulsante apre la bacheca direttamente in Telegram.",
+    boardCommand: "Apri mercatino",
+    rulesCommand: "Regole della community",
+    installCommand: "Installa pulsante (amministratori)",
+    installed:
+      "Il pulsante è stato pubblicato ma non fissato. Concedi il permesso e ripeti /install_board.",
+    choose: "Scegli una community:",
+    listings: "Apri annunci:",
+    privateIntro: "Benvenuto nel mercatino della community.",
+    myAds: "I miei annunci",
+  },
+  pt: {
+    open: "Abrir quadro",
+    owner: "Painel do proprietário",
+    board: "Mercado da comunidade",
+    intro:
+      "Publique e descubra anúncios de confiança. O botão abre o quadro diretamente no Telegram.",
+    boardCommand: "Abrir mercado",
+    rulesCommand: "Regras da comunidade",
+    installCommand: "Instalar botão (administradores)",
+    installed:
+      "O botão foi publicado, mas não foi afixado. Dê permissão e execute /install_board novamente.",
+    choose: "Escolha uma comunidade:",
+    listings: "Abrir anúncios:",
+    privateIntro: "Bem-vindo ao mercado da comunidade.",
+    myAds: "Meus anúncios",
+  },
 };
 const bt = (locale: string | null | undefined, key: string) =>
   botCopy[normalizeLocale(locale)][key] || botCopy.en[key] || key;
 const mediaUrl = (imageId: string) => {
   const now = Math.floor(Date.now() / 1000);
-  const encode = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url");
+  const encode = (value: unknown) =>
+    Buffer.from(JSON.stringify(value)).toString("base64url");
   const body = `${encode({ alg: "HS256", typ: "JWT" })}.${encode({ scope: "media", imageId, iat: now, exp: now + 3600 })}`;
-  const signature = crypto.createHmac("sha256", accessTokenSecret).update(body).digest("base64url");
+  const signature = crypto
+    .createHmac("sha256", accessTokenSecret)
+    .update(body)
+    .digest("base64url");
   const url = new URL(`/api/media/${imageId}`, appUrl);
   url.searchParams.set("token", `${body}.${signature}`);
   return url.toString();
@@ -60,7 +209,11 @@ const boardUrl = (communitySlug?: string, screen?: string) => {
   if (communitySlug) url.searchParams.set("community", communitySlug);
   return url.toString();
 };
-const privateBoard = (communitySlug?: string, screen?: string, locale?: string) =>
+const privateBoard = (
+  communitySlug?: string,
+  screen?: string,
+  locale?: string,
+) =>
   Markup.inlineKeyboard([
     Markup.button.webApp(bt(locale, "open"), boardUrl(communitySlug, screen)),
   ]);
@@ -83,7 +236,10 @@ const confirmedWebLogin = (rawToken: string, platformOwner = false) => {
     appUrl,
   );
   return Markup.inlineKeyboard([
-    Markup.button.url(platformOwner ? "Продолжить вход" : "Открыть кабинет владельца", url.toString()),
+    Markup.button.url(
+      platformOwner ? "Продолжить вход" : "Открыть кабинет владельца",
+      url.toString(),
+    ),
   ]);
 };
 const publicBoard = (communitySlug: string, locale?: string) =>
@@ -124,10 +280,7 @@ async function installGroupBoardEntry(
       console.warn("Unable to pin group board entry", error);
       return false;
     });
-  if (!pinned)
-    await ctx.reply(
-      bt(locale, "installed"),
-    );
+  if (!pinned) await ctx.reply(bt(locale, "installed"));
   return pinned;
 }
 const categorySlug = (name: string, index: number) =>
@@ -144,11 +297,7 @@ async function claimCommunityConnection(ctx: any, rawToken: string) {
     where: { tokenHash },
     include: { requestedBy: true, organization: true },
   });
-  if (
-    !intent ||
-    intent.status !== "pending" ||
-    intent.expiresAt <= new Date()
-  )
+  if (!intent || intent.status !== "pending" || intent.expiresAt <= new Date())
     return ctx.reply(
       "Ссылка подключения недействительна или истекла. Создайте новую в кабинете.",
     );
@@ -160,7 +309,7 @@ async function claimCommunityConnection(ctx: any, rawToken: string) {
     ctx.chat.id,
     ctx.from.id,
   );
-  if (!['creator', 'administrator'].includes(requesterMembership.status))
+  if (!["creator", "administrator"].includes(requesterMembership.status))
     return ctx.reply(
       "Подключить группу может только её владелец или администратор.",
     );
@@ -170,7 +319,7 @@ async function claimCommunityConnection(ctx: any, rawToken: string) {
   if (existing) {
     if (existing.organizationId !== intent.organizationId)
       return ctx.reply(
-        "Эта группа уже привязана к другой организации. Перенос должен выполнить её текущий владелец.",
+        "Эта группа уже подключена к другому кабинету. Перенос должен выполнить её текущий администратор.",
       );
     if (existing.deletionScheduledFor)
       return ctx.reply(
@@ -203,9 +352,11 @@ async function claimCommunityConnection(ctx: any, rawToken: string) {
         botStatus: botMembership.status,
         botIsAdministrator: isAdministrator,
         botCanDeleteMessages:
-          isAdministrator && Boolean((botMembership as any).can_delete_messages),
+          isAdministrator &&
+          Boolean((botMembership as any).can_delete_messages),
         botCanRestrictMembers:
-          isAdministrator && Boolean((botMembership as any).can_restrict_members),
+          isAdministrator &&
+          Boolean((botMembership as any).can_restrict_members),
         botCanInviteUsers:
           isAdministrator && Boolean((botMembership as any).can_invite_users),
         botLastCheckedAt: new Date(),
@@ -246,10 +397,15 @@ async function claimCommunityConnection(ctx: any, rawToken: string) {
   const slug = `telegram-${chatId.toString().replace("-", "")}`;
   const community = await prisma.$transaction(async (tx) => {
     const claimed = await tx.communityConnectionIntent.updateMany({
-      where: { id: intent.id, status: "pending", expiresAt: { gt: new Date() } },
+      where: {
+        id: intent.id,
+        status: "pending",
+        expiresAt: { gt: new Date() },
+      },
       data: { status: "claiming", claimedChatId: chatId },
     });
-    if (claimed.count !== 1) throw new Error("connection intent already claimed");
+    if (claimed.count !== 1)
+      throw new Error("connection intent already claimed");
     const created = await tx.community.create({
       data: {
         organizationId: intent.organizationId,
@@ -263,11 +419,14 @@ async function claimCommunityConnection(ctx: any, rawToken: string) {
         botStatus: botMembership.status,
         botIsAdministrator,
         botCanDeleteMessages:
-          botIsAdministrator && Boolean((botMembership as any).can_delete_messages),
+          botIsAdministrator &&
+          Boolean((botMembership as any).can_delete_messages),
         botCanRestrictMembers:
-          botIsAdministrator && Boolean((botMembership as any).can_restrict_members),
+          botIsAdministrator &&
+          Boolean((botMembership as any).can_restrict_members),
         botCanInviteUsers:
-          botIsAdministrator && Boolean((botMembership as any).can_invite_users),
+          botIsAdministrator &&
+          Boolean((botMembership as any).can_invite_users),
         botLastCheckedAt: new Date(),
       },
     });
@@ -278,7 +437,10 @@ async function claimCommunityConnection(ctx: any, rawToken: string) {
           userId: intent.requestedById,
         },
       },
-      update: { role: "owner", telegramMembershipStatus: requesterMembership.status },
+      update: {
+        role: "owner",
+        telegramMembershipStatus: requesterMembership.status,
+      },
       create: {
         communityId: created.id,
         userId: intent.requestedById,
@@ -331,24 +493,37 @@ async function claimCommunityConnection(ctx: any, rawToken: string) {
 }
 
 bot.start(async (ctx) => {
-  if (
-    ctx.chat.type !== "private" &&
-    ctx.startPayload?.startsWith("connect_")
-  ) {
+  if (ctx.chat.type !== "private" && ctx.startPayload?.startsWith("connect_")) {
     await claimCommunityConnection(ctx, ctx.startPayload.slice(8));
     return;
   }
-  if (ctx.startPayload?.startsWith("login_") || ctx.startPayload?.startsWith("loginp_")) {
+  if (
+    ctx.startPayload?.startsWith("login_") ||
+    ctx.startPayload?.startsWith("loginp_")
+  ) {
     if (ctx.chat.type !== "private")
       return ctx.reply("Подтвердить вход можно только в личном чате с ботом.");
     const platformOwnerLogin = ctx.startPayload.startsWith("loginp_");
     const rawToken = ctx.startPayload.slice(platformOwnerLogin ? 7 : 6);
     if (!/^[A-Za-z0-9_-]{43}$/.test(rawToken))
-      return ctx.reply("Ссылка входа повреждена. Начните вход заново на сайте.");
-    const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
-    const intent = await prisma.webLoginIntent.findUnique({ where: { tokenHash } });
-    if (!intent || intent.status !== "pending" || intent.expiresAt <= new Date())
-      return ctx.reply("Ссылка входа уже использована или истекла. Начните вход заново на сайте.");
+      return ctx.reply(
+        "Ссылка входа повреждена. Начните вход заново на сайте.",
+      );
+    const tokenHash = crypto
+      .createHash("sha256")
+      .update(rawToken)
+      .digest("hex");
+    const intent = await prisma.webLoginIntent.findUnique({
+      where: { tokenHash },
+    });
+    if (
+      !intent ||
+      intent.status !== "pending" ||
+      intent.expiresAt <= new Date()
+    )
+      return ctx.reply(
+        "Ссылка входа уже использована или истекла. Начните вход заново на сайте.",
+      );
     const user = await prisma.user.upsert({
       where: { telegramUserId: BigInt(ctx.from.id) },
       update: {
@@ -369,18 +544,24 @@ bot.start(async (ctx) => {
       },
     });
     const claimed = await prisma.webLoginIntent.updateMany({
-      where: { id: intent.id, status: "pending", expiresAt: { gt: new Date() } },
+      where: {
+        id: intent.id,
+        status: "pending",
+        expiresAt: { gt: new Date() },
+      },
       data: { status: "claimed", userId: user.id, claimedAt: new Date() },
     });
     if (claimed.count !== 1)
       return ctx.reply("Ссылка входа уже подтверждена. Вернитесь на сайт.");
-    await prisma.auditEvent.create({ data: {
-      actorId: user.id,
-      scope: "platform_security",
-      action: "web_telegram_login_confirmed",
-      targetType: "WebLoginIntent",
-      targetId: intent.id,
-    }});
+    await prisma.auditEvent.create({
+      data: {
+        actorId: user.id,
+        scope: "platform_security",
+        action: "web_telegram_login_confirmed",
+        targetType: "WebLoginIntent",
+        targetId: intent.id,
+      },
+    });
     return ctx.reply(
       platformOwnerLogin
         ? "✅ Личность подтверждена. Вернитесь в браузер или нажмите кнопку ниже."
@@ -392,7 +573,7 @@ bot.start(async (ctx) => {
     if (ctx.chat.type !== "private")
       return ctx.reply("Откройте личный чат с ботом, чтобы войти в кабинет.");
     return ctx.reply(
-      "Откройте кабинет владельца, чтобы создать организацию и подключить Telegram-группу.",
+      "Откройте кабинет администратора, чтобы подключить Telegram-сообщество.",
       platformBoard(ctx.from.language_code),
     );
   }
@@ -418,9 +599,10 @@ bot.start(async (ctx) => {
     : user?.members.length === 1
       ? user.members[0]
       : undefined;
-  const privileged = selectedMembership && roles.has(selectedMembership.role)
-    ? selectedMembership
-    : user?.members.find((member) => roles.has(member.role));
+  const privileged =
+    selectedMembership && roles.has(selectedMembership.role)
+      ? selectedMembership
+      : user?.members.find((member) => roles.has(member.role));
   if (!requestedCommunity && (user?.members.length || 0) > 1) {
     const communities = await prisma.community.findMany({
       where: { members: { some: { userId: user!.id } }, isActive: true },
@@ -430,10 +612,7 @@ bot.start(async (ctx) => {
       bt(ctx.from.language_code, "choose"),
       Markup.inlineKeyboard(
         communities.map((community) => [
-          Markup.button.webApp(
-            community.name,
-            boardUrl(community.slug),
-          ),
+          Markup.button.webApp(community.name, boardUrl(community.slug)),
         ]),
       ),
     );
@@ -442,7 +621,10 @@ bot.start(async (ctx) => {
   await ctx.reply(
     privileged
       ? `Бот подключён. Ваша роль: ${privileged.role}. Карточки модерации будут приходить в этот чат.`
-      : bt(requestedCommunity?.defaultLocale || ctx.from.language_code, "privateIntro"),
+      : bt(
+          requestedCommunity?.defaultLocale || ctx.from.language_code,
+          "privateIntro",
+        ),
     privateBoard(
       requestedCommunity?.slug,
       moderationStart ? "admin" : undefined,
@@ -817,11 +999,10 @@ async function sendModerationCard(listingId: string) {
     try {
       const chatId = member.user.telegramUserId.toString();
       if (listing.images[0])
-        await bot.telegram.sendPhoto(
-          chatId,
-          mediaUrl(listing.images[0].id),
-          { caption: text, ...keyboard.reply_markup },
-        );
+        await bot.telegram.sendPhoto(chatId, mediaUrl(listing.images[0].id), {
+          caption: text,
+          ...keyboard.reply_markup,
+        });
       else await bot.telegram.sendMessage(chatId, text, keyboard);
       sent++;
     } catch (error) {
@@ -854,9 +1035,12 @@ function notificationText(type: string, p: any) {
         listing_rejected: "Ваше объявление отклонено.",
         listing_changes_requested: "Ваше объявление требует изменений.",
         listing_interest: "Вашим объявлением заинтересовались.",
-        payment_refunded: "Оплата Telegram Stars возвращена. Платная публикация скрыта.",
-        tenant_permission_failure: "Бот удалён из группы или потерял доступ. Доска приостановлена; проверьте права бота в кабинете владельца.",
-        support_reply: "Поддержка ответила на ваше обращение. Откройте кабинет владельца, чтобы прочитать ответ.",
+        payment_refunded:
+          "Оплата Telegram Stars возвращена. Платная публикация скрыта.",
+        tenant_permission_failure:
+          "Бот удалён из группы или потерял доступ. Доска приостановлена; проверьте права бота в кабинете владельца.",
+        support_reply:
+          "Поддержка ответила на ваше обращение. Откройте кабинет владельца, чтобы прочитать ответ.",
       } as any
     )[type] || "Новое уведомление") + reason
   );
@@ -886,7 +1070,9 @@ bot.on("pre_checkout_query", async (ctx) => {
         (settings?.freeBoardSubscriptionStars || 750);
     await ctx.answerPreCheckoutQuery(
       Boolean(valid),
-      valid ? undefined : "Подписка недействительна. Создайте новый счёт в кабинете владельца.",
+      valid
+        ? undefined
+        : "Подписка недействительна. Создайте новый счёт в кабинете владельца.",
     );
     return;
   }
@@ -1031,13 +1217,20 @@ bot.on("message", async (ctx) => {
   });
   const month = new Date().toISOString().slice(0, 7);
   const currentActivity = await prisma.messageActivity.findUnique({
-    where: { communityId_userId_month: { communityId: community.id, userId: user.id, month } },
+    where: {
+      communityId_userId_month: {
+        communityId: community.id,
+        userId: user.id,
+        month,
+      },
+    },
   });
-  const rawText = "text" in ctx.message
-    ? ctx.message.text
-    : "caption" in ctx.message && typeof ctx.message.caption === "string"
-      ? ctx.message.caption
-      : "";
+  const rawText =
+    "text" in ctx.message
+      ? ctx.message.text
+      : "caption" in ctx.message && typeof ctx.message.caption === "string"
+        ? ctx.message.caption
+        : "";
   const quality = qualifyCommunityMessage({
     text: rawText,
     minChars: community.minQualifiedMessageChars,
@@ -1122,7 +1315,11 @@ bot.on("my_chat_member", async (ctx) => {
           ? { tenantStatus: "active", isActive: true, connectedAt: new Date() }
           : {}
         : community.tenantStatus !== "closed"
-          ? { tenantStatus: "onboarding", isActive: false, disconnectedAt: new Date() }
+          ? {
+              tenantStatus: "onboarding",
+              isActive: false,
+              disconnectedAt: new Date(),
+            }
           : {}),
     },
   });
@@ -1216,15 +1413,27 @@ const botProfileSetup = await Promise.allSettled([
 ]);
 for (const result of botProfileSetup)
   if (result.status === "rejected")
-    console.warn("Unable to apply an Adnecta bot profile setting", result.reason);
+    console.warn(
+      "Unable to apply an Adnecta bot profile setting",
+      result.reason,
+    );
 const privateCommands = (locale: BotLocale) => [
   { command: "board", description: bt(locale, "boardCommand") },
   { command: "myads", description: bt(locale, "myAds") },
   { command: "rules", description: bt(locale, "rulesCommand") },
   { command: "connect", description: bt(locale, "owner") },
-  { command: "terms", description: locale === "ru" ? "Условия сервиса" : "Terms of service" },
-  { command: "support", description: locale === "ru" ? "Поддержка" : "Support" },
-  { command: "paysupport", description: locale === "ru" ? "Поддержка по оплате" : "Payment support" },
+  {
+    command: "terms",
+    description: locale === "ru" ? "Условия сервиса" : "Terms of service",
+  },
+  {
+    command: "support",
+    description: locale === "ru" ? "Поддержка" : "Support",
+  },
+  {
+    command: "paysupport",
+    description: locale === "ru" ? "Поддержка по оплате" : "Payment support",
+  },
   { command: "help", description: locale === "ru" ? "Справка" : "Help" },
 ];
 await bot.telegram.setMyCommands(privateCommands("en"));

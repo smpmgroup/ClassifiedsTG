@@ -77,17 +77,32 @@ await app.register(rateLimit, { max: 100, timeWindow: "1 minute", redis });
 await app.register(jwt, { secret: config.ACCESS_TOKEN_SECRET });
 function protectImageUrls(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(protectImageUrls);
-  if (!value || typeof value !== "object" || Object.getPrototypeOf(value) !== Object.prototype)
+  if (
+    !value ||
+    typeof value !== "object" ||
+    Object.getPrototypeOf(value) !== Object.prototype
+  )
     return value;
   const item = value as Record<string, unknown>;
   const output: Record<string, unknown> = {};
   for (const [key, child] of Object.entries(item)) {
-    if (["storageKey", "telegramFileId", "telegramFileUniqueId"].includes(key) && "storageProvider" in item && "listingId" in item)
+    if (
+      ["storageKey", "telegramFileId", "telegramFileUniqueId"].includes(key) &&
+      "storageProvider" in item &&
+      "listingId" in item
+    )
       continue;
     output[key] = protectImageUrls(child);
   }
-  if ("storageProvider" in item && "listingId" in item && typeof item.id === "string") {
-    const mediaToken = app.jwt.sign({ scope: "media", imageId: item.id }, { expiresIn: 3600 });
+  if (
+    "storageProvider" in item &&
+    "listingId" in item &&
+    typeof item.id === "string"
+  ) {
+    const mediaToken = app.jwt.sign(
+      { scope: "media", imageId: item.id },
+      { expiresIn: 3600 },
+    );
     output.url = `/api/media/${item.id}?token=${encodeURIComponent(mediaToken)}`;
   }
   return output;
@@ -99,7 +114,7 @@ const ownerStarsSubscriptionActive = (organization: {
   organization.starsSubscriptionStatus === "active" &&
   Boolean(
     organization.starsSubscriptionExpiresAt &&
-      organization.starsSubscriptionExpiresAt > new Date(),
+    organization.starsSubscriptionExpiresAt > new Date(),
   );
 
 async function publicationAccess(
@@ -147,17 +162,21 @@ async function publicationAccess(
       ? daily._sum.messageCount || 0
       : activity?.messageCount || 0;
   const subscriptionActive = Boolean(
-    community.organization && ownerStarsSubscriptionActive(community.organization),
+    community.organization &&
+    ownerStarsSubscriptionActive(community.organization),
   );
   const free =
     privileged ||
     manual ||
-    (community.monetizationMode === "free_subscription" && subscriptionActive) ||
+    (community.monetizationMode === "free_subscription" &&
+      subscriptionActive) ||
     (community.monetizationMode === "hybrid" &&
       messageCount >= community.minMonthlyMessagesForFree);
   return { community, member, messageCount, subscriptionActive, free, manual };
 }
-app.addHook("preSerialization", async (_req, _reply, payload) => protectImageUrls(payload));
+app.addHook("preSerialization", async (_req, _reply, payload) =>
+  protectImageUrls(payload),
+);
 await app.register(rawBody, {
   field: "rawBody",
   global: false,
@@ -185,7 +204,8 @@ type Identity = {
 type PlatformIdentity = {
   userId: string;
   telegramUserId: string;
-  platformRole: "user" | "support" | "finance" | "platform_admin" | "platform_owner";
+  platformRole:
+    "user" | "support" | "finance" | "platform_admin" | "platform_owner";
   mfa: boolean;
   totpEnabled: boolean;
 };
@@ -209,11 +229,13 @@ async function platformAuth(req: any, reply: any) {
     // An explicit Bearer session represents the account that just completed
     // the current login flow. It must take precedence over an older browser
     // cookie left by a different Telegram account.
-    const decoded = (bearerToken
-      ? app.jwt.verify(bearerToken)
-      : cookieToken
-        ? app.jwt.verify(decodeURIComponent(cookieToken))
-        : await req.jwtVerify()) as PlatformIdentity & {
+    const decoded = (
+      bearerToken
+        ? app.jwt.verify(bearerToken)
+        : cookieToken
+          ? app.jwt.verify(decodeURIComponent(cookieToken))
+          : await req.jwtVerify()
+    ) as PlatformIdentity & {
       scope?: string;
     };
     if (decoded.scope !== "platform" || !decoded.userId)
@@ -242,8 +264,8 @@ async function platformAuth(req: any, reply: any) {
     return reply.status(401).send(error("UNAUTHORIZED", "Требуется вход"));
   }
 }
-const requirePlatformRole = (roles: Set<string>) =>
-  async (req: any, reply: any) => {
+const requirePlatformRole =
+  (roles: Set<string>) => async (req: any, reply: any) => {
     await platformAuth(req, reply);
     if (reply.sent) return;
     if (!roles.has(req.platformIdentity.platformRole))
@@ -264,7 +286,10 @@ const error = (code: string, message: string, details: unknown = null) => ({
   error: { code, message, details },
 });
 
-async function telegramBotApi<T>(method: string, body: Record<string, unknown>) {
+async function telegramBotApi<T>(
+  method: string,
+  body: Record<string, unknown>,
+) {
   const response = await fetch(
     `https://api.telegram.org/bot${config.TELEGRAM_BOT_TOKEN}/${method}`,
     {
@@ -377,7 +402,9 @@ async function syncStripeSubscription(subscription: any) {
       stripeSubscriptionId: subscription.id,
       subscriptionStatus: subscription.status || "unknown",
       subscriptionPlanKey:
-        plan?.key || subscription.metadata?.planKey || organization.subscriptionPlanKey,
+        plan?.key ||
+        subscription.metadata?.planKey ||
+        organization.subscriptionPlanKey,
       subscriptionPriceId: priceId,
       subscriptionCurrentPeriodEnd: periodEnd
         ? new Date(periodEnd * 1000)
@@ -474,8 +501,16 @@ async function auth(req: any, reply: any) {
     });
     if (!member || member.user.status !== "active")
       throw new DomainError("ACCESS_DENIED", "Доступ ограничен", 403);
-    if (member.enforcementStatus === "banned" || (member.enforcementStatus === "restricted" && (!member.restrictedUntil || member.restrictedUntil > new Date())))
-      throw new DomainError("COMMUNITY_ACCESS_RESTRICTED", member.enforcementReason || "Доступ к этой доске ограничен", 403);
+    if (
+      member.enforcementStatus === "banned" ||
+      (member.enforcementStatus === "restricted" &&
+        (!member.restrictedUntil || member.restrictedUntil > new Date()))
+    )
+      throw new DomainError(
+        "COMMUNITY_ACCESS_RESTRICTED",
+        member.enforcementReason || "Доступ к этой доске ограничен",
+        403,
+      );
     const community = await prisma.community.findUnique({
       where: { id: decoded.communityId },
       select: { isActive: true, tenantStatus: true },
@@ -498,8 +533,47 @@ async function auth(req: any, reply: any) {
   }
 }
 const requireRole = (roles: Set<string>) => async (req: any, reply: any) => {
-  await auth(req, reply);
-  if (reply.sent) return;
+  const authorization = String(req.headers.authorization || "");
+  const bearerToken = authorization.startsWith("Bearer ")
+    ? authorization.slice("Bearer ".length).trim()
+    : "";
+  const decoded = bearerToken ? (app.jwt.decode(bearerToken) as any) : null;
+  if (decoded?.scope === "platform") {
+    await platformAuth(req, reply);
+    if (reply.sent) return;
+    const communityId = String(
+      req.headers["x-community-id"] || req.query?.communityId || "",
+    );
+    const community = communityId
+      ? await prisma.community.findUnique({
+          where: { id: communityId },
+          select: { id: true, organizationId: true, tenantStatus: true },
+        })
+      : null;
+    if (!community?.organizationId)
+      return reply
+        .status(404)
+        .send(error("COMMUNITY_NOT_FOUND", "Сообщество не найдено"));
+    const membership = await prisma.organizationMember.findUnique({
+      where: {
+        organizationId_userId: {
+          organizationId: community.organizationId,
+          userId: req.platformIdentity.userId,
+        },
+      },
+    });
+    if (!membership || !["owner", "administrator"].includes(membership.role))
+      return reply.status(403).send(error("FORBIDDEN", "Недостаточно прав"));
+    req.identity = {
+      userId: req.platformIdentity.userId,
+      telegramUserId: req.platformIdentity.telegramUserId,
+      communityId: community.id,
+      role: membership.role === "owner" ? "owner" : "admin",
+    };
+  } else {
+    await auth(req, reply);
+    if (reply.sent) return;
+  }
   if (!roles.has(req.identity.role))
     return reply.status(403).send(error("FORBIDDEN", "Недостаточно прав"));
 };
@@ -572,12 +646,26 @@ app.get(
     const mediaToken = String(req.query?.token || "");
     let verified: { scope?: string; imageId?: string };
     try {
-      verified = app.jwt.verify(mediaToken) as { scope?: string; imageId?: string };
+      verified = app.jwt.verify(mediaToken) as {
+        scope?: string;
+        imageId?: string;
+      };
     } catch {
-      throw new DomainError("MEDIA_TOKEN_INVALID", "Ссылка на изображение недействительна", 401);
+      throw new DomainError(
+        "MEDIA_TOKEN_INVALID",
+        "Ссылка на изображение недействительна",
+        401,
+      );
     }
-    if (verified.scope !== "media" || verified.imageId !== String(req.params.imageId))
-      throw new DomainError("MEDIA_TOKEN_INVALID", "Ссылка на изображение недействительна", 401);
+    if (
+      verified.scope !== "media" ||
+      verified.imageId !== String(req.params.imageId)
+    )
+      throw new DomainError(
+        "MEDIA_TOKEN_INVALID",
+        "Ссылка на изображение недействительна",
+        401,
+      );
     const image = await prisma.listingImage.findUnique({
       where: { id: String(req.params.imageId) },
       select: { storageProvider: true, storageKey: true },
@@ -587,7 +675,8 @@ app.get(
     const file = await fs
       .readFile(path.join(config.UPLOAD_DIR, path.basename(image.storageKey)))
       .catch(() => null);
-    if (!file) throw new DomainError("MEDIA_NOT_FOUND", "Изображение не найдено", 404);
+    if (!file)
+      throw new DomainError("MEDIA_NOT_FOUND", "Изображение не найдено", 404);
     return reply
       .type("image/webp")
       .header("cache-control", "private, max-age=3600")
@@ -600,16 +689,37 @@ app.get("/api/public/site", async () => {
   const [plans, documents, settings] = await prisma.$transaction([
     prisma.billingPlan.findMany({
       where: { active: true },
-      select: { key: true, name: true, description: true, currency: true, unitAmount: true, interval: true, features: true, sortOrder: true },
+      select: {
+        key: true,
+        name: true,
+        description: true,
+        currency: true,
+        unitAmount: true,
+        interval: true,
+        features: true,
+        sortOrder: true,
+      },
       orderBy: { sortOrder: "asc" },
     }),
     prisma.legalDocument.findMany({
       where: { published: true, effectiveAt: { lte: new Date() } },
       orderBy: [{ type: "asc" }, { effectiveAt: "desc" }],
       distinct: ["type"],
-      select: { id: true, type: true, version: true, title: true, body: true, required: true, effectiveAt: true },
+      select: {
+        id: true,
+        type: true,
+        version: true,
+        title: true,
+        body: true,
+        required: true,
+        effectiveAt: true,
+      },
     }),
-    prisma.platformSetting.upsert({ where: { id: "global" }, update: {}, create: { id: "global" } }),
+    prisma.platformSetting.upsert({
+      where: { id: "global" },
+      update: {},
+      create: { id: "global" },
+    }),
   ]);
   return {
     platformName: settings.platformName,
@@ -633,16 +743,34 @@ app.post(
   { config: { rateLimit: { max: 30, timeWindow: "1 minute" } } },
   async (req: any, reply) => {
     const event = String(req.body?.event || "");
-    const allowed = new Set(["landing_view", "pricing_view", "docs_view", "telegram_cta", "legal_view"]);
-    if (!allowed.has(event)) throw new DomainError("CONVERSION_EVENT_INVALID", "Unknown event");
+    const allowed = new Set([
+      "landing_view",
+      "pricing_view",
+      "docs_view",
+      "telegram_cta",
+      "legal_view",
+    ]);
+    if (!allowed.has(event))
+      throw new DomainError("CONVERSION_EVENT_INVALID", "Unknown event");
     const visitor = String(req.body?.visitor || "");
     if (!/^[a-zA-Z0-9_-]{16,100}$/.test(visitor))
       throw new DomainError("CONVERSION_VISITOR_INVALID", "Invalid visitor");
     const pathName = String(req.body?.path || "/").slice(0, 200);
     let referrerHost: string | null = null;
-    try { referrerHost = req.body?.referrer ? new URL(String(req.body.referrer)).hostname.slice(0, 200) : null; } catch { referrerHost = null; }
-    const visitorHash = crypto.createHash("sha256").update(`${visitor}:${config.ACCESS_TOKEN_SECRET}`).digest("hex");
-    await prisma.conversionEvent.create({ data: { event, visitorHash, path: pathName, referrerHost, metadata: {} } });
+    try {
+      referrerHost = req.body?.referrer
+        ? new URL(String(req.body.referrer)).hostname.slice(0, 200)
+        : null;
+    } catch {
+      referrerHost = null;
+    }
+    const visitorHash = crypto
+      .createHash("sha256")
+      .update(`${visitor}:${config.ACCESS_TOKEN_SECRET}`)
+      .digest("hex");
+    await prisma.conversionEvent.create({
+      data: { event, visitorHash, path: pathName, referrerHost, metadata: {} },
+    });
     return reply.status(202).send({ accepted: true });
   },
 );
@@ -654,7 +782,9 @@ app.post(
     if (!stripe || !config.STRIPE_WEBHOOK_SECRET)
       return reply
         .status(503)
-        .send(error("STRIPE_NOT_CONFIGURED", "Stripe webhook is not configured"));
+        .send(
+          error("STRIPE_NOT_CONFIGURED", "Stripe webhook is not configured"),
+        );
     const signature = String(req.headers["stripe-signature"] || "");
     if (!signature || !req.rawBody)
       return reply
@@ -668,23 +798,30 @@ app.post(
         config.STRIPE_WEBHOOK_SECRET,
       );
     } catch (unknownError) {
-      return reply.status(400).send(
-        error(
-          "STRIPE_SIGNATURE_INVALID",
-          unknownError instanceof Error
-            ? unknownError.message
-            : "Invalid Stripe signature",
-        ),
-      );
+      return reply
+        .status(400)
+        .send(
+          error(
+            "STRIPE_SIGNATURE_INVALID",
+            unknownError instanceof Error
+              ? unknownError.message
+              : "Invalid Stripe signature",
+          ),
+        );
     }
     let stored = await prisma.stripeWebhookEvent.findUnique({
       where: { id: event.id },
     });
-    if (stored?.status === "processed") return { received: true, duplicate: true };
+    if (stored?.status === "processed")
+      return { received: true, duplicate: true };
     if (stored)
       stored = await prisma.stripeWebhookEvent.update({
         where: { id: event.id },
-        data: { status: "processing", attempts: { increment: 1 }, lastError: null },
+        data: {
+          status: "processing",
+          attempts: { increment: 1 },
+          lastError: null,
+        },
       });
     else
       stored = await prisma.stripeWebhookEvent.create({
@@ -734,7 +871,9 @@ app.post(
         data: {
           status: "failed",
           lastError:
-            unknownError instanceof Error ? unknownError.message.slice(0, 2000) : "unknown",
+            unknownError instanceof Error
+              ? unknownError.message.slice(0, 2000)
+              : "unknown",
         },
       });
       throw unknownError;
@@ -933,7 +1072,10 @@ app.post(
   },
 );
 
-const platformSessionPayload = (user: { id: string; telegramUserId: bigint; platformRole: string }, mfa: boolean) => ({
+const platformSessionPayload = (
+  user: { id: string; telegramUserId: bigint; platformRole: string },
+  mfa: boolean,
+) => ({
   scope: "platform",
   userId: user.id,
   telegramUserId: String(user.telegramUserId),
@@ -950,7 +1092,10 @@ app.post(
         ? "platform_owner"
         : "owner";
     const rawToken = crypto.randomBytes(32).toString("base64url");
-    const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+    const tokenHash = crypto
+      .createHash("sha256")
+      .update(rawToken)
+      .digest("hex");
     const expiresAt = new Date(Date.now() + 10 * 60_000);
     await prisma.$transaction([
       prisma.webLoginIntent.deleteMany({
@@ -975,29 +1120,57 @@ app.post(
   async (req: any, reply) => {
     const rawToken = String(req.body?.token || "");
     if (!/^[A-Za-z0-9_-]{43}$/.test(rawToken))
-      throw new DomainError("WEB_LOGIN_INVALID", "Некорректный запрос входа", 400);
-    const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+      throw new DomainError(
+        "WEB_LOGIN_INVALID",
+        "Некорректный запрос входа",
+        400,
+      );
+    const tokenHash = crypto
+      .createHash("sha256")
+      .update(rawToken)
+      .digest("hex");
     const cacheKey = `web-login-result:${tokenHash}`;
     const cached = await redis.get(cacheKey);
     if (cached) return JSON.parse(cached);
-    const intent = await prisma.webLoginIntent.findUnique({ where: { tokenHash } });
+    const intent = await prisma.webLoginIntent.findUnique({
+      where: { tokenHash },
+    });
     if (!intent)
       throw new DomainError("WEB_LOGIN_INVALID", "Запрос входа не найден", 404);
     if (intent.expiresAt <= new Date())
-      throw new DomainError("WEB_LOGIN_EXPIRED", "Время подтверждения истекло", 410);
-    if (intent.status === "pending") return { status: "pending", expiresAt: intent.expiresAt };
+      throw new DomainError(
+        "WEB_LOGIN_EXPIRED",
+        "Время подтверждения истекло",
+        410,
+      );
+    if (intent.status === "pending")
+      return { status: "pending", expiresAt: intent.expiresAt };
     if (intent.status !== "claimed" || !intent.userId)
-      throw new DomainError("WEB_LOGIN_CONSUMED", "Запрос входа уже использован", 409);
+      throw new DomainError(
+        "WEB_LOGIN_CONSUMED",
+        "Запрос входа уже использован",
+        409,
+      );
     const claimed = await prisma.webLoginIntent.updateMany({
-      where: { id: intent.id, status: "claimed", expiresAt: { gt: new Date() } },
+      where: {
+        id: intent.id,
+        status: "claimed",
+        expiresAt: { gt: new Date() },
+      },
       data: { status: "consumed", consumedAt: new Date() },
     });
     if (claimed.count !== 1) {
       const raced = await redis.get(cacheKey);
       if (raced) return JSON.parse(raced);
-      throw new DomainError("WEB_LOGIN_CONSUMED", "Запрос входа уже использован", 409);
+      throw new DomainError(
+        "WEB_LOGIN_CONSUMED",
+        "Запрос входа уже использован",
+        409,
+      );
     }
-    const user = await prisma.user.findUniqueOrThrow({ where: { id: intent.userId } });
+    const user = await prisma.user.findUniqueOrThrow({
+      where: { id: intent.userId },
+    });
     if (user.status !== "active")
       throw new DomainError("ACCESS_DENIED", "Доступ ограничен", 403);
     const result: Record<string, unknown> = {
@@ -1009,13 +1182,15 @@ app.post(
     };
     await Promise.all([
       redis.set(cacheKey, JSON.stringify(result), "EX", 90),
-      prisma.auditEvent.create({ data: {
-        actorId: user.id,
-        scope: "platform_security",
-        action: "web_telegram_login_completed",
-        targetType: "WebLoginIntent",
-        targetId: intent.id,
-      }}),
+      prisma.auditEvent.create({
+        data: {
+          actorId: user.id,
+          scope: "platform_security",
+          action: "web_telegram_login_completed",
+          targetType: "WebLoginIntent",
+          targetId: intent.id,
+        },
+      }),
     ]);
     return result;
   },
@@ -1028,35 +1203,53 @@ app.get(
     const rawToken = String(req.params?.token || "");
     if (!/^[A-Za-z0-9_-]{43}$/.test(rawToken))
       return reply.redirect("/platform-login?error=invalid");
-    const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
-    const intent = await prisma.webLoginIntent.findUnique({ where: { tokenHash } });
+    const tokenHash = crypto
+      .createHash("sha256")
+      .update(rawToken)
+      .digest("hex");
+    const intent = await prisma.webLoginIntent.findUnique({
+      where: { tokenHash },
+    });
     if (!intent || intent.expiresAt <= new Date() || !intent.userId)
       return reply.redirect("/platform-login?error=expired");
     const user = await prisma.user.findUnique({ where: { id: intent.userId } });
-    if (!user || user.status !== "active" || user.platformRole !== "platform_owner")
+    if (
+      !user ||
+      user.status !== "active" ||
+      user.platformRole !== "platform_owner"
+    )
       return reply.redirect("/platform-login?error=denied");
     if (intent.status !== "claimed")
       return reply.redirect("/platform-login?error=used");
     const consumed = await prisma.webLoginIntent.updateMany({
-      where: { id: intent.id, status: "claimed", expiresAt: { gt: new Date() } },
+      where: {
+        id: intent.id,
+        status: "claimed",
+        expiresAt: { gt: new Date() },
+      },
       data: { status: "consumed", consumedAt: new Date() },
     });
     if (consumed.count !== 1)
       return reply.redirect("/platform-login?error=used");
-    const accessToken = await reply.jwtSign(platformSessionPayload(user, false), {
-      expiresIn: config.ACCESS_TOKEN_TTL_SECONDS,
-    });
+    const accessToken = await reply.jwtSign(
+      platformSessionPayload(user, false),
+      {
+        expiresIn: config.ACCESS_TOKEN_TTL_SECONDS,
+      },
+    );
     reply.header(
       "Set-Cookie",
       `platform_session=${encodeURIComponent(accessToken)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${config.ACCESS_TOKEN_TTL_SECONDS}`,
     );
-    await prisma.auditEvent.create({ data: {
-      actorId: user.id,
-      scope: "platform_security",
-      action: "web_telegram_cookie_session_created",
-      targetType: "WebLoginIntent",
-      targetId: intent.id,
-    }});
+    await prisma.auditEvent.create({
+      data: {
+        actorId: user.id,
+        scope: "platform_security",
+        action: "web_telegram_cookie_session_created",
+        targetType: "WebLoginIntent",
+        targetId: intent.id,
+      },
+    });
     return reply.redirect("/platform-owner");
   },
 );
@@ -1069,28 +1262,41 @@ app.post("/api/auth/platform/logout", async (_req, reply) => {
   return { ok: true };
 });
 
-async function consumeSecondFactor(user: {
-  id: string;
-  totpSecretEncrypted: string | null;
-  totpLastUsedStep: bigint | null;
-  backupCodeHashes: string[];
-}, code: string) {
+async function consumeSecondFactor(
+  user: {
+    id: string;
+    totpSecretEncrypted: string | null;
+    totpLastUsedStep: bigint | null;
+    backupCodeHashes: string[];
+  },
+  code: string,
+) {
   const value = String(code || "").trim();
   if (user.totpSecretEncrypted && /^\d{6}$/.test(value)) {
-    const secret = decryptTotpSecret(user.totpSecretEncrypted, config.TOTP_ENCRYPTION_KEY);
+    const secret = decryptTotpSecret(
+      user.totpSecretEncrypted,
+      config.TOTP_ENCRYPTION_KEY,
+    );
     const step = verifyTotp(secret, value);
     if (step == null) return null;
     const stepValue = BigInt(step);
     const updated = await prisma.user.updateMany({
       where: {
         id: user.id,
-        OR: [{ totpLastUsedStep: null }, { totpLastUsedStep: { lt: stepValue } }],
+        OR: [
+          { totpLastUsedStep: null },
+          { totpLastUsedStep: { lt: stepValue } },
+        ],
       },
       data: { totpLastUsedStep: stepValue },
     });
     return updated.count === 1 ? "totp" : null;
   }
-  const index = verifyBackupCode(value, user.backupCodeHashes, config.TOTP_ENCRYPTION_KEY);
+  const index = verifyBackupCode(
+    value,
+    user.backupCodeHashes,
+    config.TOTP_ENCRYPTION_KEY,
+  );
   if (index < 0) return null;
   const hash = user.backupCodeHashes[index];
   const consumed = await prisma.$executeRaw`
@@ -1154,9 +1360,12 @@ app.post(
       "EX",
       config.TELEGRAM_INIT_DATA_MAX_AGE_SECONDS,
     );
-    const accessToken = await reply.jwtSign(platformSessionPayload(user, false), {
-      expiresIn: config.ACCESS_TOKEN_TTL_SECONDS,
-    });
+    const accessToken = await reply.jwtSign(
+      platformSessionPayload(user, false),
+      {
+        expiresIn: config.ACCESS_TOKEN_TTL_SECONDS,
+      },
+    );
     return {
       accessToken,
       expiresIn: config.ACCESS_TOKEN_TTL_SECONDS,
@@ -1178,56 +1387,108 @@ app.post(
     try {
       challenge = app.jwt.verify(String(req.body?.challengeToken || ""));
     } catch {
-      throw new DomainError("TWO_FACTOR_CHALLENGE_INVALID", "Запрос второго фактора истёк", 401);
+      throw new DomainError(
+        "TWO_FACTOR_CHALLENGE_INVALID",
+        "Запрос второго фактора истёк",
+        401,
+      );
     }
     if (challenge.scope !== "platform_2fa" || !challenge.userId)
-      throw new DomainError("TWO_FACTOR_CHALLENGE_INVALID", "Некорректный запрос второго фактора", 401);
+      throw new DomainError(
+        "TWO_FACTOR_CHALLENGE_INVALID",
+        "Некорректный запрос второго фактора",
+        401,
+      );
     const replayKey = `platform-2fa:${challenge.nonce}`;
-    if (!challenge.nonce || await redis.get(replayKey))
-      throw new DomainError("TWO_FACTOR_CHALLENGE_REPLAYED", "Этот запрос уже использован", 401);
-    const user = await prisma.user.findUnique({ where: { id: challenge.userId } });
-    if (!user || user.status !== "active" || user.platformRole === "user" || !user.totpEnabledAt)
+    if (!challenge.nonce || (await redis.get(replayKey)))
+      throw new DomainError(
+        "TWO_FACTOR_CHALLENGE_REPLAYED",
+        "Этот запрос уже использован",
+        401,
+      );
+    const user = await prisma.user.findUnique({
+      where: { id: challenge.userId },
+    });
+    if (
+      !user ||
+      user.status !== "active" ||
+      user.platformRole === "user" ||
+      !user.totpEnabledAt
+    )
       throw new DomainError("ACCESS_DENIED", "Доступ ограничен", 403);
     const method = await consumeSecondFactor(user, req.body?.code);
     if (!method)
-      throw new DomainError("TWO_FACTOR_CODE_INVALID", "Неверный или уже использованный код", 401);
+      throw new DomainError(
+        "TWO_FACTOR_CODE_INVALID",
+        "Неверный или уже использованный код",
+        401,
+      );
     await redis.set(replayKey, "1", "EX", 300);
-    await prisma.auditEvent.create({ data: {
-      actorId: user.id, scope: "platform_security", action: "two_factor_login",
-      targetType: "User", targetId: user.id, metadata: { method },
-    }});
-    const accessToken = await reply.jwtSign(platformSessionPayload(user, true), {
-      expiresIn: config.ACCESS_TOKEN_TTL_SECONDS,
+    await prisma.auditEvent.create({
+      data: {
+        actorId: user.id,
+        scope: "platform_security",
+        action: "two_factor_login",
+        targetType: "User",
+        targetId: user.id,
+        metadata: { method },
+      },
     });
+    const accessToken = await reply.jwtSign(
+      platformSessionPayload(user, true),
+      {
+        expiresIn: config.ACCESS_TOKEN_TTL_SECONDS,
+      },
+    );
     return { accessToken, expiresIn: config.ACCESS_TOKEN_TTL_SECONDS };
   },
 );
 
-app.get("/api/platform/security/two-factor", { preHandler: platformAuth }, async (req: any) => {
-  const user = await prisma.user.findUniqueOrThrow({
-    where: { id: req.platformIdentity.userId },
-    select: { totpEnabledAt: true, backupCodeHashes: true },
-  });
-  return {
-    enabled: Boolean(user.totpEnabledAt),
-    enabledAt: user.totpEnabledAt,
-    backupCodesRemaining: user.backupCodeHashes.length,
-    required: req.platformIdentity.platformRole !== "user",
-    sessionVerified: req.platformIdentity.mfa,
-  };
-});
+app.get(
+  "/api/platform/security/two-factor",
+  { preHandler: platformAuth },
+  async (req: any) => {
+    const user = await prisma.user.findUniqueOrThrow({
+      where: { id: req.platformIdentity.userId },
+      select: { totpEnabledAt: true, backupCodeHashes: true },
+    });
+    return {
+      enabled: Boolean(user.totpEnabledAt),
+      enabledAt: user.totpEnabledAt,
+      backupCodesRemaining: user.backupCodeHashes.length,
+      required: req.platformIdentity.platformRole !== "user",
+      sessionVerified: req.platformIdentity.mfa,
+    };
+  },
+);
 
 app.post(
   "/api/platform/security/two-factor/setup",
-  { preHandler: platformAuth, config: { rateLimit: { max: 3, timeWindow: "10 minutes" } } },
+  {
+    preHandler: platformAuth,
+    config: { rateLimit: { max: 3, timeWindow: "10 minutes" } },
+  },
   async (req: any) => {
-    const user = await prisma.user.findUniqueOrThrow({ where: { id: req.platformIdentity.userId } });
+    const user = await prisma.user.findUniqueOrThrow({
+      where: { id: req.platformIdentity.userId },
+    });
     if (user.totpEnabledAt)
-      throw new DomainError("TWO_FACTOR_ALREADY_ENABLED", "Двухфакторная защита уже включена", 409);
+      throw new DomainError(
+        "TWO_FACTOR_ALREADY_ENABLED",
+        "Двухфакторная защита уже включена",
+        409,
+      );
     const secret = generateTotpSecret();
     await prisma.user.update({
       where: { id: user.id },
-      data: { totpSecretEncrypted: encryptTotpSecret(secret, config.TOTP_ENCRYPTION_KEY), totpLastUsedStep: null, backupCodeHashes: [] },
+      data: {
+        totpSecretEncrypted: encryptTotpSecret(
+          secret,
+          config.TOTP_ENCRYPTION_KEY,
+        ),
+        totpLastUsedStep: null,
+        backupCodeHashes: [],
+      },
     });
     const label = `${config.TELEGRAM_BOT_USERNAME}:${user.username || user.telegramUserId}`;
     const otpauthUrl = `otpauth://totp/${encodeURIComponent(label)}?secret=${secret}&issuer=${encodeURIComponent(config.TELEGRAM_BOT_USERNAME)}&algorithm=SHA1&digits=6&period=30`;
@@ -1237,15 +1498,31 @@ app.post(
 
 app.post(
   "/api/platform/security/two-factor/confirm",
-  { preHandler: platformAuth, config: { rateLimit: { max: 5, timeWindow: "10 minutes" } } },
+  {
+    preHandler: platformAuth,
+    config: { rateLimit: { max: 5, timeWindow: "10 minutes" } },
+  },
   async (req: any, reply) => {
-    const user = await prisma.user.findUniqueOrThrow({ where: { id: req.platformIdentity.userId } });
+    const user = await prisma.user.findUniqueOrThrow({
+      where: { id: req.platformIdentity.userId },
+    });
     if (!user.totpSecretEncrypted || user.totpEnabledAt)
-      throw new DomainError("TWO_FACTOR_SETUP_REQUIRED", "Сначала начните настройку второго фактора", 409);
-    const secret = decryptTotpSecret(user.totpSecretEncrypted, config.TOTP_ENCRYPTION_KEY);
+      throw new DomainError(
+        "TWO_FACTOR_SETUP_REQUIRED",
+        "Сначала начните настройку второго фактора",
+        409,
+      );
+    const secret = decryptTotpSecret(
+      user.totpSecretEncrypted,
+      config.TOTP_ENCRYPTION_KEY,
+    );
     const step = verifyTotp(secret, String(req.body?.code || ""));
     if (step == null)
-      throw new DomainError("TWO_FACTOR_CODE_INVALID", "Неверный код приложения-аутентификатора", 401);
+      throw new DomainError(
+        "TWO_FACTOR_CODE_INVALID",
+        "Неверный код приложения-аутентификатора",
+        401,
+      );
     const backupCodes = generateBackupCodes();
     const enabledAt = new Date();
     const updated = await prisma.user.update({
@@ -1253,107 +1530,165 @@ app.post(
       data: {
         totpEnabledAt: enabledAt,
         totpLastUsedStep: BigInt(step),
-        backupCodeHashes: backupCodes.map((code) => hashBackupCode(code, config.TOTP_ENCRYPTION_KEY)),
+        backupCodeHashes: backupCodes.map((code) =>
+          hashBackupCode(code, config.TOTP_ENCRYPTION_KEY),
+        ),
       },
     });
-    await prisma.auditEvent.create({ data: {
-      actorId: user.id, scope: "platform_security", action: "two_factor_enabled",
-      targetType: "User", targetId: user.id, metadata: { backupCodeCount: backupCodes.length },
-    }});
-    const accessToken = await reply.jwtSign(platformSessionPayload(updated, true), {
-      expiresIn: config.ACCESS_TOKEN_TTL_SECONDS,
+    await prisma.auditEvent.create({
+      data: {
+        actorId: user.id,
+        scope: "platform_security",
+        action: "two_factor_enabled",
+        targetType: "User",
+        targetId: user.id,
+        metadata: { backupCodeCount: backupCodes.length },
+      },
     });
+    const accessToken = await reply.jwtSign(
+      platformSessionPayload(updated, true),
+      {
+        expiresIn: config.ACCESS_TOKEN_TTL_SECONDS,
+      },
+    );
     return { enabled: true, enabledAt, backupCodes, accessToken };
   },
 );
 
 app.post(
   "/api/platform/security/two-factor/backup-codes",
-  { preHandler: platformAuth, config: { rateLimit: { max: 3, timeWindow: "1 hour" } } },
+  {
+    preHandler: platformAuth,
+    config: { rateLimit: { max: 3, timeWindow: "1 hour" } },
+  },
   async (req: any) => {
-    const user = await prisma.user.findUniqueOrThrow({ where: { id: req.platformIdentity.userId } });
+    const user = await prisma.user.findUniqueOrThrow({
+      where: { id: req.platformIdentity.userId },
+    });
     if (!user.totpEnabledAt || !req.platformIdentity.mfa)
-      throw new DomainError("TWO_FACTOR_REQUIRED", "Сначала подтвердите второй фактор", 428);
-    const secret = decryptTotpSecret(user.totpSecretEncrypted!, config.TOTP_ENCRYPTION_KEY);
+      throw new DomainError(
+        "TWO_FACTOR_REQUIRED",
+        "Сначала подтвердите второй фактор",
+        428,
+      );
+    const secret = decryptTotpSecret(
+      user.totpSecretEncrypted!,
+      config.TOTP_ENCRYPTION_KEY,
+    );
     if (verifyTotp(secret, String(req.body?.code || "")) == null)
-      throw new DomainError("TWO_FACTOR_CODE_INVALID", "Неверный код приложения-аутентификатора", 401);
+      throw new DomainError(
+        "TWO_FACTOR_CODE_INVALID",
+        "Неверный код приложения-аутентификатора",
+        401,
+      );
     const backupCodes = generateBackupCodes();
-    await prisma.user.update({ where: { id: user.id }, data: {
-      backupCodeHashes: backupCodes.map((code) => hashBackupCode(code, config.TOTP_ENCRYPTION_KEY)),
-    }});
-    await prisma.auditEvent.create({ data: {
-      actorId: user.id, scope: "platform_security", action: "two_factor_backup_codes_regenerated",
-      targetType: "User", targetId: user.id, metadata: { backupCodeCount: backupCodes.length },
-    }});
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        backupCodeHashes: backupCodes.map((code) =>
+          hashBackupCode(code, config.TOTP_ENCRYPTION_KEY),
+        ),
+      },
+    });
+    await prisma.auditEvent.create({
+      data: {
+        actorId: user.id,
+        scope: "platform_security",
+        action: "two_factor_backup_codes_regenerated",
+        targetType: "User",
+        targetId: user.id,
+        metadata: { backupCodeCount: backupCodes.length },
+      },
+    });
     return { backupCodes };
   },
 );
 
 async function requiredLegalStatus(userId: string) {
   const documents = await prisma.legalDocument.findMany({
-    where: { required: true, published: true, effectiveAt: { lte: new Date() } },
+    where: {
+      required: true,
+      published: true,
+      effectiveAt: { lte: new Date() },
+    },
     orderBy: [{ type: "asc" }, { effectiveAt: "desc" }],
     distinct: ["type"],
-    include: { acceptances: { where: { userId }, select: { acceptedAt: true } } },
+    include: {
+      acceptances: { where: { userId }, select: { acceptedAt: true } },
+    },
   });
   return documents.map(({ acceptances, body: _body, ...document }) => ({
-    ...document, accepted: acceptances.length > 0, acceptedAt: acceptances[0]?.acceptedAt || null,
+    ...document,
+    accepted: acceptances.length > 0,
+    acceptedAt: acceptances[0]?.acceptedAt || null,
   }));
 }
 
 async function requireCurrentLegalAcceptance(userId: string) {
-  const missing = (await requiredLegalStatus(userId)).filter((item) => !item.accepted);
+  const missing = (await requiredLegalStatus(userId)).filter(
+    (item) => !item.accepted,
+  );
   if (missing.length)
-    throw new DomainError("LEGAL_ACCEPTANCE_REQUIRED", "Примите актуальные условия и политику конфиденциальности", 428, missing.map((item) => ({ id: item.id, type: item.type, version: item.version, title: item.title })));
+    throw new DomainError(
+      "LEGAL_ACCEPTANCE_REQUIRED",
+      "Примите актуальные условия и политику конфиденциальности",
+      428,
+      missing.map((item) => ({
+        id: item.id,
+        type: item.type,
+        version: item.version,
+        title: item.title,
+      })),
+    );
 }
 
 app.get("/api/platform/me", { preHandler: platformAuth }, async (req: any) => {
   const [user, platformSettings] = await prisma.$transaction([
     prisma.user.findUniqueOrThrow({
-    where: { id: req.platformIdentity.userId },
-    include: {
-      organizations: {
-        where: { organization: { onboardingDraft: false } },
-        include: {
-          organization: {
-            include: {
-              communities: {
-                orderBy: { createdAt: "asc" },
-                select: {
-                  id: true,
-                  name: true,
-                  slug: true,
-                  tenantStatus: true,
-                  telegramChatId: true,
-                  createdAt: true,
-                  connectedAt: true,
-                  disconnectedAt: true,
-                  botStatus: true,
-                  botIsAdministrator: true,
-                  botCanDeleteMessages: true,
-                  botCanRestrictMembers: true,
-                  botCanInviteUsers: true,
-                  botLastCheckedAt: true,
-                  deletionRequestedAt: true,
-                  deletionScheduledFor: true,
-                  deletionFinalizedAt: true,
-                  rules: true,
-                  description: true,
-                  defaultLocale: true,
-                  monetizationMode: true,
-                  publicationPriceStars: true,
-                  minMonthlyMessagesForFree: true,
-                  activityWindowDays: true,
-                  allowPaidNonMembers: true,
-                  _count: { select: { members: true, listings: true } },
+      where: { id: req.platformIdentity.userId },
+      include: {
+        organizations: {
+          where: { organization: { onboardingDraft: false } },
+          include: {
+            organization: {
+              include: {
+                communities: {
+                  orderBy: { createdAt: "asc" },
+                  select: {
+                    id: true,
+                    name: true,
+                    slug: true,
+                    tenantStatus: true,
+                    telegramChatId: true,
+                    createdAt: true,
+                    connectedAt: true,
+                    disconnectedAt: true,
+                    botStatus: true,
+                    botIsAdministrator: true,
+                    botCanDeleteMessages: true,
+                    botCanRestrictMembers: true,
+                    botCanInviteUsers: true,
+                    botLastCheckedAt: true,
+                    deletionRequestedAt: true,
+                    deletionScheduledFor: true,
+                    deletionFinalizedAt: true,
+                    rules: true,
+                    description: true,
+                    defaultLocale: true,
+                    monetizationMode: true,
+                    publicationPriceStars: true,
+                    minMonthlyMessagesForFree: true,
+                    activityWindowDays: true,
+                    allowPaidNonMembers: true,
+                    _count: { select: { members: true, listings: true } },
+                  },
                 },
               },
             },
           },
+          orderBy: { createdAt: "asc" },
         },
-        orderBy: { createdAt: "asc" },
       },
-    },
     }),
     prisma.platformSetting.upsert({
       where: { id: "global" },
@@ -1415,24 +1750,50 @@ app.post(
   "/api/platform/legal/accept",
   { preHandler: platformAuth },
   async (req: any) => {
-    const documentIds = Array.isArray(req.body?.documentIds) ? req.body.documentIds.map(String) : [];
+    const documentIds = Array.isArray(req.body?.documentIds)
+      ? req.body.documentIds.map(String)
+      : [];
     const required = await requiredLegalStatus(req.platformIdentity.userId);
-    const requiredIds = required.filter((item) => !item.accepted).map((item) => item.id);
+    const requiredIds = required
+      .filter((item) => !item.accepted)
+      .map((item) => item.id);
     if (!requiredIds.every((id) => documentIds.includes(id)))
-      throw new DomainError("LEGAL_ACCEPTANCE_INCOMPLETE", "Необходимо принять все обязательные документы");
+      throw new DomainError(
+        "LEGAL_ACCEPTANCE_INCOMPLETE",
+        "Необходимо принять все обязательные документы",
+      );
     await prisma.$transaction(async (tx) => {
       for (const documentId of requiredIds)
         await tx.legalAcceptance.upsert({
-          where: { documentId_userId: { documentId, userId: req.platformIdentity.userId } },
-          update: {}, create: { documentId, userId: req.platformIdentity.userId, source: "platform_web" },
+          where: {
+            documentId_userId: {
+              documentId,
+              userId: req.platformIdentity.userId,
+            },
+          },
+          update: {},
+          create: {
+            documentId,
+            userId: req.platformIdentity.userId,
+            source: "platform_web",
+          },
         });
       if (requiredIds.length)
-        await tx.auditEvent.create({ data: {
-          actorId: req.platformIdentity.userId, scope: "legal", action: "legal_documents_accepted",
-          targetType: "User", targetId: req.platformIdentity.userId, metadata: { documentIds: requiredIds },
-        } });
+        await tx.auditEvent.create({
+          data: {
+            actorId: req.platformIdentity.userId,
+            scope: "legal",
+            action: "legal_documents_accepted",
+            targetType: "User",
+            targetId: req.platformIdentity.userId,
+            metadata: { documentIds: requiredIds },
+          },
+        });
     });
-    return { accepted: true, documents: await requiredLegalStatus(req.platformIdentity.userId) };
+    return {
+      accepted: true,
+      documents: await requiredLegalStatus(req.platformIdentity.userId),
+    };
   },
 );
 
@@ -1441,7 +1802,15 @@ app.patch(
   { preHandler: platformAuth },
   async (req: any) => {
     const supportedLocales = new Set([
-      "en", "es", "ca", "ru", "uk", "fr", "de", "it", "pt",
+      "en",
+      "es",
+      "ca",
+      "ru",
+      "uk",
+      "fr",
+      "de",
+      "it",
+      "pt",
     ]);
     const defaultLocale = String(req.body?.defaultLocale || "")
       .trim()
@@ -1496,7 +1865,11 @@ app.patch(
       include: { organization: true },
     });
     if (!community.organizationId || !community.organization)
-      throw new DomainError("ORGANIZATION_REQUIRED", "У сообщества нет владельца", 409);
+      throw new DomainError(
+        "ORGANIZATION_REQUIRED",
+        "У сообщества нет владельца",
+        409,
+      );
     await organizationPlatformMembership(
       community.organizationId,
       req.platformIdentity.userId,
@@ -1504,27 +1877,59 @@ app.patch(
     );
     const monetizationMode = String(req.body?.monetizationMode || "");
     const publicationPriceStars = Number(req.body?.publicationPriceStars);
-    const minMonthlyMessagesForFree = Number(req.body?.minMonthlyMessagesForFree);
+    const minMonthlyMessagesForFree = Number(
+      req.body?.minMonthlyMessagesForFree,
+    );
     const activityWindowDays = Number(req.body?.activityWindowDays);
     if (!["paid_all", "hybrid", "free_subscription"].includes(monetizationMode))
-      throw new DomainError("MONETIZATION_MODE_INVALID", "Выберите режим публикаций");
-    if (!Number.isInteger(publicationPriceStars) || publicationPriceStars < 1 || publicationPriceStars > 10000)
-      throw new DomainError("PUBLICATION_PRICE_INVALID", "Цена должна быть от 1 до 10000 Stars");
-    if (!Number.isInteger(minMonthlyMessagesForFree) || minMonthlyMessagesForFree < 1 || minMonthlyMessagesForFree > 10000)
-      throw new DomainError("ACTIVITY_THRESHOLD_INVALID", "Порог должен быть от 1 до 10000 сообщений");
+      throw new DomainError(
+        "MONETIZATION_MODE_INVALID",
+        "Выберите режим публикаций",
+      );
+    if (
+      !Number.isInteger(publicationPriceStars) ||
+      publicationPriceStars < 1 ||
+      publicationPriceStars > 10000
+    )
+      throw new DomainError(
+        "PUBLICATION_PRICE_INVALID",
+        "Цена должна быть от 1 до 10000 Stars",
+      );
+    if (
+      !Number.isInteger(minMonthlyMessagesForFree) ||
+      minMonthlyMessagesForFree < 1 ||
+      minMonthlyMessagesForFree > 10000
+    )
+      throw new DomainError(
+        "ACTIVITY_THRESHOLD_INVALID",
+        "Порог должен быть от 1 до 10000 сообщений",
+      );
     if (![7, 30, 90].includes(activityWindowDays))
-      throw new DomainError("ACTIVITY_WINDOW_INVALID", "Период активности: 7, 30 или 90 дней");
+      throw new DomainError(
+        "ACTIVITY_WINDOW_INVALID",
+        "Период активности: 7, 30 или 90 дней",
+      );
     const platformSettings = await prisma.platformSetting.upsert({
       where: { id: "global" },
       update: {},
-      create: { id: "global", minimumPublicationStars: 100, defaultCommissionBps: 1500, freeBoardSubscriptionStars: 750, starsHoldDays: 21, minimumPayoutStars: 2500 },
+      create: {
+        id: "global",
+        minimumPublicationStars: 100,
+        defaultCommissionBps: 1500,
+        freeBoardSubscriptionStars: 750,
+        starsHoldDays: 21,
+        minimumPayoutStars: 2500,
+      },
     });
     if (publicationPriceStars < platformSettings.minimumPublicationStars)
       throw new DomainError(
         "PUBLICATION_PRICE_BELOW_PLATFORM_MINIMUM",
         `Минимальная цена платформы — ${platformSettings.minimumPublicationStars} Stars`,
       );
-    if (monetizationMode === "free_subscription" && !ownerStarsSubscriptionActive(community.organization))
+    if (
+      monetizationMode === "free_subscription" &&
+      !ownerStarsSubscriptionActive(community.organization)
+    )
       throw new DomainError(
         "OWNER_SUBSCRIPTION_REQUIRED",
         `Для бесплатной доски сначала оформите подписку ${platformSettings.freeBoardSubscriptionStars} Stars в месяц`,
@@ -1548,7 +1953,12 @@ app.patch(
         action: "monetization_updated",
         targetType: "Community",
         targetId: community.id,
-        metadata: { monetizationMode, publicationPriceStars, minMonthlyMessagesForFree, activityWindowDays },
+        metadata: {
+          monetizationMode,
+          publicationPriceStars,
+          minMonthlyMessagesForFree,
+          activityWindowDays,
+        },
       },
     });
     return updated;
@@ -1568,7 +1978,14 @@ app.post(
     const settings = await prisma.platformSetting.upsert({
       where: { id: "global" },
       update: {},
-      create: { id: "global", minimumPublicationStars: 100, defaultCommissionBps: 1500, freeBoardSubscriptionStars: 750, starsHoldDays: 21, minimumPayoutStars: 2500 },
+      create: {
+        id: "global",
+        minimumPublicationStars: 100,
+        defaultCommissionBps: 1500,
+        freeBoardSubscriptionStars: 750,
+        starsHoldDays: 21,
+        minimumPayoutStars: 2500,
+      },
     });
     const payload = `owner_subscription:${organizationId}:${req.platformIdentity.userId}`;
     const response = await fetch(
@@ -1578,22 +1995,32 @@ app.post(
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           title: "Бесплатная доска Adnecta",
-          description: "Подписка владельца: бесплатные публикации для всех участников",
+          description:
+            "Подписка владельца: бесплатные публикации для всех участников",
           payload,
           currency: "XTR",
-          prices: [{ label: "30 дней", amount: settings.freeBoardSubscriptionStars }],
+          prices: [
+            { label: "30 дней", amount: settings.freeBoardSubscriptionStars },
+          ],
           subscription_period: 2_592_000,
         }),
       },
     );
     const result = (await response.json()) as any;
     if (!result.ok)
-      throw new DomainError("STARS_SUBSCRIPTION_CREATE_FAILED", "Не удалось создать подписку Stars", 502);
+      throw new DomainError(
+        "STARS_SUBSCRIPTION_CREATE_FAILED",
+        "Не удалось создать подписку Stars",
+        502,
+      );
     await prisma.organization.update({
       where: { id: organizationId },
       data: { starsSubscriptionPrice: settings.freeBoardSubscriptionStars },
     });
-    return { invoiceUrl: result.result, amountStars: settings.freeBoardSubscriptionStars };
+    return {
+      invoiceUrl: result.result,
+      amountStars: settings.freeBoardSubscriptionStars,
+    };
   },
 );
 
@@ -1602,7 +2029,9 @@ app.post(
   { preHandler: platformAuth },
   async (req: any) => {
     await requireCurrentLegalAcceptance(req.platformIdentity.userId);
-    const name = String(req.body?.name || "").trim().slice(0, 100);
+    const name = String(req.body?.name || "")
+      .trim()
+      .slice(0, 100);
     if (name.length < 2)
       throw new DomainError(
         "ORGANIZATION_NAME_REQUIRED",
@@ -1650,7 +2079,9 @@ app.patch(
       req.platformIdentity.userId,
       ["owner"],
     );
-    const name = String(req.body?.name || "").trim().slice(0, 100);
+    const name = String(req.body?.name || "")
+      .trim()
+      .slice(0, 100);
     if (name.length < 2)
       throw new DomainError(
         "ORGANIZATION_NAME_REQUIRED",
@@ -1764,23 +2195,25 @@ app.post(
         include: { organization: true },
         orderBy: { createdAt: "desc" },
       });
-      const draft = existingDraft?.organization || await prisma.$transaction(async (tx) => {
-        const organization = await tx.organization.create({
-          data: {
-            name: "Новое сообщество",
-            slug: `onboarding-${crypto.randomBytes(6).toString("hex")}`,
-            onboardingDraft: true,
-          },
-        });
-        await tx.organizationMember.create({
-          data: {
-            organizationId: organization.id,
-            userId: req.platformIdentity.userId,
-            role: "owner",
-          },
-        });
-        return organization;
-      });
+      const draft =
+        existingDraft?.organization ||
+        (await prisma.$transaction(async (tx) => {
+          const organization = await tx.organization.create({
+            data: {
+              name: "Новое сообщество",
+              slug: `onboarding-${crypto.randomBytes(6).toString("hex")}`,
+              onboardingDraft: true,
+            },
+          });
+          await tx.organizationMember.create({
+            data: {
+              organizationId: organization.id,
+              userId: req.platformIdentity.userId,
+              role: "owner",
+            },
+          });
+          return organization;
+        }));
       organizationId = draft.id;
     }
     await prisma.communityConnectionIntent.updateMany({
@@ -1792,7 +2225,10 @@ app.post(
       data: { status: "cancelled" },
     });
     const rawToken = crypto.randomBytes(16).toString("hex");
-    const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+    const tokenHash = crypto
+      .createHash("sha256")
+      .update(rawToken)
+      .digest("hex");
     const intent = await prisma.communityConnectionIntent.create({
       data: {
         tokenHash,
@@ -1818,7 +2254,11 @@ app.post(
       include: { organization: { include: { members: true } } },
     });
     if (!community || !community.organization)
-      throw new DomainError("COMMUNITY_NOT_FOUND", "Сообщество не найдено", 404);
+      throw new DomainError(
+        "COMMUNITY_NOT_FOUND",
+        "Сообщество не найдено",
+        404,
+      );
     const membership = community.organization.members.find(
       (item) => item.userId === req.platformIdentity.userId,
     );
@@ -1845,8 +2285,7 @@ app.post(
           isAdministrator && Boolean(member.can_delete_messages),
         botCanRestrictMembers:
           isAdministrator && Boolean(member.can_restrict_members),
-        botCanInviteUsers:
-          isAdministrator && Boolean(member.can_invite_users),
+        botCanInviteUsers: isAdministrator && Boolean(member.can_invite_users),
         botLastCheckedAt: new Date(),
         ...(!active && community.tenantStatus === "active"
           ? {
@@ -1877,16 +2316,17 @@ app.post(
   { preHandler: platformAuth },
   async (req: any) => {
     if (String(req.body?.confirmation || "") !== "DISCONNECT")
-      throw new DomainError(
-        "CONFIRMATION_REQUIRED",
-        "Подтвердите отключение",
-      );
+      throw new DomainError("CONFIRMATION_REQUIRED", "Подтвердите отключение");
     const community = await prisma.community.findUnique({
       where: { id: String(req.params.id) },
       include: { organization: { include: { members: true } } },
     });
     if (!community?.organization)
-      throw new DomainError("COMMUNITY_NOT_FOUND", "Сообщество не найдено", 404);
+      throw new DomainError(
+        "COMMUNITY_NOT_FOUND",
+        "Сообщество не найдено",
+        404,
+      );
     if (community.deletionScheduledFor)
       throw new DomainError(
         "DELETION_SCHEDULED",
@@ -1908,7 +2348,10 @@ app.post(
         },
       });
       await tx.communityConnectionIntent.updateMany({
-        where: { communityId: community.id, status: { in: ["pending", "claiming"] } },
+        where: {
+          communityId: community.id,
+          status: { in: ["pending", "claiming"] },
+        },
         data: { status: "cancelled" },
       });
       await tx.auditEvent.create({
@@ -1935,7 +2378,11 @@ app.post(
       include: { organization: { include: { members: true } } },
     });
     if (!community?.organization)
-      throw new DomainError("COMMUNITY_NOT_FOUND", "Сообщество не найдено", 404);
+      throw new DomainError(
+        "COMMUNITY_NOT_FOUND",
+        "Сообщество не найдено",
+        404,
+      );
     if (community.deletionScheduledFor)
       throw new DomainError(
         "DELETION_SCHEDULED",
@@ -2006,13 +2453,21 @@ app.post(
       include: { organization: { include: { members: true } } },
     });
     if (!community?.organization)
-      throw new DomainError("COMMUNITY_NOT_FOUND", "Сообщество не найдено", 404);
+      throw new DomainError(
+        "COMMUNITY_NOT_FOUND",
+        "Сообщество не найдено",
+        404,
+      );
     const owner = community.organization.members.find(
       (item) =>
         item.userId === req.platformIdentity.userId && item.role === "owner",
     );
     if (!owner)
-      throw new DomainError("FORBIDDEN", "Только владелец может запросить удаление", 403);
+      throw new DomainError(
+        "FORBIDDEN",
+        "Только владелец может запросить удаление",
+        403,
+      );
     if (community.deletionScheduledFor) return community;
     const now = new Date();
     const scheduledFor = new Date(now.getTime() + 30 * 86_400_000);
@@ -2053,15 +2508,27 @@ app.post(
       include: { organization: { include: { members: true } } },
     });
     if (!community?.organization)
-      throw new DomainError("COMMUNITY_NOT_FOUND", "Сообщество не найдено", 404);
+      throw new DomainError(
+        "COMMUNITY_NOT_FOUND",
+        "Сообщество не найдено",
+        404,
+      );
     const owner = community.organization.members.find(
       (item) =>
         item.userId === req.platformIdentity.userId && item.role === "owner",
     );
     if (!owner)
-      throw new DomainError("FORBIDDEN", "Только владелец может отменить удаление", 403);
+      throw new DomainError(
+        "FORBIDDEN",
+        "Только владелец может отменить удаление",
+        403,
+      );
     if (!community.deletionScheduledFor)
-      throw new DomainError("DELETION_NOT_SCHEDULED", "Удаление не запланировано", 409);
+      throw new DomainError(
+        "DELETION_NOT_SCHEDULED",
+        "Удаление не запланировано",
+        409,
+      );
     return prisma.$transaction(async (tx) => {
       const updated = await tx.community.update({
         where: { id: community.id },
@@ -2103,7 +2570,11 @@ app.get(
       },
     });
     if (!community?.organization)
-      throw new DomainError("COMMUNITY_NOT_FOUND", "Сообщество не найдено", 404);
+      throw new DomainError(
+        "COMMUNITY_NOT_FOUND",
+        "Сообщество не найдено",
+        404,
+      );
     const membership = community.organization.members.find(
       (item) => item.userId === req.platformIdentity.userId,
     );
@@ -2136,7 +2607,10 @@ app.post(
     const organizationId = String(req.params.id);
     const targetTelegramUserId = String(req.body?.telegramUserId || "").trim();
     if (!/^\d{3,20}$/.test(targetTelegramUserId))
-      throw new DomainError("USER_ID_INVALID", "Укажите Telegram ID нового владельца");
+      throw new DomainError(
+        "USER_ID_INVALID",
+        "Укажите Telegram ID нового владельца",
+      );
     const current = await prisma.organizationMember.findUnique({
       where: {
         organizationId_userId: {
@@ -2146,7 +2620,11 @@ app.post(
       },
     });
     if (!current || current.role !== "owner")
-      throw new DomainError("FORBIDDEN", "Только владелец может передать организацию", 403);
+      throw new DomainError(
+        "FORBIDDEN",
+        "Только владелец может передать организацию",
+        403,
+      );
     const target = await prisma.user.findUnique({
       where: { telegramUserId: BigInt(targetTelegramUserId) },
     });
@@ -2157,7 +2635,10 @@ app.post(
         409,
       );
     if (target.id === req.platformIdentity.userId)
-      throw new DomainError("TARGET_IS_CURRENT_OWNER", "Это уже текущий владелец");
+      throw new DomainError(
+        "TARGET_IS_CURRENT_OWNER",
+        "Это уже текущий владелец",
+      );
     return prisma.$transaction(async (tx) => {
       await tx.organizationMember.updateMany({
         where: {
@@ -2182,7 +2663,10 @@ app.post(
           metadata: { newOwnerId: target.id },
         },
       });
-      return { organizationId, owner: { id: target.id, firstName: target.firstName } };
+      return {
+        organizationId,
+        owner: { id: target.id, firstName: target.firstName },
+      };
     });
   },
 );
@@ -2235,7 +2719,9 @@ app.get(
         -account.entries.reduce((sum, entry) => sum + entry.amount, 0),
       ]),
     );
-    const platformSettings = await prisma.platformSetting.findUnique({ where: { id: "global" } });
+    const platformSettings = await prisma.platformSetting.findUnique({
+      where: { id: "global" },
+    });
     const holdDays = platformSettings?.starsHoldDays || 21;
     return {
       currency: "XTR",
@@ -2243,7 +2729,9 @@ app.get(
         pending: balances.liability_pending || 0,
         available: balances.liability_available || 0,
         reserved: balances.liability_reserved || 0,
-        paidOut: payouts.filter((item) => item.status === "paid").reduce((sum, item) => sum + item.amountStars, 0),
+        paidOut: payouts
+          .filter((item) => item.status === "paid")
+          .reduce((sum, item) => sum + item.amountStars, 0),
       },
       holdDays,
       minimumPayoutStars: platformSettings?.minimumPayoutStars || 2500,
@@ -2267,30 +2755,71 @@ app.post(
   async (req: any) => {
     await requireCurrentLegalAcceptance(req.platformIdentity.userId);
     const organizationId = String(req.params.id);
-    await organizationPlatformMembership(organizationId, req.platformIdentity.userId, ["owner"]);
+    await organizationPlatformMembership(
+      organizationId,
+      req.platformIdentity.userId,
+      ["owner"],
+    );
     const amountStars = Number(req.body?.amountStars);
-    const settings = await prisma.platformSetting.findUnique({ where: { id: "global" } });
+    const settings = await prisma.platformSetting.findUnique({
+      where: { id: "global" },
+    });
     if (!settings?.payoutsEnabled)
-      throw new DomainError("PAYOUTS_DISABLED", "Выплаты пока закрыты владельцем платформы", 409);
-    if (!Number.isSafeInteger(amountStars) || amountStars < settings.minimumPayoutStars)
-      throw new DomainError("PAYOUT_AMOUNT_INVALID", `Минимальная выплата — ${settings.minimumPayoutStars} Stars`);
+      throw new DomainError(
+        "PAYOUTS_DISABLED",
+        "Выплаты пока закрыты владельцем платформы",
+        409,
+      );
+    if (
+      !Number.isSafeInteger(amountStars) ||
+      amountStars < settings.minimumPayoutStars
+    )
+      throw new DomainError(
+        "PAYOUT_AMOUNT_INVALID",
+        `Минимальная выплата — ${settings.minimumPayoutStars} Stars`,
+      );
     try {
-      return await prisma.$transaction(async (tx) => {
-        const payout = await tx.payoutRequest.create({ data: {
-          organizationId, requestedById: req.platformIdentity.userId, amountStars,
-          status: "requested", rail: "manual_sepa",
-        } });
-        const reservation = await reservePayoutLedger(tx, { payoutId: payout.id, organizationId, amountStars });
-        const updated = await tx.payoutRequest.update({ where: { id: payout.id }, data: { reservationTransactionId: reservation.id } });
-        await tx.auditEvent.create({ data: {
-          actorId: req.platformIdentity.userId, scope: "platform_finance", action: "payout_requested",
-          targetType: "PayoutRequest", targetId: payout.id, metadata: { organizationId, amountStars },
-        } });
-        return updated;
-      }, { isolationLevel: "Serializable" });
+      return await prisma.$transaction(
+        async (tx) => {
+          const payout = await tx.payoutRequest.create({
+            data: {
+              organizationId,
+              requestedById: req.platformIdentity.userId,
+              amountStars,
+              status: "requested",
+              rail: "manual_sepa",
+            },
+          });
+          const reservation = await reservePayoutLedger(tx, {
+            payoutId: payout.id,
+            organizationId,
+            amountStars,
+          });
+          const updated = await tx.payoutRequest.update({
+            where: { id: payout.id },
+            data: { reservationTransactionId: reservation.id },
+          });
+          await tx.auditEvent.create({
+            data: {
+              actorId: req.platformIdentity.userId,
+              scope: "platform_finance",
+              action: "payout_requested",
+              targetType: "PayoutRequest",
+              targetId: payout.id,
+              metadata: { organizationId, amountStars },
+            },
+          });
+          return updated;
+        },
+        { isolationLevel: "Serializable" },
+      );
     } catch (e: any) {
       if (String(e?.message || "").includes("insufficient available"))
-        throw new DomainError("PAYOUT_BALANCE_INSUFFICIENT", "Недостаточно доступных Stars", 409);
+        throw new DomainError(
+          "PAYOUT_BALANCE_INSUFFICIENT",
+          "Недостаточно доступных Stars",
+          409,
+        );
       throw e;
     }
   },
@@ -2301,14 +2830,43 @@ app.post(
   { preHandler: platformAuth },
   async (req: any) => {
     const organizationId = String(req.params.id);
-    await organizationPlatformMembership(organizationId, req.platformIdentity.userId, ["owner"]);
+    await organizationPlatformMembership(
+      organizationId,
+      req.platformIdentity.userId,
+      ["owner"],
+    );
     return prisma.$transaction(async (tx) => {
-      const payout = await tx.payoutRequest.findFirst({ where: { id: String(req.params.payoutId), organizationId } });
-      if (!payout) throw new DomainError("PAYOUT_NOT_FOUND", "Заявка не найдена", 404);
-      if (payout.status !== "requested") throw new DomainError("PAYOUT_STATE_INVALID", "Эту заявку уже нельзя отменить", 409);
-      await releasePayoutLedger(tx, { payoutId: payout.id, organizationId, amountStars: payout.amountStars, reason: "cancelled_by_owner" });
-      const updated = await tx.payoutRequest.update({ where: { id: payout.id }, data: { status: "cancelled", processedAt: new Date() } });
-      await tx.auditEvent.create({ data: { actorId: req.platformIdentity.userId, scope: "platform_finance", action: "payout_cancelled", targetType: "PayoutRequest", targetId: payout.id, metadata: { amountStars: payout.amountStars } } });
+      const payout = await tx.payoutRequest.findFirst({
+        where: { id: String(req.params.payoutId), organizationId },
+      });
+      if (!payout)
+        throw new DomainError("PAYOUT_NOT_FOUND", "Заявка не найдена", 404);
+      if (payout.status !== "requested")
+        throw new DomainError(
+          "PAYOUT_STATE_INVALID",
+          "Эту заявку уже нельзя отменить",
+          409,
+        );
+      await releasePayoutLedger(tx, {
+        payoutId: payout.id,
+        organizationId,
+        amountStars: payout.amountStars,
+        reason: "cancelled_by_owner",
+      });
+      const updated = await tx.payoutRequest.update({
+        where: { id: payout.id },
+        data: { status: "cancelled", processedAt: new Date() },
+      });
+      await tx.auditEvent.create({
+        data: {
+          actorId: req.platformIdentity.userId,
+          scope: "platform_finance",
+          action: "payout_cancelled",
+          targetType: "PayoutRequest",
+          targetId: payout.id,
+          metadata: { amountStars: payout.amountStars },
+        },
+      });
       return updated;
     });
   },
@@ -2336,7 +2894,11 @@ app.get(
         assignedTo: { select: { id: true, firstName: true } },
         messages: {
           where: { internal: false },
-          include: { author: { select: { id: true, firstName: true, platformRole: true } } },
+          include: {
+            author: {
+              select: { id: true, firstName: true, platformRole: true },
+            },
+          },
           orderBy: { createdAt: "asc" },
         },
       },
@@ -2361,8 +2923,12 @@ app.post(
     });
     if (!membership)
       throw new DomainError("FORBIDDEN", "Недостаточно прав", 403);
-    const subject = String(req.body?.subject || "").trim().slice(0, 160);
-    const body = String(req.body?.message || "").trim().slice(0, 5000);
+    const subject = String(req.body?.subject || "")
+      .trim()
+      .slice(0, 160);
+    const body = String(req.body?.message || "")
+      .trim()
+      .slice(0, 5000);
     const communityId = req.body?.communityId
       ? String(req.body.communityId)
       : null;
@@ -2373,9 +2939,15 @@ app.post(
       );
     if (
       communityId &&
-      !(await prisma.community.count({ where: { id: communityId, organizationId } }))
+      !(await prisma.community.count({
+        where: { id: communityId, organizationId },
+      }))
     )
-      throw new DomainError("COMMUNITY_NOT_FOUND", "Сообщество не найдено", 404);
+      throw new DomainError(
+        "COMMUNITY_NOT_FOUND",
+        "Сообщество не найдено",
+        404,
+      );
     return prisma.$transaction(async (tx) => {
       const ticket = await tx.supportTicket.create({
         data: {
@@ -2412,7 +2984,11 @@ app.post(
       where: { id: String(req.params.id) },
     });
     if (!ticket)
-      throw new DomainError("SUPPORT_TICKET_NOT_FOUND", "Обращение не найдено", 404);
+      throw new DomainError(
+        "SUPPORT_TICKET_NOT_FOUND",
+        "Обращение не найдено",
+        404,
+      );
     const membership = await prisma.organizationMember.findUnique({
       where: {
         organizationId_userId: {
@@ -2426,7 +3002,9 @@ app.post(
       platformSupportRoles.has(req.platformIdentity.platformRole);
     if (!membership && !isStaff)
       throw new DomainError("FORBIDDEN", "Недостаточно прав", 403);
-    const body = String(req.body?.message || "").trim().slice(0, 5000);
+    const body = String(req.body?.message || "")
+      .trim()
+      .slice(0, 5000);
     const internal = Boolean(req.body?.internal) && isStaff;
     if (body.length < 2)
       throw new DomainError("SUPPORT_MESSAGE_INVALID", "Введите сообщение");
@@ -2519,7 +3097,11 @@ app.post(
       ["owner"],
     );
     const organization = membership.organization;
-    if (["active", "trialing", "past_due", "incomplete"].includes(organization.subscriptionStatus))
+    if (
+      ["active", "trialing", "past_due", "incomplete"].includes(
+        organization.subscriptionStatus,
+      )
+    )
       throw new DomainError(
         "SUBSCRIPTION_ALREADY_EXISTS",
         "Управляйте текущей подпиской через Stripe Portal",
@@ -2586,7 +3168,11 @@ app.post(
       ["owner"],
     );
     if (!membership.organization.stripeCustomerId)
-      throw new DomainError("STRIPE_CUSTOMER_MISSING", "Stripe Customer ещё не создан", 409);
+      throw new DomainError(
+        "STRIPE_CUSTOMER_MISSING",
+        "Stripe Customer ещё не создан",
+        409,
+      );
     const session = await stripeClient.billingPortal.sessions.create({
       customer: membership.organization.stripeCustomerId,
       return_url: `${config.APP_URL}/?mode=platform&billing=return`,
@@ -2626,7 +3212,10 @@ app.post(
       accountId = account.id;
       await prisma.organization.update({
         where: { id: organization.id },
-        data: { stripeConnectAccountId: accountId, billingUpdatedAt: new Date() },
+        data: {
+          stripeConnectAccountId: accountId,
+          billingUpdatedAt: new Date(),
+        },
       });
     }
     const link = await stripeClient.accountLinks.create({
@@ -2634,7 +3223,10 @@ app.post(
       type: "account_onboarding",
       refresh_url: `${config.APP_URL}/?mode=platform&connect=refresh`,
       return_url: `${config.APP_URL}/?mode=platform&connect=return`,
-      collection_options: { fields: "eventually_due", future_requirements: "include" },
+      collection_options: {
+        fields: "eventually_due",
+        future_requirements: "include",
+      },
     });
     await prisma.auditEvent.create({
       data: {
@@ -2661,8 +3253,14 @@ app.post(
     );
     const accountId = membership.organization.stripeConnectAccountId;
     if (!accountId)
-      throw new DomainError("STRIPE_CONNECT_MISSING", "Stripe Connect ещё не создан", 409);
-    return syncStripeConnectAccount(await stripeClient.accounts.retrieve(accountId));
+      throw new DomainError(
+        "STRIPE_CONNECT_MISSING",
+        "Stripe Connect ещё не создан",
+        409,
+      );
+    return syncStripeConnectAccount(
+      await stripeClient.accounts.retrieve(accountId),
+    );
   },
 );
 
@@ -2787,20 +3385,39 @@ app.get(
   { preHandler: requirePlatformRole(platformAdminRoles) },
   async () => {
     const since = new Date(Date.now() - 24 * 60 * 60_000);
-    const [runs, alerts, failedNotifications, pendingNotifications] = await prisma.$transaction([
-      prisma.jobRun.findMany({ where: { startedAt: { gte: since } }, orderBy: { startedAt: "desc" }, take: 100 }),
-      prisma.systemAlert.findMany({ where: { status: "open" }, orderBy: [{ severity: "desc" }, { lastSeenAt: "desc" }], take: 100 }),
-      prisma.notification.count({ where: { status: "failed", attempts: { gte: 5 } } }),
-      prisma.notification.count({ where: { status: { in: ["pending", "processing"] } } }),
-    ]);
+    const [runs, alerts, failedNotifications, pendingNotifications] =
+      await prisma.$transaction([
+        prisma.jobRun.findMany({
+          where: { startedAt: { gte: since } },
+          orderBy: { startedAt: "desc" },
+          take: 100,
+        }),
+        prisma.systemAlert.findMany({
+          where: { status: "open" },
+          orderBy: [{ severity: "desc" }, { lastSeenAt: "desc" }],
+          take: 100,
+        }),
+        prisma.notification.count({
+          where: { status: "failed", attempts: { gte: 5 } },
+        }),
+        prisma.notification.count({
+          where: { status: { in: ["pending", "processing"] } },
+        }),
+      ]);
     const latest = new Map<string, any>();
-    for (const run of runs) if (!latest.has(run.jobName)) latest.set(run.jobName, run);
+    for (const run of runs)
+      if (!latest.has(run.jobName)) latest.set(run.jobName, run);
     return {
       checkedAt: new Date(),
       jobs: [...latest.values()],
-      recentFailures: runs.filter((run) => run.status === "failed").slice(0, 20),
+      recentFailures: runs
+        .filter((run) => run.status === "failed")
+        .slice(0, 20),
       alerts,
-      notifications: { pending: pendingNotifications, deadLetter: failedNotifications },
+      notifications: {
+        pending: pendingNotifications,
+        deadLetter: failedNotifications,
+      },
     };
   },
 );
@@ -2808,10 +3425,11 @@ app.get(
 app.get(
   "/api/platform/admin/legal-documents",
   { preHandler: requirePlatformRole(platformAdminRoles) },
-  async () => prisma.legalDocument.findMany({
-    include: { _count: { select: { acceptances: true } } },
-    orderBy: [{ type: "asc" }, { effectiveAt: "desc" }],
-  }),
+  async () =>
+    prisma.legalDocument.findMany({
+      include: { _count: { select: { acceptances: true } } },
+      orderBy: [{ type: "asc" }, { effectiveAt: "desc" }],
+    }),
 );
 
 app.post(
@@ -2823,20 +3441,44 @@ app.post(
     const title = String(req.body?.title || "").trim();
     const body = String(req.body?.body || "").trim();
     const required = Boolean(req.body?.required);
-    if (!["terms", "privacy", "prohibited"].includes(type) || !/^[a-zA-Z0-9._-]{1,40}$/.test(version))
-      throw new DomainError("LEGAL_DOCUMENT_INVALID", "Неверный тип или версия документа");
+    if (
+      !["terms", "privacy", "prohibited"].includes(type) ||
+      !/^[a-zA-Z0-9._-]{1,40}$/.test(version)
+    )
+      throw new DomainError(
+        "LEGAL_DOCUMENT_INVALID",
+        "Неверный тип или версия документа",
+      );
     if (title.length < 3 || body.length < 100 || body.length > 100000)
-      throw new DomainError("LEGAL_DOCUMENT_INVALID", "Заполните заголовок и текст документа");
+      throw new DomainError(
+        "LEGAL_DOCUMENT_INVALID",
+        "Заполните заголовок и текст документа",
+      );
     return prisma.$transaction(async (tx) => {
-      const document = await tx.legalDocument.create({ data: {
-        type, version, title, body, required, published: true,
-        effectiveAt: req.body?.effectiveAt ? new Date(req.body.effectiveAt) : new Date(),
-        publishedById: req.platformIdentity.userId,
-      } });
-      await tx.auditEvent.create({ data: {
-        actorId: req.platformIdentity.userId, scope: "legal", action: "legal_document_published",
-        targetType: "LegalDocument", targetId: document.id, metadata: { type, version, required },
-      } });
+      const document = await tx.legalDocument.create({
+        data: {
+          type,
+          version,
+          title,
+          body,
+          required,
+          published: true,
+          effectiveAt: req.body?.effectiveAt
+            ? new Date(req.body.effectiveAt)
+            : new Date(),
+          publishedById: req.platformIdentity.userId,
+        },
+      });
+      await tx.auditEvent.create({
+        data: {
+          actorId: req.platformIdentity.userId,
+          scope: "legal",
+          action: "legal_document_published",
+          targetType: "LegalDocument",
+          targetId: document.id,
+          metadata: { type, version, required },
+        },
+      });
       return document;
     });
   },
@@ -2848,10 +3490,25 @@ app.get(
   async () => {
     const since = new Date(Date.now() - 30 * 86_400_000);
     const [events, uniqueVisitors] = await prisma.$transaction([
-      prisma.conversionEvent.groupBy({ by: ["event"], where: { createdAt: { gte: since } }, orderBy: { event: "asc" }, _count: true }),
-      prisma.conversionEvent.findMany({ where: { createdAt: { gte: since } }, distinct: ["visitorHash"], select: { visitorHash: true } }),
+      prisma.conversionEvent.groupBy({
+        by: ["event"],
+        where: { createdAt: { gte: since } },
+        orderBy: { event: "asc" },
+        _count: true,
+      }),
+      prisma.conversionEvent.findMany({
+        where: { createdAt: { gte: since } },
+        distinct: ["visitorHash"],
+        select: { visitorHash: true },
+      }),
     ]);
-    return { since, uniqueVisitors: uniqueVisitors.length, events: Object.fromEntries(events.map((item) => [item.event, item._count])) };
+    return {
+      since,
+      uniqueVisitors: uniqueVisitors.length,
+      events: Object.fromEntries(
+        events.map((item) => [item.event, item._count]),
+      ),
+    };
   },
 );
 
@@ -2866,7 +3523,9 @@ app.get(
         community: { select: { id: true, name: true } },
         payment: true,
         entries: {
-          include: { account: { select: { key: true, kind: true, name: true } } },
+          include: {
+            account: { select: { key: true, kind: true, name: true } },
+          },
         },
       },
       orderBy: { occurredAt: "desc" },
@@ -2883,11 +3542,19 @@ app.get(
     return prisma.payoutRequest.findMany({
       where: status ? { status } : undefined,
       include: {
-        organization: { select: { id: true, name: true, stripeConnectAccountId: true, connectPayoutsEnabled: true } },
+        organization: {
+          select: {
+            id: true,
+            name: true,
+            stripeConnectAccountId: true,
+            connectPayoutsEnabled: true,
+          },
+        },
         requestedBy: { select: { firstName: true, username: true } },
         reviewedBy: { select: { firstName: true, username: true } },
       },
-      orderBy: { requestedAt: "desc" }, take: 200,
+      orderBy: { requestedAt: "desc" },
+      take: 200,
     });
   },
 );
@@ -2898,32 +3565,81 @@ app.post(
   async (req: any) => {
     const decision = String(req.body?.decision || "");
     if (!["approve", "reject"].includes(decision))
-      throw new DomainError("PAYOUT_DECISION_INVALID", "Укажите approve или reject");
-    const settlementTon = String(req.body?.settlementTon || "").trim().replace(",", ".");
-    const settlementTonNano =
-      /^\d+(\.\d{1,9})?$/.test(settlementTon)
-        ? BigInt(settlementTon.split(".")[0]) * 1_000_000_000n +
-          BigInt((settlementTon.split(".")[1] || "").padEnd(9, "0"))
-        : 0n;
+      throw new DomainError(
+        "PAYOUT_DECISION_INVALID",
+        "Укажите approve или reject",
+      );
+    const settlementTon = String(req.body?.settlementTon || "")
+      .trim()
+      .replace(",", ".");
+    const settlementTonNano = /^\d+(\.\d{1,9})?$/.test(settlementTon)
+      ? BigInt(settlementTon.split(".")[0]) * 1_000_000_000n +
+        BigInt((settlementTon.split(".")[1] || "").padEnd(9, "0"))
+      : 0n;
     const rail = "ton_wallet";
     if (decision === "approve" && settlementTonNano <= 0n)
-      throw new DomainError("PAYOUT_SETTLEMENT_INVALID", "Укажите сумму выплаты в TON");
+      throw new DomainError(
+        "PAYOUT_SETTLEMENT_INVALID",
+        "Укажите сумму выплаты в TON",
+      );
     return prisma.$transaction(async (tx) => {
-      const payout = await tx.payoutRequest.findUnique({ where: { id: String(req.params.id) }, include: { organization: true } });
-      if (!payout) throw new DomainError("PAYOUT_NOT_FOUND", "Заявка не найдена", 404);
-      if (payout.status !== "requested") throw new DomainError("PAYOUT_STATE_INVALID", "Заявка уже рассмотрена", 409);
+      const payout = await tx.payoutRequest.findUnique({
+        where: { id: String(req.params.id) },
+        include: { organization: true },
+      });
+      if (!payout)
+        throw new DomainError("PAYOUT_NOT_FOUND", "Заявка не найдена", 404);
+      if (payout.status !== "requested")
+        throw new DomainError(
+          "PAYOUT_STATE_INVALID",
+          "Заявка уже рассмотрена",
+          409,
+        );
       if (decision === "reject") {
-        await releasePayoutLedger(tx, { payoutId: payout.id, organizationId: payout.organizationId, amountStars: payout.amountStars, reason: String(req.body?.reason || "rejected_by_platform") });
+        await releasePayoutLedger(tx, {
+          payoutId: payout.id,
+          organizationId: payout.organizationId,
+          amountStars: payout.amountStars,
+          reason: String(req.body?.reason || "rejected_by_platform"),
+        });
       }
-      const updated = await tx.payoutRequest.update({ where: { id: payout.id }, data: {
-        status: decision === "approve" ? "approved" : "rejected",
-        reviewedById: req.platformIdentity.userId, reviewedAt: new Date(),
-        ...(decision === "approve" ? { settlementTonNano, settlementCurrency: "TON", settlementAmount: null, rail, statementNote: String(req.body?.statementNote || "").trim() || null } : { failureReason: String(req.body?.reason || "Отклонено платформой") }),
-      } });
-      await tx.auditEvent.create({ data: {
-        actorId: req.platformIdentity.userId, scope: "platform_finance", action: `payout_${decision === "approve" ? "approved" : "rejected"}`,
-        targetType: "PayoutRequest", targetId: payout.id, metadata: { amountStars: payout.amountStars, settlementTonNano: decision === "approve" ? settlementTonNano.toString() : null, rail },
-      } });
+      const updated = await tx.payoutRequest.update({
+        where: { id: payout.id },
+        data: {
+          status: decision === "approve" ? "approved" : "rejected",
+          reviewedById: req.platformIdentity.userId,
+          reviewedAt: new Date(),
+          ...(decision === "approve"
+            ? {
+                settlementTonNano,
+                settlementCurrency: "TON",
+                settlementAmount: null,
+                rail,
+                statementNote:
+                  String(req.body?.statementNote || "").trim() || null,
+              }
+            : {
+                failureReason: String(
+                  req.body?.reason || "Отклонено платформой",
+                ),
+              }),
+        },
+      });
+      await tx.auditEvent.create({
+        data: {
+          actorId: req.platformIdentity.userId,
+          scope: "platform_finance",
+          action: `payout_${decision === "approve" ? "approved" : "rejected"}`,
+          targetType: "PayoutRequest",
+          targetId: payout.id,
+          metadata: {
+            amountStars: payout.amountStars,
+            settlementTonNano:
+              decision === "approve" ? settlementTonNano.toString() : null,
+            rail,
+          },
+        },
+      });
       return updated;
     });
   },
@@ -2933,27 +3649,66 @@ app.post(
   "/api/platform/admin/payouts/:id/execute",
   { preHandler: requirePlatformRole(new Set(["platform_owner"])) },
   async (req: any) => {
-    const payout = await prisma.payoutRequest.findUnique({ where: { id: String(req.params.id) }, include: { organization: true } });
-    if (!payout) throw new DomainError("PAYOUT_NOT_FOUND", "Заявка не найдена", 404);
+    const payout = await prisma.payoutRequest.findUnique({
+      where: { id: String(req.params.id) },
+      include: { organization: true },
+    });
+    if (!payout)
+      throw new DomainError("PAYOUT_NOT_FOUND", "Заявка не найдена", 404);
     if (payout.status === "paid") return payout;
-    if (!['approved', 'failed'].includes(payout.status) || !payout.settlementTonNano)
-      throw new DomainError("PAYOUT_STATE_INVALID", "Выплата не готова к исполнению", 409);
+    if (
+      !["approved", "failed"].includes(payout.status) ||
+      !payout.settlementTonNano
+    )
+      throw new DomainError(
+        "PAYOUT_STATE_INVALID",
+        "Выплата не готова к исполнению",
+        409,
+      );
     const settlementTonNano = payout.settlementTonNano;
     const externalReference = String(req.body?.externalReference || "").trim();
     if (!externalReference)
-      throw new DomainError("PAYOUT_REFERENCE_REQUIRED", "Укажите hash транзакции TON");
+      throw new DomainError(
+        "PAYOUT_REFERENCE_REQUIRED",
+        "Укажите hash транзакции TON",
+      );
     return prisma.$transaction(async (tx) => {
-      const current = await tx.payoutRequest.findUniqueOrThrow({ where: { id: payout.id } });
+      const current = await tx.payoutRequest.findUniqueOrThrow({
+        where: { id: payout.id },
+      });
       if (current.status === "paid") return current;
-      const completion = await completePayoutLedger(tx, { payoutId: payout.id, organizationId: payout.organizationId, amountStars: payout.amountStars, rail: payout.rail, externalReference });
-      const updated = await tx.payoutRequest.update({ where: { id: payout.id }, data: {
-        status: "paid", completionTransactionId: completion.id,
-        externalReference, tonTransactionHash: externalReference, failureReason: null, processedAt: new Date(),
-      } });
-      await tx.auditEvent.create({ data: {
-        actorId: req.platformIdentity.userId, scope: "platform_finance", action: "payout_paid",
-        targetType: "PayoutRequest", targetId: payout.id, metadata: { rail: payout.rail, externalReference, settlementTonNano: settlementTonNano.toString() },
-      } });
+      const completion = await completePayoutLedger(tx, {
+        payoutId: payout.id,
+        organizationId: payout.organizationId,
+        amountStars: payout.amountStars,
+        rail: payout.rail,
+        externalReference,
+      });
+      const updated = await tx.payoutRequest.update({
+        where: { id: payout.id },
+        data: {
+          status: "paid",
+          completionTransactionId: completion.id,
+          externalReference,
+          tonTransactionHash: externalReference,
+          failureReason: null,
+          processedAt: new Date(),
+        },
+      });
+      await tx.auditEvent.create({
+        data: {
+          actorId: req.platformIdentity.userId,
+          scope: "platform_finance",
+          action: "payout_paid",
+          targetType: "PayoutRequest",
+          targetId: payout.id,
+          metadata: {
+            rail: payout.rail,
+            externalReference,
+            settlementTonNano: settlementTonNano.toString(),
+          },
+        },
+      });
       return updated;
     });
   },
@@ -2970,7 +3725,12 @@ app.get(
             OR: [
               { firstName: { contains: search, mode: "insensitive" } },
               { lastName: { contains: search, mode: "insensitive" } },
-              { username: { contains: search.replace(/^@/, ""), mode: "insensitive" } },
+              {
+                username: {
+                  contains: search.replace(/^@/, ""),
+                  mode: "insensitive",
+                },
+              },
               ...(/^\d+$/.test(search)
                 ? [{ telegramUserId: BigInt(search) }]
                 : []),
@@ -2999,9 +3759,13 @@ app.patch(
   async (req: any) => {
     const platformRole = String(req.body?.platformRole || "");
     if (
-      !["user", "support", "finance", "platform_admin", "platform_owner"].includes(
-        platformRole,
-      )
+      ![
+        "user",
+        "support",
+        "finance",
+        "platform_admin",
+        "platform_owner",
+      ].includes(platformRole)
     )
       throw new DomainError("PLATFORM_ROLE_INVALID", "Неверная роль");
     const target = await prisma.user.findUnique({
@@ -3012,7 +3776,9 @@ app.patch(
     if (
       target.platformRole === "platform_owner" &&
       platformRole !== "platform_owner" &&
-      (await prisma.user.count({ where: { platformRole: "platform_owner", status: "active" } })) <= 1
+      (await prisma.user.count({
+        where: { platformRole: "platform_owner", status: "active" },
+      })) <= 1
     )
       throw new DomainError(
         "LAST_PLATFORM_OWNER",
@@ -3068,7 +3834,11 @@ app.get(
         createdBy: { select: { id: true, firstName: true, username: true } },
         assignedTo: { select: { id: true, firstName: true } },
         messages: {
-          include: { author: { select: { id: true, firstName: true, platformRole: true } } },
+          include: {
+            author: {
+              select: { id: true, firstName: true, platformRole: true },
+            },
+          },
           orderBy: { createdAt: "asc" },
         },
       },
@@ -3084,7 +3854,16 @@ app.patch(
   async (req: any) => {
     const status = String(req.body?.status || "");
     const priority = String(req.body?.priority || "");
-    if (status && !["open", "in_progress", "waiting_customer", "resolved", "closed"].includes(status))
+    if (
+      status &&
+      ![
+        "open",
+        "in_progress",
+        "waiting_customer",
+        "resolved",
+        "closed",
+      ].includes(status)
+    )
       throw new DomainError("SUPPORT_STATUS_INVALID", "Неверный статус");
     if (priority && !["low", "normal", "high", "urgent"].includes(priority))
       throw new DomainError("SUPPORT_PRIORITY_INVALID", "Неверный приоритет");
@@ -3143,15 +3922,28 @@ app.patch(
     const unitAmount = Number(req.body?.unitAmount);
     const active = Boolean(req.body?.active);
     if (stripePriceId && !/^price_[A-Za-z0-9]+$/.test(stripePriceId))
-      throw new DomainError("STRIPE_PRICE_INVALID", "Stripe Price ID должен начинаться с price_");
-    if (!Number.isInteger(unitAmount) || unitAmount < 0 || unitAmount > 100000000)
+      throw new DomainError(
+        "STRIPE_PRICE_INVALID",
+        "Stripe Price ID должен начинаться с price_",
+      );
+    if (
+      !Number.isInteger(unitAmount) ||
+      unitAmount < 0 ||
+      unitAmount > 100000000
+    )
       throw new DomainError("BILLING_AMOUNT_INVALID", "Неверная сумма тарифа");
     if (stripe && stripePriceId) {
       const remotePrice = await stripe.prices.retrieve(stripePriceId);
       if (!remotePrice.active || remotePrice.type !== "recurring")
-        throw new DomainError("STRIPE_PRICE_INVALID", "Stripe Price должен быть активным и рекуррентным");
+        throw new DomainError(
+          "STRIPE_PRICE_INVALID",
+          "Stripe Price должен быть активным и рекуррентным",
+        );
       if (remotePrice.currency !== plan.currency)
-        throw new DomainError("STRIPE_PRICE_CURRENCY", "Валюта Stripe Price не совпадает с тарифом");
+        throw new DomainError(
+          "STRIPE_PRICE_CURRENCY",
+          "Валюта Stripe Price не совпадает с тарифом",
+        );
     }
     const updated = await prisma.billingPlan.update({
       where: { id: plan.id },
@@ -3211,9 +4003,16 @@ app.post(
       },
     });
     if (!community)
-      throw new DomainError("COMMUNITY_NOT_FOUND", "Сообщество не найдено", 404);
+      throw new DomainError(
+        "COMMUNITY_NOT_FOUND",
+        "Сообщество не найдено",
+        404,
+      );
     if (community.deletionFinalizedAt) return community;
-    if (!community.deletionScheduledFor || community.deletionScheduledFor > new Date())
+    if (
+      !community.deletionScheduledFor ||
+      community.deletionScheduledFor > new Date()
+    )
       throw new DomainError(
         "DELETION_COOLING_PERIOD",
         "30-дневный период отмены ещё не завершён",
@@ -3290,7 +4089,9 @@ app.post(
     });
     await Promise.all(
       imageKeys.map((key) =>
-        fs.unlink(path.join(config.UPLOAD_DIR, path.basename(key))).catch(() => undefined),
+        fs
+          .unlink(path.join(config.UPLOAD_DIR, path.basename(key)))
+          .catch(() => undefined),
       ),
     );
     return finalized;
@@ -3301,10 +4102,10 @@ app.post(
   "/api/platform/admin/stars/reconcile",
   { preHandler: requirePlatformRole(platformFinanceRoles) },
   async (req: any) => {
-    const balance = await telegramBotApi<{ amount: number; nanostar_amount?: number }>(
-      "getMyStarBalance",
-      {},
-    );
+    const balance = await telegramBotApi<{
+      amount: number;
+      nanostar_amount?: number;
+    }>("getMyStarBalance", {});
     const remote: any[] = [];
     for (let offset = 0; offset < 1000; offset += 100) {
       const page = await telegramBotApi<{ transactions: any[] }>(
@@ -3445,7 +4246,9 @@ app.post(
         errors.push({
           id: candidate.id,
           message:
-            unknownError instanceof Error ? unknownError.message : "unknown error",
+            unknownError instanceof Error
+              ? unknownError.message
+              : "unknown error",
         });
       }
     }
@@ -3458,7 +4261,12 @@ app.post(
         metadata: { cutoff, settled: settled.length, errors },
       },
     });
-    return { cutoff, eligible: candidates.length, settled: settled.length, errors };
+    return {
+      cutoff,
+      eligible: candidates.length,
+      settled: settled.length,
+      errors,
+    };
   },
 );
 
@@ -3490,7 +4298,11 @@ app.post(
       data: { status: "refund_processing" },
     });
     if (locked.count !== 1)
-      throw new DomainError("REFUND_IN_PROGRESS", "Возврат уже выполняется", 409);
+      throw new DomainError(
+        "REFUND_IN_PROGRESS",
+        "Возврат уже выполняется",
+        409,
+      );
     try {
       await telegramBotApi<boolean>("refundStarPayment", {
         user_id: payment.userId
@@ -3526,7 +4338,9 @@ app.post(
         where: { id: payment.listingId },
         data: {
           paymentStatus: "refunded",
-          ...(payment.listing.status === "published" ? { status: "hidden" } : {}),
+          ...(payment.listing.status === "published"
+            ? { status: "hidden" }
+            : {}),
         },
       });
       await tx.notification.create({
@@ -3557,9 +4371,7 @@ app.patch(
   "/api/platform/admin/settings",
   { preHandler: requirePlatformRole(new Set(["platform_owner"])) },
   async (req: any) => {
-    const minimumPublicationStars = Number(
-      req.body?.minimumPublicationStars,
-    );
+    const minimumPublicationStars = Number(req.body?.minimumPublicationStars);
     const defaultCommissionBps = Number(req.body?.defaultCommissionBps);
     const starsHoldDays = Number(req.body?.starsHoldDays);
     const minimumPayoutStars = Number(req.body?.minimumPayoutStars);
@@ -3573,7 +4385,11 @@ app.patch(
         "PLATFORM_SETTINGS_INVALID",
         "Минимальная цена должна быть от 1 до 100000 Stars",
       );
-    if (!Number.isInteger(starsHoldDays) || starsHoldDays < 0 || starsHoldDays > 90)
+    if (
+      !Number.isInteger(starsHoldDays) ||
+      starsHoldDays < 0 ||
+      starsHoldDays > 90
+    )
       throw new DomainError(
         "PLATFORM_SETTINGS_INVALID",
         "Период разблокировки должен быть от 0 до 90 дней",
@@ -3627,7 +4443,7 @@ app.patch(
   { preHandler: requirePlatformRole(platformAdminRoles) },
   async (req: any) => {
     const tenantStatus = String(req.body?.tenantStatus || "");
-    if (!['active', 'suspended'].includes(tenantStatus))
+    if (!["active", "suspended"].includes(tenantStatus))
       throw new DomainError(
         "TENANT_STATUS_INVALID",
         "Допустимы статусы active и suspended",
@@ -3790,7 +4606,13 @@ app.get("/api/community/showcase", { preHandler: auth }, async (req: any) => {
         getTelegramChatInfo(selectedCommunity.telegramChatId),
       ),
   ]);
-  const { community, messageCount, free: freeForUser, manual, subscriptionActive } = access;
+  const {
+    community,
+    messageCount,
+    free: freeForUser,
+    manual,
+    subscriptionActive,
+  } = access;
   const isPrivileged = privilegedRoles.has(req.identity.role);
   return {
     name: chat?.title || community.name,
@@ -3816,40 +4638,56 @@ app.get("/api/community/showcase", { preHandler: auth }, async (req: any) => {
       : Math.max(community.minMonthlyMessagesForFree - messageCount, 0),
   };
 });
-app.get("/api/community/avatar", { preHandler: auth }, async (req: any, reply) => {
-  const community = await prisma.community.findUniqueOrThrow({
-    where: { id: req.identity.communityId },
-    select: { telegramChatId: true },
-  });
-  const chat = await getTelegramChatInfo(community.telegramChatId);
-  const fileId = chat?.photo?.big_file_id;
-  if (!fileId)
-    throw new DomainError("COMMUNITY_AVATAR_NOT_FOUND", "Аватар не найден", 404);
-  const fileResponse = await fetch(
-    `https://api.telegram.org/bot${config.TELEGRAM_BOT_TOKEN}/getFile`,
-    {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ file_id: fileId }),
-    },
-  );
-  const filePayload = (await fileResponse.json()) as {
-    ok?: boolean;
-    result?: { file_path?: string };
-  };
-  if (!fileResponse.ok || !filePayload.ok || !filePayload.result?.file_path)
-    throw new DomainError("COMMUNITY_AVATAR_UNAVAILABLE", "Аватар недоступен", 502);
-  const imageResponse = await fetch(
-    `https://api.telegram.org/file/bot${config.TELEGRAM_BOT_TOKEN}/${filePayload.result.file_path}`,
-  );
-  if (!imageResponse.ok)
-    throw new DomainError("COMMUNITY_AVATAR_UNAVAILABLE", "Аватар недоступен", 502);
-  const image = Buffer.from(await imageResponse.arrayBuffer());
-  return reply
-    .type(imageResponse.headers.get("content-type") || "image/jpeg")
-    .header("cache-control", "private, max-age=300")
-    .send(image);
-});
+app.get(
+  "/api/community/avatar",
+  { preHandler: auth },
+  async (req: any, reply) => {
+    const community = await prisma.community.findUniqueOrThrow({
+      where: { id: req.identity.communityId },
+      select: { telegramChatId: true },
+    });
+    const chat = await getTelegramChatInfo(community.telegramChatId);
+    const fileId = chat?.photo?.big_file_id;
+    if (!fileId)
+      throw new DomainError(
+        "COMMUNITY_AVATAR_NOT_FOUND",
+        "Аватар не найден",
+        404,
+      );
+    const fileResponse = await fetch(
+      `https://api.telegram.org/bot${config.TELEGRAM_BOT_TOKEN}/getFile`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ file_id: fileId }),
+      },
+    );
+    const filePayload = (await fileResponse.json()) as {
+      ok?: boolean;
+      result?: { file_path?: string };
+    };
+    if (!fileResponse.ok || !filePayload.ok || !filePayload.result?.file_path)
+      throw new DomainError(
+        "COMMUNITY_AVATAR_UNAVAILABLE",
+        "Аватар недоступен",
+        502,
+      );
+    const imageResponse = await fetch(
+      `https://api.telegram.org/file/bot${config.TELEGRAM_BOT_TOKEN}/${filePayload.result.file_path}`,
+    );
+    if (!imageResponse.ok)
+      throw new DomainError(
+        "COMMUNITY_AVATAR_UNAVAILABLE",
+        "Аватар недоступен",
+        502,
+      );
+    const image = Buffer.from(await imageResponse.arrayBuffer());
+    return reply
+      .type(imageResponse.headers.get("content-type") || "image/jpeg")
+      .header("cache-control", "private, max-age=300")
+      .send(image);
+  },
+);
 app.patch("/api/me/settings", { preHandler: auth }, async (req: any) => {
   const allowed = [
     "notifyListingUpdates",
@@ -4102,7 +4940,11 @@ app.post(
   async (req: any) => {
     const listing = await prisma.listing.findFirst({
       where: { id: req.params.id, communityId: req.identity.communityId },
-      include: { category: true, images: { select: { id: true } }, author: { select: { createdAt: true } } },
+      include: {
+        category: true,
+        images: { select: { id: true } },
+        author: { select: { createdAt: true } },
+      },
     });
     if (!listing || listing.authorId !== req.identity.userId)
       throw new DomainError("LISTING_NOT_FOUND", "Объявление не найдено", 404);
@@ -4159,45 +5001,104 @@ app.post(
         );
       const sinceDay = new Date(Date.now() - 86_400_000);
       const listingsToday = await prisma.listing.count({
-        where: { communityId: community.id, authorId: req.identity.userId, createdAt: { gte: sinceDay } },
+        where: {
+          communityId: community.id,
+          authorId: req.identity.userId,
+          createdAt: { gte: sinceDay },
+        },
       });
-      if (community.abuseProtectionMode === "enforce" && listingsToday > community.maxListingsPerDay)
-        throw new DomainError("LISTING_VELOCITY_LIMIT", `Можно создать не более ${community.maxListingsPerDay} объявлений за 24 часа`, 429);
+      if (
+        community.abuseProtectionMode === "enforce" &&
+        listingsToday > community.maxListingsPerDay
+      )
+        throw new DomainError(
+          "LISTING_VELOCITY_LIMIT",
+          `Можно создать не более ${community.maxListingsPerDay} объявлений за 24 часа`,
+          429,
+        );
       const duplicateCandidates = await prisma.listing.findMany({
         where: {
-          id: { not: listing.id }, communityId: community.id, authorId: req.identity.userId,
+          id: { not: listing.id },
+          communityId: community.id,
+          authorId: req.identity.userId,
           status: { notIn: ["deleted", "rejected"] },
-          createdAt: { gte: new Date(Date.now() - community.duplicateWindowDays * 86_400_000) },
+          createdAt: {
+            gte: new Date(
+              Date.now() - community.duplicateWindowDays * 86_400_000,
+            ),
+          },
         },
-        select: { id: true, title: true, description: true }, take: 50,
+        select: { id: true, title: true, description: true },
+        take: 50,
       });
       let duplicateSimilarity = 0;
       let duplicateOf: string | null = null;
       for (const candidate of duplicateCandidates) {
-        const similarity = tokenSimilarity(`${listing.title} ${listing.description}`, `${candidate.title} ${candidate.description}`);
-        if (similarity > duplicateSimilarity) { duplicateSimilarity = similarity; duplicateOf = candidate.id; }
+        const similarity = tokenSimilarity(
+          `${listing.title} ${listing.description}`,
+          `${candidate.title} ${candidate.description}`,
+        );
+        if (similarity > duplicateSimilarity) {
+          duplicateSimilarity = similarity;
+          duplicateOf = candidate.id;
+        }
       }
       const listingRisk = scoreListingRisk({
-        title: listing.title, description: listing.description,
+        title: listing.title,
+        description: listing.description,
         prohibitedWords: community.prohibitedWords,
-        duplicateSimilarity: duplicateSimilarity >= community.duplicateSimilarityPercent ? 85 : duplicateSimilarity,
-        accountAgeHours: (Date.now() - listing.author.createdAt.getTime()) / 3_600_000,
-        links: (`${listing.title} ${listing.description}`.match(/(?:https?:\/\/|www\.|t\.me\/)/gi) || []).length,
+        duplicateSimilarity:
+          duplicateSimilarity >= community.duplicateSimilarityPercent
+            ? 85
+            : duplicateSimilarity,
+        accountAgeHours:
+          (Date.now() - listing.author.createdAt.getTime()) / 3_600_000,
+        links: (
+          `${listing.title} ${listing.description}`.match(
+            /(?:https?:\/\/|www\.|t\.me\/)/gi,
+          ) || []
+        ).length,
       });
-      const requiresManualReview = community.abuseProtectionMode !== "off" && listingRisk.score >= community.riskyListingThreshold;
+      const requiresManualReview =
+        community.abuseProtectionMode !== "off" &&
+        listingRisk.score >= community.riskyListingThreshold;
       await prisma.$transaction(async (tx) => {
-        await tx.listing.update({ where: { id: listing.id }, data: {
-          duplicateSuspected: duplicateSimilarity >= community.duplicateSimilarityPercent,
-          riskScore: listingRisk.score, riskReasons: listingRisk.reasons,
-          requiresManualReview,
-        } });
-        if (listingRisk.score > 0 && !(await tx.abuseEvent.findFirst({ where: { listingId: listing.id, type: "listing_risk", status: "open" } })))
-          await tx.abuseEvent.create({ data: {
-            communityId: community.id, userId: listing.authorId, listingId: listing.id,
-            type: "listing_risk", severity: requiresManualReview ? "high" : "low",
-            score: listingRisk.score, reasons: listingRisk.reasons,
-            metadata: { duplicateSimilarity, duplicateOf, prohibitedMatches: listingRisk.prohibitedMatches },
-          } });
+        await tx.listing.update({
+          where: { id: listing.id },
+          data: {
+            duplicateSuspected:
+              duplicateSimilarity >= community.duplicateSimilarityPercent,
+            riskScore: listingRisk.score,
+            riskReasons: listingRisk.reasons,
+            requiresManualReview,
+          },
+        });
+        if (
+          listingRisk.score > 0 &&
+          !(await tx.abuseEvent.findFirst({
+            where: {
+              listingId: listing.id,
+              type: "listing_risk",
+              status: "open",
+            },
+          }))
+        )
+          await tx.abuseEvent.create({
+            data: {
+              communityId: community.id,
+              userId: listing.authorId,
+              listingId: listing.id,
+              type: "listing_risk",
+              severity: requiresManualReview ? "high" : "low",
+              score: listingRisk.score,
+              reasons: listingRisk.reasons,
+              metadata: {
+                duplicateSimilarity,
+                duplicateOf,
+                prohibitedMatches: listingRisk.prohibitedMatches,
+              },
+            },
+          });
       });
       const access = await publicationAccess(
         req.identity.communityId,
@@ -4312,14 +5213,23 @@ app.post(
         409,
       );
     const invoicesToday = await prisma.publicationPayment.count({
-      where: { communityId: community.id, userId: req.identity.userId, createdAt: { gte: new Date(Date.now() - 86_400_000) } },
+      where: {
+        communityId: community.id,
+        userId: req.identity.userId,
+        createdAt: { gte: new Date(Date.now() - 86_400_000) },
+      },
     });
     const paymentRisk = scorePaymentRisk({
-      invoicesToday, maxInvoicesPerDay: community.maxPaidInvoicesPerDay,
+      invoicesToday,
+      maxInvoicesPerDay: community.maxPaidInvoicesPerDay,
       listingRiskScore: listing.riskScore,
-      accountAgeHours: (Date.now() - listing.author.createdAt.getTime()) / 3_600_000,
+      accountAgeHours:
+        (Date.now() - listing.author.createdAt.getTime()) / 3_600_000,
     });
-    const needsReview = community.abuseProtectionMode === "enforce" && paymentRisk.score >= 50 && existingPayment?.reviewStatus !== "approved";
+    const needsReview =
+      community.abuseProtectionMode === "enforce" &&
+      paymentRisk.score >= 50 &&
+      existingPayment?.reviewStatus !== "approved";
     const storedPayment = await prisma.publicationPayment.upsert({
       where: { listingId: listing.id },
       update: {
@@ -4333,7 +5243,12 @@ app.post(
         paidAt: null,
         riskScore: paymentRisk.score,
         riskReasons: paymentRisk.reasons,
-        reviewStatus: existingPayment?.reviewStatus === "approved" ? "approved" : needsReview ? "review" : "clear",
+        reviewStatus:
+          existingPayment?.reviewStatus === "approved"
+            ? "approved"
+            : needsReview
+              ? "review"
+              : "clear",
       },
       create: {
         communityId: community.id,
@@ -4350,14 +5265,34 @@ app.post(
       },
     });
     if (needsReview) {
-      if (!(await prisma.abuseEvent.findFirst({ where: { paymentId: storedPayment.id, type: "payment_risk", status: "open" } })))
-        await prisma.abuseEvent.create({ data: {
-          communityId: community.id, userId: req.identity.userId, listingId: listing.id,
-          paymentId: storedPayment.id, type: "payment_risk", severity: "high",
-          score: paymentRisk.score, reasons: paymentRisk.reasons,
-          metadata: { invoicesToday },
-        } });
-      throw new DomainError("PAYMENT_REVIEW_REQUIRED", "Перед оплатой нужна проверка администратора. Мы уведомили модераторов.", 409, { listingId: listing.id });
+      if (
+        !(await prisma.abuseEvent.findFirst({
+          where: {
+            paymentId: storedPayment.id,
+            type: "payment_risk",
+            status: "open",
+          },
+        }))
+      )
+        await prisma.abuseEvent.create({
+          data: {
+            communityId: community.id,
+            userId: req.identity.userId,
+            listingId: listing.id,
+            paymentId: storedPayment.id,
+            type: "payment_risk",
+            severity: "high",
+            score: paymentRisk.score,
+            reasons: paymentRisk.reasons,
+            metadata: { invoicesToday },
+          },
+        });
+      throw new DomainError(
+        "PAYMENT_REVIEW_REQUIRED",
+        "Перед оплатой нужна проверка администратора. Мы уведомили модераторов.",
+        409,
+        { listingId: listing.id },
+      );
     }
     const response = await fetch(
       `https://api.telegram.org/bot${config.TELEGRAM_BOT_TOKEN}/createInvoiceLink`,
@@ -4806,7 +5741,12 @@ app.post(
       });
       await tx.abuseEvent.updateMany({
         where: { listingId: listing.id, status: "open" },
-        data: { status: "resolved", resolution: `listing_${to}`, reviewedById: req.identity.userId, reviewedAt: new Date() },
+        data: {
+          status: "resolved",
+          resolution: `listing_${to}`,
+          reviewedById: req.identity.userId,
+          reviewedAt: new Date(),
+        },
       });
       await tx.notification.create({
         data: {
@@ -4836,38 +5776,101 @@ app.get(
 app.get(
   "/api/admin/abuse",
   { preHandler: requireRole(privilegedRoles) },
-  async (req: any) => prisma.abuseEvent.findMany({
-    where: { communityId: req.identity.communityId, status: String(req.query?.status || "open") },
-    include: {
-      user: { select: { id: true, firstName: true, username: true, createdAt: true } },
-      listing: { include: { category: true, images: { take: 1 } } },
-      payment: { select: { id: true, amountStars: true, reviewStatus: true, riskScore: true, riskReasons: true } },
-    },
-    orderBy: [{ severity: "desc" }, { createdAt: "asc" }], take: 200,
-  }),
+  async (req: any) =>
+    prisma.abuseEvent.findMany({
+      where: {
+        communityId: req.identity.communityId,
+        status: String(req.query?.status || "open"),
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            firstName: true,
+            username: true,
+            createdAt: true,
+          },
+        },
+        listing: { include: { category: true, images: { take: 1 } } },
+        payment: {
+          select: {
+            id: true,
+            amountStars: true,
+            reviewStatus: true,
+            riskScore: true,
+            riskReasons: true,
+          },
+        },
+      },
+      orderBy: [{ severity: "desc" }, { createdAt: "asc" }],
+      take: 200,
+    }),
 );
 app.post(
   "/api/admin/abuse/:id/resolve",
   { preHandler: requireRole(privilegedRoles) },
   async (req: any) => {
     const resolution = String(req.body?.resolution || "");
-    if (!["approved", "false_positive", "confirmed", "blocked"].includes(resolution))
-      throw new DomainError("ABUSE_RESOLUTION_INVALID", "Выберите результат проверки");
+    if (
+      !["approved", "false_positive", "confirmed", "blocked"].includes(
+        resolution,
+      )
+    )
+      throw new DomainError(
+        "ABUSE_RESOLUTION_INVALID",
+        "Выберите результат проверки",
+      );
     return prisma.$transaction(async (tx) => {
-      const event = await tx.abuseEvent.findFirst({ where: { id: req.params.id, communityId: req.identity.communityId, status: "open" } });
-      if (!event) throw new DomainError("ABUSE_EVENT_NOT_FOUND", "Риск-событие не найдено", 404);
+      const event = await tx.abuseEvent.findFirst({
+        where: {
+          id: req.params.id,
+          communityId: req.identity.communityId,
+          status: "open",
+        },
+      });
+      if (!event)
+        throw new DomainError(
+          "ABUSE_EVENT_NOT_FOUND",
+          "Риск-событие не найдено",
+          404,
+        );
       if (event.paymentId)
-        await tx.publicationPayment.update({ where: { id: event.paymentId }, data: { reviewStatus: ["approved", "false_positive"].includes(resolution) ? "approved" : "blocked" } });
-      if (event.listingId && ["approved", "false_positive"].includes(resolution))
-        await tx.listing.update({ where: { id: event.listingId }, data: { requiresManualReview: false } });
-      const updated = await tx.abuseEvent.update({ where: { id: event.id }, data: {
-        status: "resolved", resolution, reviewedById: req.identity.userId, reviewedAt: new Date(),
-      } });
-      await tx.moderationAction.create({ data: {
-        communityId: req.identity.communityId, moderatorId: req.identity.userId,
-        targetUserId: event.userId, listingId: event.listingId,
-        action: "abuse_risk_resolved", reason: resolution, metadata: { abuseEventId: event.id, paymentId: event.paymentId },
-      } });
+        await tx.publicationPayment.update({
+          where: { id: event.paymentId },
+          data: {
+            reviewStatus: ["approved", "false_positive"].includes(resolution)
+              ? "approved"
+              : "blocked",
+          },
+        });
+      if (
+        event.listingId &&
+        ["approved", "false_positive"].includes(resolution)
+      )
+        await tx.listing.update({
+          where: { id: event.listingId },
+          data: { requiresManualReview: false },
+        });
+      const updated = await tx.abuseEvent.update({
+        where: { id: event.id },
+        data: {
+          status: "resolved",
+          resolution,
+          reviewedById: req.identity.userId,
+          reviewedAt: new Date(),
+        },
+      });
+      await tx.moderationAction.create({
+        data: {
+          communityId: req.identity.communityId,
+          moderatorId: req.identity.userId,
+          targetUserId: event.userId,
+          listingId: event.listingId,
+          action: "abuse_risk_resolved",
+          reason: resolution,
+          metadata: { abuseEventId: event.id, paymentId: event.paymentId },
+        },
+      });
       return updated;
     });
   },
@@ -4963,11 +5966,21 @@ app.patch(
       freePublicationOverride !== undefined &&
       typeof freePublicationOverride !== "boolean"
     )
-      throw new DomainError("FREE_ACCESS_INVALID", "Неверное значение бесплатного доступа");
+      throw new DomainError(
+        "FREE_ACCESS_INVALID",
+        "Неверное значение бесплатного доступа",
+      );
     if (status && !["active", "restricted", "banned"].includes(status))
-      throw new DomainError("ENFORCEMENT_STATUS_INVALID", "Неверный статус доступа");
+      throw new DomainError(
+        "ENFORCEMENT_STATUS_INVALID",
+        "Неверный статус доступа",
+      );
     if (status && status !== "active" && target.role === "owner")
-      throw new DomainError("OWNER_PROTECTED", "Сначала передайте права владельца", 409);
+      throw new DomainError(
+        "OWNER_PROTECTED",
+        "Сначала передайте права владельца",
+        409,
+      );
     if (["admin", "owner"].includes(role) && req.identity.role !== "owner")
       throw new DomainError(
         "OWNER_REQUIRED",
@@ -5001,8 +6014,18 @@ app.patch(
                     : null,
               }
             : {}),
-          ...(status ? { enforcementStatus: status === "active" ? "active" : status, enforcementReason: String(req.body?.reason || "").slice(0, 500) || null } : {}),
-          ...(req.body?.restrictedUntil ? { restrictedUntil: new Date(req.body.restrictedUntil) } : status === "active" ? { restrictedUntil: null } : {}),
+          ...(status
+            ? {
+                enforcementStatus: status === "active" ? "active" : status,
+                enforcementReason:
+                  String(req.body?.reason || "").slice(0, 500) || null,
+              }
+            : {}),
+          ...(req.body?.restrictedUntil
+            ? { restrictedUntil: new Date(req.body.restrictedUntil) }
+            : status === "active"
+              ? { restrictedUntil: null }
+              : {}),
         },
       });
       await tx.moderationAction.create({
@@ -5122,21 +6145,49 @@ app.patch(
     if (typeof data.description === "string")
       data.description = data.description.trim().slice(0, 500);
     if (data.prohibitedWords !== undefined) {
-      if (!Array.isArray(data.prohibitedWords) || data.prohibitedWords.length > 200)
-        throw new DomainError("SETTINGS_INVALID", "Допустимо не более 200 запрещённых фраз");
-      data.prohibitedWords = [...new Set(data.prohibitedWords.map((value: unknown) => String(value).trim().toLowerCase().slice(0, 80)).filter((value: string) => value.length >= 2))];
+      if (
+        !Array.isArray(data.prohibitedWords) ||
+        data.prohibitedWords.length > 200
+      )
+        throw new DomainError(
+          "SETTINGS_INVALID",
+          "Допустимо не более 200 запрещённых фраз",
+        );
+      data.prohibitedWords = [
+        ...new Set(
+          data.prohibitedWords
+            .map((value: unknown) =>
+              String(value).trim().toLowerCase().slice(0, 80),
+            )
+            .filter((value: string) => value.length >= 2),
+        ),
+      ];
     }
-    if (data.abuseProtectionMode !== undefined && !["off", "observe", "enforce"].includes(data.abuseProtectionMode))
+    if (
+      data.abuseProtectionMode !== undefined &&
+      !["off", "observe", "enforce"].includes(data.abuseProtectionMode)
+    )
       throw new DomainError("SETTINGS_INVALID", "Неверный режим защиты");
     const abuseRanges: Record<string, [number, number]> = {
-      minQualifiedMessageChars: [1, 500], maxLinksPerQualifiedMessage: [0, 10],
-      maxListingsPerDay: [1, 100], duplicateWindowDays: [1, 365],
-      duplicateSimilarityPercent: [50, 100], riskyListingThreshold: [1, 100],
+      minQualifiedMessageChars: [1, 500],
+      maxLinksPerQualifiedMessage: [0, 10],
+      maxListingsPerDay: [1, 100],
+      duplicateWindowDays: [1, 365],
+      duplicateSimilarityPercent: [50, 100],
+      riskyListingThreshold: [1, 100],
       maxPaidInvoicesPerDay: [1, 100],
     };
     for (const [key, [minimum, maximum]] of Object.entries(abuseRanges))
-      if (data[key] !== undefined && (!Number.isInteger(data[key]) || data[key] < minimum || data[key] > maximum))
-        throw new DomainError("SETTINGS_INVALID", `${key}: допустимо от ${minimum} до ${maximum}`);
+      if (
+        data[key] !== undefined &&
+        (!Number.isInteger(data[key]) ||
+          data[key] < minimum ||
+          data[key] > maximum)
+      )
+        throw new DomainError(
+          "SETTINGS_INVALID",
+          `${key}: допустимо от ${minimum} до ${maximum}`,
+        );
     if (
       data.minMonthlyMessagesForFree !== undefined &&
       (!Number.isInteger(data.minMonthlyMessagesForFree) ||
