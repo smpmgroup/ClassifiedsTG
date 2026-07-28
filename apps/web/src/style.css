@@ -420,6 +420,13 @@ nav .active {
   align-items: center;
   gap: 12px;
 }
+.tenant-community-switcher .tenant-language-select {
+  margin-top: 7px;
+}
+.tenant-community-switcher label:first-child + .tenant-language-select {
+  padding-top: 7px;
+  border-top: 1px solid #e3ebe7;
+}
 .tenant-community-switcher label > span {
   color: var(--tg-theme-hint-color, #68766e);
   font-size: 11px;
@@ -446,6 +453,52 @@ nav .active {
 }
 .tenant-community-switcher .switch-error {
   color: #a23b35;
+}
+.owner-localization {
+  margin: 16px 0;
+  padding: 20px;
+  border: 1px solid #d9e7df;
+  border-radius: 18px;
+  background: #f7fbf8;
+}
+.owner-localization > div small {
+  color: #168752;
+  font-weight: 800;
+  letter-spacing: .07em;
+}
+.owner-localization h3 {
+  margin: 5px 0;
+}
+.owner-localization p {
+  margin: 5px 0 16px;
+  color: #65766c;
+}
+.owner-localization form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+  margin-top: 10px;
+}
+.owner-localization label {
+  display: grid;
+  gap: 6px;
+  font-weight: 700;
+}
+.owner-localization select,
+.owner-localization button {
+  min-height: 44px;
+  border: 1px solid #cadbd1;
+  border-radius: 11px;
+  padding: 9px 12px;
+}
+.owner-localization button {
+  border: 0;
+}
+@media (max-width: 560px) {
+  .owner-localization form {
+    grid-template-columns: 1fr;
+  }
 }
 .category-list {
   display: grid;

@@ -1339,6 +1339,7 @@ app.get("/api/platform/me", { preHandler: platformAuth }, async (req: any) => {
                   deletionFinalizedAt: true,
                   rules: true,
                   description: true,
+                  defaultLocale: true,
                   monetizationMode: true,
                   publicationPriceStars: true,
                   minMonthlyMessagesForFree: true,
@@ -1432,6 +1433,57 @@ app.post(
         } });
     });
     return { accepted: true, documents: await requiredLegalStatus(req.platformIdentity.userId) };
+  },
+);
+
+app.patch(
+  "/api/platform/communities/:id/localization",
+  { preHandler: platformAuth },
+  async (req: any) => {
+    const supportedLocales = new Set([
+      "en", "es", "ca", "ru", "uk", "fr", "de", "it", "pt",
+    ]);
+    const defaultLocale = String(req.body?.defaultLocale || "")
+      .trim()
+      .toLowerCase()
+      .slice(0, 2);
+    if (!supportedLocales.has(defaultLocale))
+      throw new DomainError(
+        "LOCALE_UNSUPPORTED",
+        "Выберите поддерживаемый язык",
+      );
+    const community = await prisma.community.findUniqueOrThrow({
+      where: { id: String(req.params.id) },
+      select: { id: true, organizationId: true },
+    });
+    if (!community.organizationId)
+      throw new DomainError(
+        "ORGANIZATION_REQUIRED",
+        "У сообщества нет владельца",
+        409,
+      );
+    await organizationPlatformMembership(
+      community.organizationId,
+      req.platformIdentity.userId,
+      ["owner", "administrator"],
+    );
+    const updated = await prisma.community.update({
+      where: { id: community.id },
+      data: { defaultLocale },
+      select: { id: true, name: true, slug: true, defaultLocale: true },
+    });
+    await prisma.auditEvent.create({
+      data: {
+        communityId: community.id,
+        actorId: req.platformIdentity.userId,
+        scope: "owner_settings",
+        action: "community_locale_updated",
+        targetType: "Community",
+        targetId: community.id,
+        metadata: { defaultLocale },
+      },
+    });
+    return updated;
   },
 );
 
@@ -3742,6 +3794,7 @@ app.get("/api/community/showcase", { preHandler: auth }, async (req: any) => {
   const isPrivileged = privilegedRoles.has(req.identity.role);
   return {
     name: chat?.title || community.name,
+    defaultLocale: community.defaultLocale,
     description:
       community.description ||
       chat?.description ||

@@ -9,6 +9,7 @@ import {
   useSearchParams,
 } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { supportedLanguages } from "./i18n";
 import { PublicSite } from "./PublicSite";
 import {
   activateSession,
@@ -38,6 +39,7 @@ type Listing = {
 };
 type CommunityShowcase = {
   name: string;
+  defaultLocale: string;
   description: string;
   hasAvatar: boolean;
   minMonthlyMessagesForFree: number;
@@ -49,6 +51,24 @@ type CommunityShowcase = {
   isPrivileged: boolean;
   messagesRemaining: number;
 };
+const categoryTranslations: Record<string, Record<string, string>> = {
+  "Транспорт": { en:"Vehicles",es:"Vehículos",ca:"Vehicles",ru:"Транспорт",uk:"Транспорт",fr:"Véhicules",de:"Fahrzeuge",it:"Veicoli",pt:"Veículos" },
+  "Недвижимость": { en:"Property",es:"Inmobiliaria",ca:"Immobiliària",ru:"Недвижимость",uk:"Нерухомість",fr:"Immobilier",de:"Immobilien",it:"Immobili",pt:"Imóveis" },
+  "Электроника": { en:"Electronics",es:"Electrónica",ca:"Electrònica",ru:"Электроника",uk:"Електроніка",fr:"Électronique",de:"Elektronik",it:"Elettronica",pt:"Eletrónica" },
+  "Дом и сад": { en:"Home & garden",es:"Hogar y jardín",ca:"Llar i jardí",ru:"Дом и сад",uk:"Дім і сад",fr:"Maison et jardin",de:"Haus & Garten",it:"Casa e giardino",pt:"Casa e jardim" },
+  "Одежда и обувь": { en:"Fashion",es:"Ropa y calzado",ca:"Roba i calçat",ru:"Одежда и обувь",uk:"Одяг і взуття",fr:"Mode",de:"Mode",it:"Abbigliamento",pt:"Roupa e calçado" },
+  "Детские товары": { en:"Kids",es:"Infantil",ca:"Infantil",ru:"Детские товары",uk:"Дитячі товари",fr:"Enfants",de:"Kinder",it:"Bambini",pt:"Crianças" },
+  "Работа": { en:"Jobs",es:"Empleo",ca:"Feina",ru:"Работа",uk:"Робота",fr:"Emploi",de:"Jobs",it:"Lavoro",pt:"Emprego" },
+  "Услуги": { en:"Services",es:"Servicios",ca:"Serveis",ru:"Услуги",uk:"Послуги",fr:"Services",de:"Dienstleistungen",it:"Servizi",pt:"Serviços" },
+  "Животные": { en:"Pets",es:"Animales",ca:"Animals",ru:"Животные",uk:"Тварини",fr:"Animaux",de:"Tiere",it:"Animali",pt:"Animais" },
+  "Отдам бесплатно": { en:"Free items",es:"Gratis",ca:"Gratuït",ru:"Отдам бесплатно",uk:"Віддам безкоштовно",fr:"À donner",de:"Zu verschenken",it:"In regalo",pt:"Grátis" },
+  "Обмен": { en:"Exchange",es:"Intercambio",ca:"Intercanvi",ru:"Обмен",uk:"Обмін",fr:"Échange",de:"Tausch",it:"Scambio",pt:"Troca" },
+  "Другое": { en:"Other",es:"Otros",ca:"Altres",ru:"Другое",uk:"Інше",fr:"Autres",de:"Sonstiges",it:"Altro",pt:"Outros" },
+};
+const localizedCategory = (name?: string, language?: string) =>
+  name
+    ? categoryTranslations[name]?.[String(language || "en").slice(0, 2)] || name
+    : "";
 const estimatedTon = (stars: number, rate: any) =>
   rate?.tonPerStar
     ? `${(Number(stars || 0) * Number(rate.tonPerStar)).toLocaleString("ru", { maximumFractionDigits: 4 })} TON`
@@ -175,7 +195,7 @@ export function App() {
   if (state === "select")
     return (
       <Message
-        text="Выберите доску сообщества"
+        text={t("chooseCommunity")}
         actions={
           <div className="community-select">
             {communityChoices.map((community) => (
@@ -252,6 +272,7 @@ function CommunitySwitcher({
 }: {
   onSwitched: (community: any) => void;
 }) {
+  const { t, i18n } = useTranslation();
   const [communities, setCommunities] = useState<any[]>([]);
   const [switching, setSwitching] = useState(false);
   const [error, setError] = useState("");
@@ -260,12 +281,11 @@ function CommunitySwitcher({
       .then(setCommunities)
       .catch(() => undefined);
   }, []);
-  if (communities.length < 2) return null;
   const current = communities.find((community) => community.current);
   return (
     <header className="tenant-community-switcher">
-      <label>
-        <span>Доска сообщества</span>
+      {communities.length > 1 && <label>
+        <span>{t("switchCommunity")}</span>
         <select
           aria-label="Переключить сообщество"
           disabled={switching}
@@ -281,7 +301,7 @@ function CommunitySwitcher({
               await switchTenantCommunity(target.id);
               onSwitched(target);
             } catch (unknownError: any) {
-              setError(unknownError.message || "Не удалось переключить доску");
+              setError(unknownError.message || t("switchError"));
               setSwitching(false);
             }
           }}
@@ -292,8 +312,23 @@ function CommunitySwitcher({
             </option>
           ))}
         </select>
+      </label>}
+      <label className="tenant-language-select">
+        <span>{t("language")}</span>
+        <select
+          aria-label={t("language")}
+          value={i18n.resolvedLanguage || "en"}
+          onChange={(event) => {
+            localStorage.setItem("adnecta-language", event.target.value);
+            void i18n.changeLanguage(event.target.value);
+          }}
+        >
+          {supportedLanguages.map(([code, name]) => (
+            <option value={code} key={code}>{name}</option>
+          ))}
+        </select>
       </label>
-      {switching && <small>Переключаем…</small>}
+      {switching && <small>{t("switching")}</small>}
       {error && <small className="switch-error">{error}</small>}
     </header>
   );
@@ -483,6 +518,13 @@ function PlatformWorkspace({ platformAdminOnly = false }: { platformAdminOnly?: 
                 </div>
               )}
             </div>
+            {["owner", "administrator"].includes(organization.role) &&
+              organization.communities.length > 0 && (
+                <OwnerLocalization
+                  communities={organization.communities}
+                  onChanged={load}
+                />
+              )}
             {organization.role === "owner" && organization.communities.length > 0 && (
               <OwnerMonetization organization={organization} pricing={data.platformPricing} onChanged={load} />
             )}
@@ -538,6 +580,79 @@ function PlatformWorkspace({ platformAdminOnly = false }: { platformAdminOnly?: 
       {platformAdminOnly && data.user.platformRole === "finance" && <PlatformFinancePanel />}
       {platformAdminOnly && !["platform_admin", "platform_owner", "support", "finance"].includes(data.user.platformRole) && <LoadError message="Этот отдельный кабинет доступен только владельцу и сотрудникам платформы." />}
     </main>
+  );
+}
+
+function OwnerLocalization({
+  communities,
+  onChanged,
+}: {
+  communities: any[];
+  onChanged: () => Promise<any>;
+}) {
+  const { t } = useTranslation();
+  const [drafts, setDrafts] = useState<Record<string, string>>(
+    Object.fromEntries(
+      communities.map((community) => [
+        community.id,
+        community.defaultLocale || "en",
+      ]),
+    ),
+  );
+  const [busy, setBusy] = useState("");
+  const [message, setMessage] = useState("");
+  return (
+    <section className="owner-localization">
+      <div>
+        <small>{t("language").toLocaleUpperCase()}</small>
+        <h3>{t("boardLanguage")}</h3>
+        <p>{t("boardLanguageHint")}</p>
+      </div>
+      {communities.map((community) => (
+        <form
+          key={community.id}
+          onSubmit={async (event) => {
+            event.preventDefault();
+            setBusy(community.id);
+            setMessage("");
+            try {
+              await request(
+                `/platform/communities/${community.id}/localization`,
+                "PATCH",
+                { defaultLocale: drafts[community.id] },
+              );
+              setMessage(t("languageSaved"));
+              await onChanged();
+            } catch (error: any) {
+              setMessage(error.message);
+            } finally {
+              setBusy("");
+            }
+          }}
+        >
+          <label>
+            {community.name}
+            <select
+              value={drafts[community.id] || "en"}
+              onChange={(event) =>
+                setDrafts((current) => ({
+                  ...current,
+                  [community.id]: event.target.value,
+                }))
+              }
+            >
+              {supportedLanguages.map(([code, name]) => (
+                <option value={code} key={code}>{name}</option>
+              ))}
+            </select>
+          </label>
+          <button className="primary" disabled={Boolean(busy)}>
+            {busy === community.id ? t("saving") : t("saveLanguage")}
+          </button>
+        </form>
+      ))}
+      {message && <p className="platform-message">{message}</p>}
+    </section>
   );
 }
 
@@ -1381,7 +1496,7 @@ function Skeleton() {
   );
 }
 function Catalog() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const nav = useNavigate();
   const [params, setParams] = useSearchParams();
   const [items, setItems] = useState<Listing[]>([]),
@@ -1409,6 +1524,30 @@ function Catalog() {
       ([categoryData, communityData]) => {
         setCategories(categoryData);
         setCommunity(communityData);
+        if (!localStorage.getItem("adnecta-language")) {
+          const rawTelegramLanguage = (() => {
+            try {
+              const rawUser = new URLSearchParams(
+                window.Telegram?.WebApp.initData || "",
+              ).get("user");
+              return rawUser
+                ? String(JSON.parse(rawUser).language_code || "").slice(0, 2)
+                : "";
+            } catch {
+              return "";
+            }
+          })();
+          const automatic = (
+            rawTelegramLanguage ||
+            navigator.language ||
+            ""
+          ).slice(0, 2).toLowerCase();
+          const supported = supportedLanguages.some(
+            ([code]) => code === automatic,
+          );
+          if (!supported && communityData.defaultLocale)
+            void i18n.changeLanguage(communityData.defaultLocale);
+        }
       },
     );
   }, []);
@@ -1452,7 +1591,7 @@ function Catalog() {
       <section className="community-hero">
         <header>
           <div className="community-copy">
-            <small>ДОСКА ОБЪЯВЛЕНИЙ СООБЩЕСТВА</small>
+            <small>{t("communityBoard").toLocaleUpperCase()}</small>
             <h1>{community?.name || "Наше сообщество"}</h1>
           </div>
           <div className="community-avatar" aria-label="Аватар сообщества">
@@ -1470,26 +1609,26 @@ function Catalog() {
             <div>
               <b>
                 {community.freeForUser
-                  ? "Для вас размещение бесплатно"
-                  : `Публикация — ${community.publicationPriceStars} ⭐`}
+                  ? t("freeForYou")
+                  : t("publicationPrice", { count: community.publicationPriceStars })}
               </b>
               <small>
                 {community.isPrivileged
-                  ? "Для администраторов сообщества без ограничений."
+                  ? t("adminFree")
                   : community.freeForUser
-                    ? `Активность: ${community.messageCount} из ${community.minMonthlyMessagesForFree} сообщений за ${community.activityWindowDays} дней.`
-                    : `До бесплатного размещения осталось ${community.messagesRemaining} сообщений в чате.`}
+                    ? t("activity", { count: community.messageCount, required: community.minMonthlyMessagesForFree, days: community.activityWindowDays })
+                    : t("remaining", { count: community.messagesRemaining })}
               </small>
             </div>
           </div>
         )}
         <button className="hero-add" onClick={() => nav("/add")}>
-          ＋ Разместить объявление
+          ＋ {t("publishListing")}
         </button>
       </section>
       <div className="category-chips" aria-label="Категории">
         <button className={!categoryId ? "active" : ""} onClick={() => applyQuery({ categoryId: "" })}>
-          Все
+          {t("all")}
         </button>
         {categories.map((category) => (
           <button
@@ -1497,7 +1636,7 @@ function Catalog() {
             className={categoryId === category.id ? "active" : ""}
             onClick={() => applyQuery({ categoryId: category.id })}
           >
-            <span>{category.icon || "◻"}</span> {category.name}
+          <span>{category.icon || "◻"}</span> {localizedCategory(category.name, i18n.resolvedLanguage)}
           </button>
         ))}
       </div>
@@ -1522,14 +1661,14 @@ function Catalog() {
       </form>
       <div className="catalog-heading">
         <div>
-          <small>{categoryId ? "ВЫБРАННАЯ КАТЕГОРИЯ" : "СВЕЖИЕ ОБЪЯВЛЕНИЯ"}</small>
-          <h2>{loading ? "Загрузка…" : `${items.length} ${listingCountLabel(items.length)}`}</h2>
+          <small>{String(categoryId ? t("selectedCategory") : t("freshListings")).toLocaleUpperCase()}</small>
+          <h2>{loading ? t("loading") : t("listings", { count: items.length })}</h2>
         </div>
         <select value={sort} onChange={(e) => { setSort(e.target.value); applyQuery({ sort: e.target.value }); }} aria-label="Сортировка">
-          <option value="newest">Сначала новые</option>
-          <option value="popular">Популярные</option>
-          <option value="price_asc">Цена по возрастанию</option>
-          <option value="price_desc">Цена по убыванию</option>
+          <option value="newest">{t("sortNewest")}</option>
+          <option value="popular">{t("sortPopular")}</option>
+          <option value="price_asc">{t("sortPriceAsc")}</option>
+          <option value="price_desc">{t("sortPriceDesc")}</option>
         </select>
       </div>
       {loadError && <LoadError message={loadError} />}
@@ -1557,19 +1696,19 @@ function Catalog() {
                   {item.isFavorite ? "♥" : "♡"}
                 </button>
               </div>
-              <small className="listing-category">{item.category?.icon} {item.category?.name}</small>
+              <small className="listing-category">{item.category?.icon} {localizedCategory(item.category?.name, i18n.resolvedLanguage)}</small>
               <h3>{item.title}</h3>
               <strong>
                 {item.priceType === "free"
-                  ? "Бесплатно"
+                  ? t("free")
                   : item.price
                     ? `${item.price} ${item.currency}`
-                    : "По договорённости"}
+                    : t("negotiable")}
               </strong>
               <p>
-                {item.locationText || "Сообщество"}
+                {item.locationText || t("community")}
                 {item.condition !== "not_applicable"
-                  ? ` · ${conditionLabel(item.condition)}`
+                  ? ` · ${conditionLabel(item.condition, t)}`
                   : ""}
               </p>
             </article>
@@ -1593,6 +1732,7 @@ function listingCountLabel(count: number) {
   return "объявлений";
 }
 function Categories() {
+  const { t, i18n } = useTranslation();
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -1605,14 +1745,14 @@ function Categories() {
   }, []);
   return (
     <section className="page">
-      <h1>Категории</h1>
-      <p className="hint">Выберите раздел, чтобы увидеть подходящие объявления сообщества.</p>
+      <h1>{t("categories")}</h1>
+      <p className="hint">{t("categoriesHint")}</p>
       {error && <LoadError message={error} />}
       {loading ? <div className="skeleton hero" /> : <div className="category-list">
         {data.map((c) => (
           <button key={c.id} onClick={() => nav(`/?categoryId=${c.id}`)}>
             <span>{c.icon || "◻"}</span>
-            {c.name}
+            {localizedCategory(c.name, i18n.resolvedLanguage)}
             <b>›</b>
           </button>
         ))}
@@ -1620,20 +1760,18 @@ function Categories() {
     </section>
   );
 }
-function conditionLabel(value: string) {
-  return (
-    (
-      {
-        new: "Новое",
-        like_new: "Как новое",
-        good: "Хорошее",
-        fair: "Удовлетворительное",
-        for_parts: "На запчасти",
-      } as Record<string, string>
-    )[value] || value
-  );
+function conditionLabel(value: string, t?: (key: string) => string) {
+  const keys: Record<string, string> = {
+    new: "conditionNew",
+    like_new: "conditionLikeNew",
+    good: "conditionGood",
+    fair: "conditionFair",
+    for_parts: "conditionParts",
+  };
+  return t && keys[value] ? t(keys[value]) : value;
 }
 function ListingDetail() {
+  const { t, i18n } = useTranslation();
   const { id } = useParams();
   const nav = useNavigate();
   const [item, setItem] = useState<any>();
@@ -1648,7 +1786,7 @@ function ListingDetail() {
     return (
       <section className="page">
         <button className="back-link" onClick={() => nav(-1)}>
-          ← Назад
+          ← {t("back")}
         </button>
         <LoadError message={error} />
       </section>
@@ -1671,7 +1809,7 @@ function ListingDetail() {
   return (
     <section className="page listing-detail">
       <button className="back-link" onClick={() => nav(-1)}>
-        ← Назад
+        ← {t("back")}
       </button>
       {item.images?.length > 0 && (
         <div className="detail-images">
@@ -1681,33 +1819,33 @@ function ListingDetail() {
         </div>
       )}
       <small>
-        {item.category?.icon} {item.category?.name}
+        {item.category?.icon} {localizedCategory(item.category?.name, i18n.resolvedLanguage)}
       </small>
       <h1>{item.title}</h1>
       <strong className="detail-price">
         {item.priceType === "free"
-          ? "Бесплатно"
+          ? t("free")
           : item.price
             ? `${item.price} ${item.currency}`
-            : "По договорённости"}
+            : t("negotiable")}
       </strong>
       <p>{item.description}</p>
       <div className="detail-meta">
-        <span>📍 {item.locationText || "Не указано"}</span>
+        <span>📍 {item.locationText || t("notSpecified")}</span>
         {item.condition !== "not_applicable" && (
-          <span>◇ {conditionLabel(item.condition)}</span>
+          <span>◇ {conditionLabel(item.condition, t)}</span>
         )}
         <span>👁 {item.viewCount}</span>
       </div>
       {message && <div className="save-success">{message}</div>}
       <button className="primary contact-button" onClick={() => void contact()}>
-        Написать автору
+        {t("contactAuthor")}
       </button>
     </section>
   );
 }
 function Create() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const nav = useNavigate();
   const [query] = useSearchParams();
   const editingId = query.get("listingId");
@@ -1824,21 +1962,21 @@ function Create() {
           }
         >
           <span>{c.icon || "◻"}</span>
-          <b>{c.name}</b>
+          <b>{localizedCategory(c.name, i18n.resolvedLanguage)}</b>
           <i>{data.categoryId === c.id ? "✓" : "›"}</i>
         </button>
       ))}
     </div>,
     <input
       maxLength={80}
-      placeholder="Что вы предлагаете?"
+      placeholder={t("titlePlaceholder")}
       value={data.title || ""}
       onChange={(e) => setData({ ...data, title: e.target.value })}
     />,
     <div>
       <label className={`upload ${uploading ? "busy" : ""}`}>
-        ＋<b>{uploading ? "Загрузка…" : "Добавить фотографии"}</b>
-        <small>JPG, PNG, WEBP или HEIC до 10 МБ</small>
+        ＋<b>{uploading ? t("uploadProgress") : t("uploadPhotos")}</b>
+        <small>{t("imageFormats")}</small>
         <input
           type="file"
           accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
@@ -1871,7 +2009,7 @@ function Create() {
                     setAttribute(field.key, event.target.value)
                   }
                 >
-                  <option value="">Выберите</option>
+                  <option value="">{t("choose")}</option>
                   {field.options?.map((option: string) => (
                     <option key={option}>{option}</option>
                   ))}
@@ -1902,28 +2040,28 @@ function Create() {
       )}
       {conditionEnabled && (
         <label>
-          <span>Состояние</span>
+          <span>{t("condition")}</span>
           <select
             value={data.condition || "good"}
             onChange={(e) => setData({ ...data, condition: e.target.value })}
           >
-            <option value="new">Новое</option>
-            <option value="like_new">Как новое</option>
-            <option value="good">Хорошее</option>
-            <option value="fair">Удовлетворительное</option>
-            <option value="for_parts">На запчасти</option>
+            <option value="new">{t("conditionNew")}</option>
+            <option value="like_new">{t("conditionLikeNew")}</option>
+            <option value="good">{t("conditionGood")}</option>
+            <option value="fair">{t("conditionFair")}</option>
+            <option value="for_parts">{t("conditionParts")}</option>
           </select>
         </label>
       )}
       {!fieldSchema.length && !conditionEnabled && (
         <p className="hint">
-          Для этой категории дополнительные характеристики не нужны.
+          {t("noExtraFields")}
         </p>
       )}
     </div>,
     <textarea
       maxLength={3000}
-      placeholder="Подробно опишите товар"
+      placeholder={t("descriptionPlaceholder")}
       value={data.description || ""}
       onChange={(e) => setData({ ...data, description: e.target.value })}
     />,
@@ -1938,25 +2076,25 @@ function Create() {
           })
         }
       >
-        <option value="fixed">Фиксированная цена</option>
-        <option value="negotiable">Торг уместен</option>
-        <option value="free">Бесплатно</option>
-        <option value="exchange">Обмен</option>
-        <option value="contact">Цена по запросу</option>
+        <option value="fixed">{t("fixedPrice")}</option>
+        <option value="negotiable">{t("negotiablePrice")}</option>
+        <option value="free">{t("free")}</option>
+        <option value="exchange">{t("exchange")}</option>
+        <option value="contact">{t("priceOnRequest")}</option>
       </select>
       {!["free", "exchange", "contact"].includes(data.priceType || "fixed") && (
         <input
           type="number"
           min="0"
           step="0.01"
-          placeholder="Цена, EUR"
+          placeholder={t("pricePlaceholder")}
           value={data.price || ""}
           onChange={(e) => setData({ ...data, price: e.target.value })}
         />
       )}
     </div>,
     <input
-      placeholder="Город или район"
+      placeholder={t("locationPlaceholder")}
       value={data.locationText || ""}
       onChange={(e) => setData({ ...data, locationText: e.target.value })}
     />,
@@ -1964,8 +2102,8 @@ function Create() {
       value={data.contactMode || "telegram"}
       onChange={(e) => setData({ ...data, contactMode: e.target.value })}
     >
-      <option value="telegram">Написать в Telegram</option>
-      <option value="bot">Уведомить через бота</option>
+      <option value="telegram">{t("contactTelegram")}</option>
+      <option value="bot">{t("contactBot")}</option>
     </select>,
     <div className="preview">
       <h2>{data.title}</h2>
@@ -2032,22 +2170,22 @@ function Create() {
   };
   return (
     <section className="page wizard">
-      <small>Шаг {step + 1} из 9</small>
+      <small>{t("step", { current: step + 1, total: 9 })}</small>
       <div className="progress">
         <i style={{ width: `${((step + 1) / 9) * 100}%` }} />
       </div>
       <h1>
         {
           [
-            "Категория",
-            "Название",
-            "Фотографии",
-            "Характеристики",
-            "Описание",
-            "Цена",
-            "Местоположение",
-            "Способ связи",
-            "Предпросмотр",
+            t("category"),
+            t("title"),
+            t("photos"),
+            t("attributes"),
+            t("description"),
+            t("price"),
+            t("location"),
+            t("contactMethod"),
+            t("preview"),
           ][step]
         }
       </h1>
@@ -2067,7 +2205,7 @@ function Create() {
           className="primary"
           onClick={() => (step === 8 ? done() : setStep(step + 1))}
         >
-          {submitting ? "Отправка…" : step === 8 ? t("submit") : t("next")}
+          {submitting ? t("sending") : step === 8 ? t("submit") : t("next")}
         </button>
       </div>
     </section>
