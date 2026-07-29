@@ -9,6 +9,29 @@ import {
   startPlatformWebLogin,
 } from "./api";
 
+// ─────────────────────────────────────────────────────────────────────────────
+// FINANCIAL CONFIGURATION
+// All financial values come from the /api/public/site endpoint (SiteData).
+// The constant below is the only place to update the Stars→EUR estimate.
+// 1 Telegram Star ≈ 0.012 EUR (roughly 12 EUR per 1 000 Stars).
+// ─────────────────────────────────────────────────────────────────────────────
+const STARS_TO_EUR_ESTIMATE = 0.012;
+
+function formatNum(n: number): string {
+  return Math.round(n).toLocaleString("ru-RU");
+}
+
+function formatEur(n: number): string {
+  return Math.round(n).toLocaleString("ru-RU", {
+    style: "currency",
+    currency: "EUR",
+    maximumFractionDigits: 0,
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TYPES
+// ─────────────────────────────────────────────────────────────────────────────
 type SiteData = {
   platformName: string;
   botUsername: string;
@@ -38,6 +61,9 @@ type SiteData = {
   };
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// ANALYTICS
+// ─────────────────────────────────────────────────────────────────────────────
 const visitor = () => {
   const key = "boardVisitor";
   let value = localStorage.getItem(key);
@@ -66,57 +92,95 @@ async function track(event: string, path = window.location.pathname) {
   }
 }
 
-function Header({ botUsername }: { botUsername?: string }) {
+// ─────────────────────────────────────────────────────────────────────────────
+// HEADER
+// ─────────────────────────────────────────────────────────────────────────────
+function Header() {
   const { t } = useTranslation();
   const [signedIn, setSignedIn] = useState(
     Boolean(sessionStorage.getItem("platformToken")),
   );
+  const [menuOpen, setMenuOpen] = useState(false);
+
   useEffect(() => {
     fetch("/api/platform/me")
       .then((response) => setSignedIn(response.ok))
       .catch(() => undefined);
   }, []);
+
+  const navLinks = [
+    { href: "/#how", label: t("howItWorks") },
+    { href: "/#features", label: t("featuresNav") },
+    { href: "/#pricing", label: t("pricingNav") },
+    { href: "/#faq", label: t("faqNav") },
+  ];
+
   return (
-    <header className="public-header">
-      <a className="public-brand" href="/">
-        <span>AD</span>
+    <header className={`public-header${menuOpen ? " menu-open" : ""}`}>
+      <a className="public-brand" href="/" aria-label="Adnecta">
+        <span aria-hidden="true">AD</span>
         <b>Adnecta</b>
       </a>
-      <nav>
-        <a href="/pricing">{t("pricingNav")}</a>
-        <a href="/docs">{t("howItWorks")}</a>
-        <a href="/support">{t("support")}</a>
+
+      <nav aria-label="Main navigation">
+        {navLinks.map(({ href, label }) => (
+          <a key={href} href={href} onClick={() => setMenuOpen(false)}>
+            {label}
+          </a>
+        ))}
       </nav>
-      <LanguageSelect compact />
-      <a
-        className="public-login"
-        href={signedIn ? "/owner" : "/login"}
-        onClick={() =>
-          void track(signedIn ? "dashboard_return" : "web_login_open")
-        }
+
+      <div className="header-right">
+        <LanguageSelect compact />
+        <a
+          className="public-login"
+          href={signedIn ? "/owner" : "/login"}
+          onClick={() =>
+            void track(signedIn ? "dashboard_return" : "web_login_open")
+          }
+        >
+          {signedIn ? t("openAdminDashboard") : t("telegramLogin")}
+        </a>
+      </div>
+
+      <button
+        className="header-menu-btn"
+        aria-label={t(menuOpen ? "menuClose" : "menuOpen")}
+        aria-expanded={menuOpen}
+        onClick={() => setMenuOpen((v) => !v)}
       >
-        {signedIn ? t("openAdminDashboard") : t("telegramLogin")}
-      </a>
+        <span />
+        <span />
+        <span />
+      </button>
     </header>
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// FOOTER
+// ─────────────────────────────────────────────────────────────────────────────
 function Footer() {
   const { t } = useTranslation();
   return (
     <footer className="public-footer">
-      <div>
-        <b>Adnecta 2.0</b>
-        <span>Marketplace for every community.</span>
+      <div className="footer-brand">
+        <a className="public-brand" href="/" aria-label="Adnecta">
+          <span aria-hidden="true">AD</span>
+          <b>Adnecta</b>
+        </a>
+        <p>{t("footerSlogan")}</p>
       </div>
-      <nav>
+      <nav aria-label="Footer navigation">
+        <a href="/#pricing">{t("pricingNav")}</a>
+        <a href="/#how">{t("howItWorks")}</a>
+        <a href="/support">{t("support")}</a>
         <a href="/terms">{t("terms")}</a>
         <a href="/privacy">{t("privacy")}</a>
         <a href="/prohibited">{t("prohibited")}</a>
-        <a href="/support">{t("support")}</a>
       </nav>
       <small>
-        {t("betaStars")}{" "}
+        {t("footerBeta")}{" "}
         <a
           className="service-owner-entry"
           href="/platform-login"
@@ -129,181 +193,271 @@ function Footer() {
   );
 }
 
-function TelegramCta({ data, label }: { data: SiteData; label?: string }) {
+// ─────────────────────────────────────────────────────────────────────────────
+// SHARED CTA BUTTON
+// ─────────────────────────────────────────────────────────────────────────────
+function TelegramCta({ label, inverted }: { label?: string; inverted?: boolean }) {
   const { t } = useTranslation();
   return (
     <a
-      className="public-primary"
+      className={`public-primary${inverted ? " public-primary-inv" : ""}`}
       href="/login"
       onClick={() => void track("web_signup_start")}
     >
       {label || t("connectCommunity")}
-      <span>→</span>
     </a>
   );
 }
 
-function Landing({ data }: { data: SiteData }) {
+// ─────────────────────────────────────────────────────────────────────────────
+// LANDING SECTIONS
+// ─────────────────────────────────────────────────────────────────────────────
+
+function HeroSection() {
   const { t } = useTranslation();
   return (
-    <>
-      {/* ── HERO ── */}
-      <section className="public-hero">
+    <section className="public-hero">
+      <div className="hero-inner">
         <div className="beta-pill">{t("landingBadge")}</div>
-        <h1>
-          {t("landingTitle")}
-          <br />
-          <em>{t("landingAccent")}</em>
-        </h1>
-        <p>{t("landingLead")}</p>
+        <h1>{t("heroTitle")}</h1>
+        <p>{t("heroLead")}</p>
         <div className="hero-actions">
-          <TelegramCta data={data} />
-          <a href="/docs" className="hero-secondary">{t("viewProcess")}</a>
+          <a
+            className="public-primary public-primary-inv"
+            href="/login"
+            onClick={() => void track("hero_cta_click")}
+          >
+            {t("connectCommunity")}
+          </a>
+          <a href="#how" className="hero-secondary">
+            {t("viewProcess")}
+          </a>
         </div>
-        <div className="trust-row">
-          <span>✓ {t("trustBot")}</span>
-          <span>✓ {t("starsOnlyNote")}</span>
-          <span>✓ {t("trustDashboard")}</span>
+        <div className="hero-benefits">
+          <span>✓ {t("heroBenefit1")}</span>
+          <span>✓ {t("heroBenefit2")}</span>
+          <span>✓ {t("heroBenefit3")}</span>
+          <span>✓ {t("heroBenefit4")}</span>
         </div>
-      </section>
+      </div>
+    </section>
+  );
+}
 
-      {/* ── HOW IT WORKS ── */}
-      <section className="public-how">
-        <div className="how-header">
-          <small>{t("quickLaunch")}</small>
-          <h2>{t("howItWorksTitle")}</h2>
+function ProblemSection() {
+  const { t } = useTranslation();
+  return (
+    <section className="public-problem">
+      <div className="lp-container">
+        <div className="section-label">{t("problemBadge")}</div>
+        <h2>{t("problemTitle")}</h2>
+        <p className="section-lead">{t("problemDesc")}</p>
+        <div className="problem-comparison">
+          <div className="problem-col problem-before">
+            <h3>{t("problemColTitle")}</h3>
+            <ul>
+              {(["problemItem1","problemItem2","problemItem3","problemItem4","problemItem5"] as const).map((k) => (
+                <li key={k}>{t(k)}</li>
+              ))}
+            </ul>
+          </div>
+          <div className="problem-col problem-after">
+            <h3>{t("solutionColTitle")}</h3>
+            <ul>
+              {(["solutionItem1","solutionItem2","solutionItem3","solutionItem4","solutionItem5","solutionItem6"] as const).map((k) => (
+                <li key={k}>{t(k)}</li>
+              ))}
+            </ul>
+          </div>
         </div>
-        <div className="how-grid">
-          <article>
-            <span>01</span>
-            <h3>{t("selfConnect")}</h3>
-            <p>{t("selfConnectText")}</p>
-          </article>
-          <article>
-            <span>02</span>
-            <h3>{t("smartPublishing")}</h3>
-            <p>{t("smartPublishingText")}</p>
-          </article>
-          <article>
-            <span>03</span>
-            <h3>{t("communityEconomy")}</h3>
-            <p>{t("communityEconomyText")}</p>
-          </article>
-        </div>
-      </section>
+      </div>
+    </section>
+  );
+}
 
-      {/* ── DEMO ── */}
-      <section className="public-demo">
-        <div className="demo-board">
-          <header>
-            <span>IT Tarragona</span>
-            <small>{t("communityBoard")}</small>
-          </header>
-          <article>
-            <i>🚲</i>
-            <div>
-              <b>City bicycle</b>
-              <small>Vehicles · Tarragona</small>
-              <strong>180 €</strong>
-            </div>
-          </article>
-          <article>
-            <i>💻</i>
-            <div>
-              <b>Frontend developer</b>
-              <small>Jobs · Remote</small>
-              <strong>{t("negotiable")}</strong>
-            </div>
-          </article>
-          <article>
-            <i>🏠</i>
-            <div>
-              <b>2BR apartment for rent</b>
-              <small>Property · Barcelona</small>
-              <strong>1 200 €/mo</strong>
-            </div>
-          </article>
+function DemoSection() {
+  const { t } = useTranslation();
+  return (
+    <section className="public-demo">
+      <div className="lp-container demo-layout">
+        <div className="demo-text">
+          <div className="section-label">{t("demoBadge")}</div>
+          <h2>{t("demoTitle")}</h2>
+          <p>{t("demoDesc")}</p>
         </div>
-        <aside>
-          <small>{t("insideGroup")}</small>
-          <h2>{t("notEmptyMarketplace")}</h2>
-          <p>{t("communityValue")}</p>
-          <TelegramCta data={data} />
-        </aside>
-      </section>
-
-      {/* ── FEATURES ── */}
-      <section className="public-features">
-        <small>{t("onePlatform")}</small>
-        <h2>{t("everythingLocal")}</h2>
-        <div className="features-grid">
-          <article>
-            <span>01</span>
-            <h3>{t("selfConnect")}</h3>
-            <p>{t("selfConnectText")}</p>
-          </article>
-          <article>
-            <span>02</span>
-            <h3>{t("smartPublishing")}</h3>
-            <p>{t("smartPublishingText")}</p>
-          </article>
-          <article>
-            <span>03</span>
-            <h3>{t("communityEconomy")}</h3>
-            <p>{t("communityEconomyText")}</p>
-          </article>
-          <article>
-            <span>04</span>
-            <h3>{t("communityAdministrator")}</h3>
-            <p>{t("communityAdministratorText")}</p>
-          </article>
+        <div className="demo-visual" aria-hidden="true">
+          <div className="demo-board">
+            <header>
+              <span>{t("demoGroupName")}</span>
+              <small>{t("communityBoard")}</small>
+            </header>
+            <article>
+              <i>🚲</i>
+              <div>
+                <b>{t("demoItem1Title")}</b>
+                <small>{t("demoItem1Cat")}</small>
+                <strong>{t("demoItem1Price")}</strong>
+              </div>
+            </article>
+            <article>
+              <i>💻</i>
+              <div>
+                <b>{t("demoItem2Title")}</b>
+                <small>{t("demoItem2Cat")}</small>
+                <strong>{t("negotiable")}</strong>
+              </div>
+            </article>
+            <article>
+              <i>🏠</i>
+              <div>
+                <b>{t("demoItem3Title")}</b>
+                <small>{t("demoItem3Cat")}</small>
+                <strong>{t("demoItem3Price")}</strong>
+              </div>
+            </article>
+          </div>
         </div>
-      </section>
+      </div>
+    </section>
+  );
+}
 
-      {/* ── ROLES ── */}
-      <section className="public-roles">
-        <small>{t("clearRoles")}</small>
-        <h2>{t("roleInterfaces")}</h2>
+function BenefitsSection() {
+  const { t } = useTranslation();
+  const benefits = [
+    { icon: "📋", title: t("benefit1Title"), text: t("benefit1Text") },
+    { icon: "⚙️", title: t("benefit2Title"), text: t("benefit2Text") },
+    { icon: "💰", title: t("benefit3Title"), text: t("benefit3Text") },
+  ];
+  return (
+    <section className="public-benefits" id="features">
+      <div className="lp-container">
+        <div className="section-label">{t("benefitsBadge")}</div>
+        <h2>{t("benefitsTitle")}</h2>
+        <div className="benefits-grid">
+          {benefits.map(({ icon, title, text }) => (
+            <article key={title}>
+              <div className="benefit-icon" aria-hidden="true">{icon}</div>
+              <h3>{title}</h3>
+              <p>{text}</p>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function HowSection() {
+  const { t } = useTranslation();
+  const steps = [
+    { num: "01", title: t("howStep1Title"), text: t("howStep1Text") },
+    { num: "02", title: t("howStep2Title"), text: t("howStep2Text") },
+    { num: "03", title: t("howStep3Title"), text: t("howStep3Text") },
+  ];
+  return (
+    <section className="public-how" id="how">
+      <div className="lp-container">
+        <div className="section-label">{t("howBadge")}</div>
+        <h2>{t("howItWorksTitle")}</h2>
+        <div className="how-steps">
+          {steps.map(({ num, title, text }) => (
+            <article key={num}>
+              <span className="step-num" aria-hidden="true">{num}</span>
+              <h3>{title}</h3>
+              <p>{text}</p>
+            </article>
+          ))}
+        </div>
+        <div className="how-cta">
+          <TelegramCta label={t("howCta")} />
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function RolesSection() {
+  const { t } = useTranslation();
+  const roles = [
+    { title: t("roleAdminTitle"), text: t("roleAdminText") },
+    { title: t("roleModTitle"), text: t("roleModText") },
+    { title: t("roleMemberTitle"), text: t("roleMemberText") },
+  ];
+  return (
+    <section className="public-roles">
+      <div className="lp-container">
+        <div className="section-label">{t("rolesBadge")}</div>
+        <h2>{t("rolesTitle")}</h2>
         <div className="roles-grid">
-          <article>
-            <b>{t("communityAdministrator")}</b>
-            <p>{t("communityAdministratorText")}</p>
-          </article>
-          <article>
-            <b>{t("moderator")}</b>
-            <p>{t("moderatorText")}</p>
-          </article>
-          <article>
-            <b>{t("member")}</b>
-            <p>{t("memberText")}</p>
-          </article>
+          {roles.map(({ title, text }) => (
+            <article key={title}>
+              <b>{title}</b>
+              <p>{text}</p>
+            </article>
+          ))}
         </div>
-      </section>
+      </div>
+    </section>
+  );
+}
 
-      {/* ── PRICING ── */}
-      <section className="public-pricing-inline">
-        <small>{t("transparentRules")}</small>
-        <h2>{t("priceAndActivity")}</h2>
-        <p className="pricing-lead">{t("economyLead", { count: data.publication.minimumStars })}</p>
+function AdminControlSection() {
+  const { t } = useTranslation();
+  const items = [
+    t("adminItem1"), t("adminItem2"), t("adminItem3"), t("adminItem4"),
+    t("adminItem5"), t("adminItem6"), t("adminItem7"), t("adminItem8"),
+    t("adminItem9"), t("adminItem10"),
+  ];
+  return (
+    <section className="public-admin-control">
+      <div className="lp-container">
+        <div className="section-label">{t("adminBadge")}</div>
+        <h2>{t("adminTitle")}</h2>
+        <ul className="admin-list">
+          {items.map((item, i) => (
+            <li key={i}>
+              <span aria-hidden="true">✓</span>
+              {item}
+            </li>
+          ))}
+        </ul>
+      </div>
+    </section>
+  );
+}
+
+function PricingSection({ data }: { data: SiteData }) {
+  const { t } = useTranslation();
+  const { minimumStars, defaultCommissionPercent, holdDays, freeBoardSubscriptionStars, minimumPayoutStars } = data.publication;
+  const communityShare = 100 - defaultCommissionPercent;
+
+  return (
+    <section className="public-pricing-inline" id="pricing">
+      <div className="lp-container">
+        <div className="section-label">{t("pricingBadge")}</div>
+        <h2>{t("pricingTitle")}</h2>
+        <p className="pricing-lead">{t("pricingLead")}</p>
         <div className="pricing-models">
           <article>
-            <small>{t("model1Label")}</small>
+            <small>{t("pricingModel1Label")}</small>
             <h3>{t("model1Title")}</h3>
             <strong className="pricing-price">
-              15%<i>{" "}{t("model1Feature1").split(" ")[0] === "85%" ? "commission" : "platform fee"}</i>
+              {t("pricingMinNote", { min: minimumStars })}
             </strong>
-            <p>{t("model1Desc", { count: data.publication.minimumStars })}</p>
+            <p className="pricing-commission">{t("pricingCommissionNote", { commission: defaultCommissionPercent })}</p>
             <ul>
-              <li>✓ {t("model1Feature1")}</li>
+              <li>✓ {t("model1Feature1", { share: communityShare })}</li>
               <li>✓ {t("model1Feature2")}</li>
               <li>✓ {t("model1Feature3")}</li>
             </ul>
           </article>
-          <article className="pricing-alt">
-            <small>{t("model2Label")}</small>
+          <article className="pricing-featured">
+            <small>{t("pricingModel2Label")}</small>
             <h3>{t("model2Title")}</h3>
             <strong className="pricing-price">
-              {data.publication.freeBoardSubscriptionStars} ⭐<i>/30 days</i>
+              {freeBoardSubscriptionStars}&nbsp;⭐
+              <i>&nbsp;{t("pricingIntervalNote")}</i>
             </strong>
             <p>{t("model2Desc")}</p>
             <ul>
@@ -314,48 +468,257 @@ function Landing({ data }: { data: SiteData }) {
           </article>
         </div>
         <div className="pricing-note-inline">
-          <b>{t("allPaymentsInTelegram")}</b>
-          <p>{t("allPaymentsDesc", { hold: data.publication.holdDays, min: data.publication.minimumPayoutStars })}</p>
+          <p>{t("pricingPaymentsDesc", { hold: holdDays, min: minimumPayoutStars })}</p>
         </div>
-      </section>
+      </div>
+    </section>
+  );
+}
 
-      {/* ── FAQ ── */}
-      <section className="public-faq">
-        <small>{t("faq")}</small>
-        <h2>{t("transparentLaunch")}</h2>
-        <details>
-          <summary>{t("ownBotQuestion")}</summary>
-          <p>{t("ownBotAnswer")}</p>
-        </details>
-        <details>
-          <summary>{t("freeQuestion")}</summary>
-          <p>{t("freeAnswer")}</p>
-        </details>
-        <details>
-          <summary>{t("moderationQuestion")}</summary>
-          <p>{t("moderationAnswer")}</p>
-        </details>
-        <details>
-          <summary>{t("disableQuestion")}</summary>
-          <p>{t("disableAnswer")}</p>
-        </details>
-      </section>
+function CalculatorSection({ data }: { data: SiteData }) {
+  const { t } = useTranslation();
+  const { minimumStars, defaultCommissionPercent } = data.publication;
+  const defaultPrice = Math.max(minimumStars, 200);
 
-      {/* ── FINAL CTA ── */}
-      <section className="public-final">
+  const [publications, setPublications] = useState(50);
+  const [pricePerPub, setPricePerPub] = useState(defaultPrice);
+
+  const commissionRate = defaultCommissionPercent / 100;
+  const total = publications * pricePerPub;
+  const commission = total * commissionRate;
+  const communityMonthly = total - commission;
+  const communityYearly = communityMonthly * 12;
+  const eurMonthly = communityMonthly * STARS_TO_EUR_ESTIMATE;
+  const eurYearly = communityYearly * STARS_TO_EUR_ESTIMATE;
+
+  const handlePubs = (v: string) => {
+    const n = parseInt(v, 10);
+    if (!isNaN(n) && n >= 1 && n <= 10000) setPublications(n);
+  };
+
+  const handlePrice = (v: string) => {
+    const n = parseInt(v, 10);
+    if (!isNaN(n) && n >= minimumStars && n <= 100000) setPricePerPub(n);
+  };
+
+  return (
+    <section className="public-calculator">
+      <div className="lp-container">
+        <div className="section-label">{t("calcBadge")}</div>
+        <h2>{t("calcTitle")}</h2>
+        <div className="calc-layout">
+          <div className="calc-inputs">
+            <div className="calc-field">
+              <label htmlFor="calc-pub">{t("calcPublicationsLabel")}</label>
+              <input
+                id="calc-pub"
+                type="number"
+                value={publications}
+                min={1}
+                max={10000}
+                onChange={(e) => handlePubs(e.target.value)}
+              />
+            </div>
+            <div className="calc-field">
+              <label htmlFor="calc-price">{t("calcPriceLabel")}</label>
+              <input
+                id="calc-price"
+                type="number"
+                value={pricePerPub}
+                min={minimumStars}
+                max={100000}
+                onChange={(e) => handlePrice(e.target.value)}
+              />
+              <small>min {minimumStars}&nbsp;⭐</small>
+            </div>
+          </div>
+          <div className="calc-results">
+            <div className="calc-row">
+              <span>{t("calcTotal")}</span>
+              <strong>{formatNum(total)}&nbsp;⭐</strong>
+            </div>
+            <div className="calc-row calc-row-dim">
+              <span>{t("calcCommission", { rate: defaultCommissionPercent })}</span>
+              <span>−{formatNum(commission)}&nbsp;⭐</span>
+            </div>
+            <div className="calc-row calc-row-main">
+              <span>{t("calcCommunity")}</span>
+              <div className="calc-main-value">
+                <strong>{formatNum(communityMonthly)}&nbsp;⭐</strong>
+                <em>{t("calcEurApprox", { eur: formatEur(eurMonthly) })}</em>
+              </div>
+            </div>
+            <div className="calc-row">
+              <span>{t("calcYearly")}</span>
+              <div className="calc-yearly-value">
+                <strong>{formatNum(communityYearly)}&nbsp;⭐</strong>
+                <em>{t("calcEurApprox", { eur: formatEur(eurYearly) })}</em>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p className="calc-disclaimer">{t("calcDisclaimer")}</p>
+      </div>
+    </section>
+  );
+}
+
+function ScenariosSection() {
+  const { t } = useTranslation();
+  const items = [
+    { icon: "🏙️", key: "scenario1" as const },
+    { icon: "🏠", key: "scenario2" as const },
+    { icon: "💼", key: "scenario3" as const },
+    { icon: "🚗", key: "scenario4" as const },
+    { icon: "🛍️", key: "scenario5" as const },
+    { icon: "🌍", key: "scenario6" as const },
+    { icon: "👨‍👩‍👧", key: "scenario7" as const },
+    { icon: "🎓", key: "scenario8" as const },
+    { icon: "🔧", key: "scenario9" as const },
+    { icon: "♟️", key: "scenario10" as const },
+  ];
+  return (
+    <section className="public-scenarios">
+      <div className="lp-container">
+        <div className="section-label">{t("scenariosBadge")}</div>
+        <h2>{t("scenariosTitle")}</h2>
+        <div className="scenarios-grid">
+          {items.map(({ icon, key }) => (
+            <div className="scenario-item" key={key}>
+              <span aria-hidden="true">{icon}</span>
+              <p>{t(key)}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function TrustSection() {
+  const { t } = useTranslation();
+  return (
+    <section className="public-trust">
+      <div className="lp-container">
+        <div className="section-label">{t("trustBadge")}</div>
+        <h2>{t("trustTitle")}</h2>
+        <p className="section-lead">{t("trustDesc")}</p>
+        <div className="trust-grid">
+          <div className="trust-col">
+            <h3>{t("trustCanTitle")}</h3>
+            <ul>
+              <li>{t("trustCan1")}</li>
+              <li>{t("trustCan2")}</li>
+              <li>{t("trustCan3")}</li>
+            </ul>
+          </div>
+          <div className="trust-col trust-col-cannot">
+            <h3>{t("trustCannotTitle")}</h3>
+            <ul>
+              <li>{t("trustCannot1")}</li>
+              <li>{t("trustCannot2")}</li>
+              <li>{t("trustCannot3")}</li>
+            </ul>
+          </div>
+        </div>
+        <div className="trust-data">
+          <h3>{t("trustDataTitle")}</h3>
+          <ul>
+            <li>{t("trustData1")}</li>
+            <li>{t("trustData2")}</li>
+            <li>{t("trustData3")}</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function FaqSection({ data }: { data: SiteData }) {
+  const { t } = useTranslation();
+  const { defaultCommissionPercent, holdDays, minimumPayoutStars } = data.publication;
+  const share = 100 - defaultCommissionPercent;
+
+  const faqs = [
+    { q: t("faqMembersRegister"), a: t("faqMembersRegisterAnswer") },
+    { q: t("ownBotQuestion"), a: t("ownBotAnswer") },
+    { q: t("faqWhereView"), a: t("faqWhereViewAnswer") },
+    { q: t("freeQuestion"), a: t("freeAnswer") },
+    { q: t("moderationQuestion"), a: t("moderationAnswer") },
+    { q: t("faqBotPermissions"), a: t("faqBotPermissionsAnswer") },
+    { q: t("faqPayouts"), a: t("faqPayoutsAnswer", { share, hold: holdDays, min: minimumPayoutStars }) },
+    { q: t("disableQuestion"), a: t("disableAnswer") },
+  ];
+
+  return (
+    <section className="public-faq" id="faq">
+      <div className="lp-container faq-inner">
+        <div className="section-label">{t("faq")}</div>
+        <h2>{t("faqTitle")}</h2>
+        {faqs.map(({ q, a }, i) => (
+          <details key={i}>
+            <summary>{q}</summary>
+            <p>{a}</p>
+          </details>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function FinalCtaSection() {
+  const { t } = useTranslation();
+  return (
+    <section className="public-final">
+      <div className="lp-container final-inner">
         <h2>{t("launchCommunity")}</h2>
         <p>{t("launchLead")}</p>
-        <TelegramCta data={data} label={t("createAdminDashboard")} />
-      </section>
+        <TelegramCta label={t("createAdminDashboard")} inverted />
+        <small>{t("heroBenefit1")}</small>
+      </div>
+    </section>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LANDING PAGE
+// ─────────────────────────────────────────────────────────────────────────────
+function Landing({ data }: { data: SiteData }) {
+  useEffect(() => {
+    void track("landing_view");
+  }, []);
+
+  return (
+    <>
+      <HeroSection />
+      <ProblemSection />
+      <DemoSection />
+      <BenefitsSection />
+      <HowSection />
+      <RolesSection />
+      <AdminControlSection />
+      <PricingSection data={data} />
+      <CalculatorSection data={data} />
+      <ScenariosSection />
+      <TrustSection />
+      <FaqSection data={data} />
+      <FinalCtaSection />
     </>
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// /pricing PAGE
+// ─────────────────────────────────────────────────────────────────────────────
 function Pricing({ data }: { data: SiteData }) {
   const { t } = useTranslation();
+  const { minimumStars, defaultCommissionPercent, holdDays, freeBoardSubscriptionStars, minimumPayoutStars } = data.publication;
+  const communityShare = 100 - defaultCommissionPercent;
+
   useEffect(() => {
     void track("pricing_view");
   }, []);
+
   return (
     <main className="public-page">
       <small>{t("pricingPageBadge")}</small>
@@ -363,23 +726,24 @@ function Pricing({ data }: { data: SiteData }) {
       <p className="lead">{t("pricingPageLead")}</p>
       <div className="pricing-grid">
         <article>
-          <small>{t("model1Label")}</small>
+          <small>{t("pricingModel1Label")}</small>
           <h2>{t("model1Title")}</h2>
           <strong>
-            15%<i>{" "}platform fee</i>
+            {t("pricingMinNote", { min: minimumStars })}
           </strong>
-          <p>{t("model1Desc", { count: data.publication.minimumStars })}</p>
+          <p>{t("pricingCommissionNote", { commission: defaultCommissionPercent })}</p>
           <ul>
-            <li>✓ {t("model1Feature1")}</li>
+            <li>✓ {t("model1Feature1", { share: communityShare })}</li>
             <li>✓ {t("model1Feature2")}</li>
             <li>✓ {t("model1Feature3")}</li>
           </ul>
         </article>
         <article>
-          <small>{t("model2Label")}</small>
+          <small>{t("pricingModel2Label")}</small>
           <h2>{t("model2Title")}</h2>
           <strong>
-            {data.publication.freeBoardSubscriptionStars} ⭐<i>/ 30 days</i>
+            {freeBoardSubscriptionStars}&nbsp;⭐
+            <i>&nbsp;{t("pricingIntervalNote")}</i>
           </strong>
           <p>{t("model2Desc")}</p>
           <ul>
@@ -390,14 +754,16 @@ function Pricing({ data }: { data: SiteData }) {
         </article>
       </div>
       <div className="pricing-note">
-        <b>{t("allPaymentsInTelegram")}</b>
-        <p>{t("allPaymentsDesc", { hold: data.publication.holdDays, min: data.publication.minimumPayoutStars })}</p>
+        <p>{t("pricingPaymentsDesc", { hold: holdDays, min: minimumPayoutStars })}</p>
       </div>
-      <TelegramCta data={data} />
+      <TelegramCta />
     </main>
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// /docs PAGE
+// ─────────────────────────────────────────────────────────────────────────────
 function Docs({ data }: { data: SiteData }) {
   const { t } = useTranslation();
   useEffect(() => {
@@ -409,56 +775,55 @@ function Docs({ data }: { data: SiteData }) {
       <h1>{t("docsPageTitle")}</h1>
       <p className="lead">{t("docsPageLead")}</p>
       <div className="steps">
-        <article>
-          <b>1</b>
-          <div>
-            <h2>{t("docsStep1Title")}</h2>
-            <p>{t("docsStep1Text")}</p>
-          </div>
-        </article>
-        <article>
-          <b>2</b>
-          <div>
-            <h2>{t("docsStep2Title")}</h2>
-            <p>{t("docsStep2Text")}</p>
-          </div>
-        </article>
-        <article>
-          <b>3</b>
-          <div>
-            <h2>{t("docsStep3Title")}</h2>
-            <p>{t("docsStep3Text")}</p>
-          </div>
-        </article>
-        <article>
-          <b>4</b>
-          <div>
-            <h2>{t("docsStep4Title")}</h2>
-            <p>{t("docsStep4Text")}</p>
-          </div>
-        </article>
-        <article>
-          <b>5</b>
-          <div>
-            <h2>{t("docsStep5Title")}</h2>
-            <p>{t("docsStep5Text", { stars: data.publication.freeBoardSubscriptionStars })}</p>
-          </div>
-        </article>
-        <article>
-          <b>6</b>
-          <div>
-            <h2>{t("docsStep6Title")}</h2>
-            <p>{t("docsStep6Text")}</p>
-          </div>
-        </article>
+        {[1, 2, 3, 4, 5, 6].map((n) => (
+          <article key={n}>
+            <b>{n}</b>
+            <div>
+              <h2>{t(`docsStep${n}Title` as any)}</h2>
+              <p>
+                {n === 5
+                  ? t("docsStep5Text", { stars: data.publication.freeBoardSubscriptionStars })
+                  : t(`docsStep${n}Text` as any)}
+              </p>
+            </div>
+          </article>
+        ))}
       </div>
       <h2>{t("commissionAndPayouts")}</h2>
       <p>{t("commissionAndPayoutsDesc", { hold: data.publication.holdDays, min: data.publication.minimumPayoutStars })}</p>
-      <TelegramCta data={data} label={t("startRegistration")} />
+      <TelegramCta label={t("startRegistration")} />
     </main>
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// /support PAGE
+// ─────────────────────────────────────────────────────────────────────────────
+function Support({ data }: { data: SiteData }) {
+  const { t } = useTranslation();
+  return (
+    <main className="public-page">
+      <small>{t("support").toUpperCase()}</small>
+      <h1>{t("supportTitle")}</h1>
+      <div className="support-public">
+        <article>
+          <h2>{t("supportOwnerTitle")}</h2>
+          <p>{t("supportOwnerText")}</p>
+          <TelegramCta label={t("supportOwnerCta")} />
+        </article>
+        <article>
+          <h2>{t("supportStarsTitle")}</h2>
+          <p>{t("supportStarsText", { command: "/paysupport" })}</p>
+          <a href={`https://t.me/${data.botUsername}`}>{t("supportStarsLink")}</a>
+        </article>
+      </div>
+    </main>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WEB LOGIN
+// ─────────────────────────────────────────────────────────────────────────────
 function WebLogin({ platformOwner = false }: { platformOwner?: boolean }) {
   const { t } = useTranslation();
   const tokenPathPrefix = platformOwner ? "/platform-login/" : "/login/";
@@ -494,13 +859,12 @@ function WebLogin({ platformOwner = false }: { platformOwner?: boolean }) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [sessionIsolated, setSessionIsolated] = useState(platformOwner);
+
   useEffect(() => {
     if (platformOwner) return;
-    // The same physical browser can be used with several Telegram accounts.
-    // Remove a previous service-owner cookie before exchanging a community
-    // owner login so identities and privileges can never bleed between flows.
     void logoutPlatformSession().finally(() => setSessionIsolated(true));
   }, [platformOwner]);
+
   useEffect(() => {
     if (!urlToken) return;
     window.history.replaceState(
@@ -509,6 +873,7 @@ function WebLogin({ platformOwner = false }: { platformOwner?: boolean }) {
       platformOwner ? "/platform-login" : "/login",
     );
   }, []);
+
   useEffect(() => {
     if (!sessionIsolated || !intent || state !== "waiting") return;
     let active = true;
@@ -544,6 +909,7 @@ function WebLogin({ platformOwner = false }: { platformOwner?: boolean }) {
       window.clearInterval(timer);
     };
   }, [intent, state, nextPath, sessionIsolated]);
+
   const start = async () => {
     setBusy(true);
     setError("");
@@ -559,8 +925,6 @@ function WebLogin({ platformOwner = false }: { platformOwner?: boolean }) {
       setIntent(storedIntent);
       setState("waiting");
       void track("web_login_started");
-      // Keep the registration page in this tab. Opening an intermediate blank
-      // window leaves users on a white page when they return from Telegram.
       window.location.href = nextIntent.telegramAppUrl || nextIntent.botUrl;
     } catch (e: any) {
       setError(e.message);
@@ -569,6 +933,7 @@ function WebLogin({ platformOwner = false }: { platformOwner?: boolean }) {
       setBusy(false);
     }
   };
+
   const finishTwoFactor = async (event: any) => {
     event.preventDefault();
     setBusy(true);
@@ -582,6 +947,7 @@ function WebLogin({ platformOwner = false }: { platformOwner?: boolean }) {
       setBusy(false);
     }
   };
+
   return (
     <main className="web-login">
       <LanguageSelect compact />
@@ -709,6 +1075,9 @@ function WebLogin({ platformOwner = false }: { platformOwner?: boolean }) {
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// LEGAL PAGES
+// ─────────────────────────────────────────────────────────────────────────────
 function Legal({ document }: { document?: SiteData["documents"][number] }) {
   useEffect(() => {
     void track("legal_view");
@@ -736,48 +1105,34 @@ function Legal({ document }: { document?: SiteData["documents"][number] }) {
   );
 }
 
-function Support({ data }: { data: SiteData }) {
-  const { t } = useTranslation();
-  return (
-    <main className="public-page">
-      <small>{t("support").toUpperCase()}</small>
-      <h1>{t("supportTitle")}</h1>
-      <div className="support-public">
-        <article>
-          <h2>{t("supportOwnerTitle")}</h2>
-          <p>{t("supportOwnerText")}</p>
-          <TelegramCta data={data} label={t("supportOwnerCta")} />
-        </article>
-        <article>
-          <h2>{t("supportStarsTitle")}</h2>
-          <p>{t("supportStarsText", { command: "/paysupport" })}</p>
-          <a href={`https://t.me/${data.botUsername}`}>{t("supportStarsLink")}</a>
-        </article>
-      </div>
-    </main>
-  );
-}
-
+// ─────────────────────────────────────────────────────────────────────────────
+// ROOT
+// ─────────────────────────────────────────────────────────────────────────────
 export function PublicSite() {
   const [data, setData] = useState<SiteData>();
   const path = window.location.pathname.replace(/\/$/, "") || "/";
+
   useEffect(() => {
     fetch("/api/public/site")
       .then((response) => response.json())
       .then(setData);
-    if (path === "/") void track("landing_view");
   }, [path]);
+
   const legalType = useMemo(() => path.slice(1), [path]);
+
   if (!data) return <div className="public-loading">Adnecta</div>;
+
   if (path === "/platform-login" || path.startsWith("/platform-login/"))
     return (
       <div className="public-site service-login">
         <WebLogin platformOwner />
       </div>
     );
+
   let content = <Landing data={data} />;
   if (path === "/pricing") content = <Pricing data={data} />;
-  if (path === "/login" || path.startsWith("/login/")) content = <WebLogin />;
+  if (path === "/login" || path.startsWith("/login/"))
+    content = <WebLogin />;
   if (path === "/docs") content = <Docs data={data} />;
   if (path === "/support") content = <Support data={data} />;
   if (["/terms", "/privacy", "/prohibited"].includes(path))
@@ -786,9 +1141,10 @@ export function PublicSite() {
         document={data.documents.find((item) => item.type === legalType)}
       />
     );
+
   return (
     <div className="public-site">
-      <Header botUsername={data.botUsername} />
+      <Header />
       {content}
       <Footer />
     </div>
