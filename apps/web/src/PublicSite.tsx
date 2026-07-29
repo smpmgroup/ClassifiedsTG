@@ -147,6 +147,7 @@ function Landing({ data }: { data: SiteData }) {
   const { t } = useTranslation();
   return (
     <>
+      {/* ── HERO ── */}
       <section className="public-hero">
         <div className="beta-pill">{t("landingBadge")}</div>
         <h1>
@@ -157,14 +158,41 @@ function Landing({ data }: { data: SiteData }) {
         <p>{t("landingLead")}</p>
         <div className="hero-actions">
           <TelegramCta data={data} />
-          <a href="/docs">{t("viewProcess")}</a>
+          <a href="/docs" className="hero-secondary">{t("viewProcess")}</a>
         </div>
         <div className="trust-row">
           <span>✓ {t("trustBot")}</span>
-          <span>✓ {t("trustIsolation")}</span>
+          <span>✓ {t("starsOnlyNote")}</span>
           <span>✓ {t("trustDashboard")}</span>
         </div>
       </section>
+
+      {/* ── HOW IT WORKS ── */}
+      <section className="public-how">
+        <div className="how-header">
+          <small>{t("quickLaunch")}</small>
+          <h2>{t("howItWorksTitle")}</h2>
+        </div>
+        <div className="how-grid">
+          <article>
+            <span>01</span>
+            <h3>{t("selfConnect")}</h3>
+            <p>{t("selfConnectText")}</p>
+          </article>
+          <article>
+            <span>02</span>
+            <h3>{t("smartPublishing")}</h3>
+            <p>{t("smartPublishingText")}</p>
+          </article>
+          <article>
+            <span>03</span>
+            <h3>{t("communityEconomy")}</h3>
+            <p>{t("communityEconomyText")}</p>
+          </article>
+        </div>
+      </section>
+
+      {/* ── DEMO ── */}
       <section className="public-demo">
         <div className="demo-board">
           <header>
@@ -187,17 +215,28 @@ function Landing({ data }: { data: SiteData }) {
               <strong>{t("negotiable")}</strong>
             </div>
           </article>
+          <article>
+            <i>🏠</i>
+            <div>
+              <b>2BR apartment for rent</b>
+              <small>Property · Barcelona</small>
+              <strong>1 200 €/mo</strong>
+            </div>
+          </article>
         </div>
         <aside>
           <small>{t("insideGroup")}</small>
           <h2>{t("notEmptyMarketplace")}</h2>
           <p>{t("communityValue")}</p>
+          <TelegramCta data={data} />
         </aside>
       </section>
+
+      {/* ── FEATURES ── */}
       <section className="public-features">
         <small>{t("onePlatform")}</small>
         <h2>{t("everythingLocal")}</h2>
-        <div>
+        <div className="features-grid">
           <article>
             <span>01</span>
             <h3>{t("selfConnect")}</h3>
@@ -213,12 +252,19 @@ function Landing({ data }: { data: SiteData }) {
             <h3>{t("communityEconomy")}</h3>
             <p>{t("communityEconomyText")}</p>
           </article>
+          <article>
+            <span>04</span>
+            <h3>{t("communityAdministrator")}</h3>
+            <p>{t("communityAdministratorText")}</p>
+          </article>
         </div>
       </section>
+
+      {/* ── ROLES ── */}
       <section className="public-roles">
         <small>{t("clearRoles")}</small>
         <h2>{t("roleInterfaces")}</h2>
-        <div>
+        <div className="roles-grid">
           <article>
             <b>{t("communityAdministrator")}</b>
             <p>{t("communityAdministratorText")}</p>
@@ -233,31 +279,47 @@ function Landing({ data }: { data: SiteData }) {
           </article>
         </div>
       </section>
-      <section className="public-economy">
-        <div>
-          <small>{t("transparentRules")}</small>
-          <h2>{t("priceAndActivity")}</h2>
-          <p>{t("economyLead", { count: data.publication.minimumStars })}</p>
-        </div>
-        <div className="economy-flow">
-          <span>
-            {t("publication")}
-            <strong>Telegram Stars</strong>
-          </span>
-          <b>→</b>
-          <span>
-            {t("holding")}
-            <strong>
-              {t("holdingDays", { count: data.publication.holdDays })}
+
+      {/* ── PRICING ── */}
+      <section className="public-pricing-inline">
+        <small>{t("transparentRules")}</small>
+        <h2>{t("priceAndActivity")}</h2>
+        <p className="pricing-lead">{t("economyLead", { count: data.publication.minimumStars })}</p>
+        <div className="pricing-models">
+          <article>
+            <small>{t("model1Label")}</small>
+            <h3>{t("model1Title")}</h3>
+            <strong className="pricing-price">
+              15%<i>{" "}{t("model1Feature1").split(" ")[0] === "85%" ? "commission" : "platform fee"}</i>
             </strong>
-          </span>
-          <b>→</b>
-          <span>
-            {t("communityShare")}
-            <strong>{t("afterReview")}</strong>
-          </span>
+            <p>{t("model1Desc", { count: data.publication.minimumStars })}</p>
+            <ul>
+              <li>✓ {t("model1Feature1")}</li>
+              <li>✓ {t("model1Feature2")}</li>
+              <li>✓ {t("model1Feature3")}</li>
+            </ul>
+          </article>
+          <article className="pricing-alt">
+            <small>{t("model2Label")}</small>
+            <h3>{t("model2Title")}</h3>
+            <strong className="pricing-price">
+              {data.publication.freeBoardSubscriptionStars} ⭐<i>/30 days</i>
+            </strong>
+            <p>{t("model2Desc")}</p>
+            <ul>
+              <li>✓ {t("model2Feature1")}</li>
+              <li>✓ {t("model2Feature2")}</li>
+              <li>✓ {t("model2Feature3")}</li>
+            </ul>
+          </article>
+        </div>
+        <div className="pricing-note-inline">
+          <b>{t("allPaymentsInTelegram")}</b>
+          <p>{t("allPaymentsDesc", { hold: data.publication.holdDays, min: data.publication.minimumPayoutStars })}</p>
         </div>
       </section>
+
+      {/* ── FAQ ── */}
       <section className="public-faq">
         <small>{t("faq")}</small>
         <h2>{t("transparentLaunch")}</h2>
@@ -278,6 +340,8 @@ function Landing({ data }: { data: SiteData }) {
           <p>{t("disableAnswer")}</p>
         </details>
       </section>
+
+      {/* ── FINAL CTA ── */}
       <section className="public-final">
         <h2>{t("launchCommunity")}</h2>
         <p>{t("launchLead")}</p>
@@ -288,59 +352,46 @@ function Landing({ data }: { data: SiteData }) {
 }
 
 function Pricing({ data }: { data: SiteData }) {
+  const { t } = useTranslation();
   useEffect(() => {
     void track("pricing_view");
   }, []);
   return (
     <main className="public-page">
-      <small>ТАРИФЫ В TELEGRAM STARS</small>
-      <h1>Платформа зарабатывает вместе с сообществом</h1>
-      <p className="lead">
-        Банковская карта и Stripe не нужны. Владелец выбирает одну из двух
-        прозрачных моделей прямо в кабинете.
-      </p>
+      <small>{t("pricingPageBadge")}</small>
+      <h1>{t("pricingPageTitle")}</h1>
+      <p className="lead">{t("pricingPageLead")}</p>
       <div className="pricing-grid">
         <article>
-          <small>МОНЕТИЗАЦИЯ</small>
-          <h2>Платные публикации</h2>
+          <small>{t("model1Label")}</small>
+          <h2>{t("model1Title")}</h2>
           <strong>
-            15%<i>комиссия платформы</i>
+            15%<i>{" "}platform fee</i>
           </strong>
-          <p>
-            Владелец назначает цену от {data.publication.minimumStars} Stars.
-            Можно брать оплату со всех либо оставить бесплатное размещение
-            активным участникам.
-          </p>
+          <p>{t("model1Desc", { count: data.publication.minimumStars })}</p>
           <ul>
-            <li>✓ 85% начисляется сообществу</li>
-            <li>✓ Настраиваемый порог активности</li>
-            <li>✓ Ручной бесплатный доступ</li>
+            <li>✓ {t("model1Feature1")}</li>
+            <li>✓ {t("model1Feature2")}</li>
+            <li>✓ {t("model1Feature3")}</li>
           </ul>
         </article>
         <article>
-          <small>БЕСПЛАТНО ДЛЯ ЛЮДЕЙ</small>
-          <h2>Подписка владельца</h2>
+          <small>{t("model2Label")}</small>
+          <h2>{t("model2Title")}</h2>
           <strong>
-            {data.publication.freeBoardSubscriptionStars} ⭐<i>/ 30 дней</i>
+            {data.publication.freeBoardSubscriptionStars} ⭐<i>/ 30 days</i>
           </strong>
-          <p>
-            Если абсолютно все объявления бесплатны, владелец оплачивает работу
-            сервиса ежемесячной подпиской Stars.
-          </p>
+          <p>{t("model2Desc")}</p>
           <ul>
-            <li>✓ Автоматическое продление Telegram</li>
-            <li>✓ Никакой комиссии с объявлений</li>
-            <li>✓ Отмена через Telegram</li>
+            <li>✓ {t("model2Feature1")}</li>
+            <li>✓ {t("model2Feature2")}</li>
+            <li>✓ {t("model2Feature3")}</li>
           </ul>
         </article>
       </div>
       <div className="pricing-note">
-        <b>Все расчёты внутри Telegram</b>
-        <p>
-          Оплата цифровых функций проводится исключительно в Telegram Stars.
-          Начисления выдерживают {data.publication.holdDays} день, после чего
-          доступны к выплате от {data.publication.minimumPayoutStars} Stars.
-        </p>
+        <b>{t("allPaymentsInTelegram")}</b>
+        <p>{t("allPaymentsDesc", { hold: data.publication.holdDays, min: data.publication.minimumPayoutStars })}</p>
       </div>
       <TelegramCta data={data} />
     </main>
@@ -348,91 +399,62 @@ function Pricing({ data }: { data: SiteData }) {
 }
 
 function Docs({ data }: { data: SiteData }) {
+  const { t } = useTranslation();
   useEffect(() => {
     void track("docs_view");
   }, []);
   return (
     <main className="public-page">
-      <small>ПОШАГОВОЕ ПОДКЛЮЧЕНИЕ</small>
-      <h1>От регистрации до доски внутри группы</h1>
-      <p className="lead">
-        Собственный Telegram-бот и его токен не нужны. Один защищённый бот
-        платформы обслуживает независимые сообщества и определяет нужную доску
-        по группе.
-      </p>
+      <small>{t("docsPageBadge")}</small>
+      <h1>{t("docsPageTitle")}</h1>
+      <p className="lead">{t("docsPageLead")}</p>
       <div className="steps">
         <article>
           <b>1</b>
           <div>
-            <h2>Создайте кабинет администратора</h2>
-            <p>
-              Подтвердите Telegram ID через бота. В кабинете администратора
-              находятся подключение групп, модерация, настройки, Stars и
-              выплаты.
-            </p>
+            <h2>{t("docsStep1Title")}</h2>
+            <p>{t("docsStep1Text")}</p>
           </div>
         </article>
         <article>
           <b>2</b>
           <div>
-            <h2>Подключите первое сообщество</h2>
-            <p>
-              Выберите Telegram-группу. Её название и данные станут названием
-              сообщества, а позже можно подключить дополнительные группы.
-            </p>
+            <h2>{t("docsStep2Title")}</h2>
+            <p>{t("docsStep2Text")}</p>
           </div>
         </article>
         <article>
           <b>3</b>
           <div>
-            <h2>Добавьте общего бота в группу</h2>
-            <p>
-              Кабинет сформирует одноразовую ссылку. Выберите группу, где вы
-              владелец или администратор, и добавьте бота.
-            </p>
+            <h2>{t("docsStep3Title")}</h2>
+            <p>{t("docsStep3Text")}</p>
           </div>
         </article>
         <article>
           <b>4</b>
           <div>
-            <h2>Проверьте разрешения</h2>
-            <p>
-              Выдайте права администратора для публикации, проверки участников и
-              модерации. Кабинет покажет, каких разрешений не хватает.
-            </p>
+            <h2>{t("docsStep4Title")}</h2>
+            <p>{t("docsStep4Text")}</p>
           </div>
         </article>
         <article>
           <b>5</b>
           <div>
-            <h2>Выберите модель Stars</h2>
-            <p>
-              Установите цену объявления и критерии активности либо оформите
-              подписку {data.publication.freeBoardSubscriptionStars} ⭐/30 дней
-              для полностью бесплатной доски.
-            </p>
+            <h2>{t("docsStep5Title")}</h2>
+            <p>{t("docsStep5Text", { stars: data.publication.freeBoardSubscriptionStars })}</p>
           </div>
         </article>
         <article>
           <b>6</b>
           <div>
-            <h2>Назначьте администраторов</h2>
-            <p>
-              Панель администратора отвечает за модерацию, пользователей,
-              категории и правила; коммерческие настройки остаются только у
-              владельца.
-            </p>
+            <h2>{t("docsStep6Title")}</h2>
+            <p>{t("docsStep6Text")}</p>
           </div>
         </article>
       </div>
-      <h2>Комиссия и выплаты</h2>
-      <p>
-        С каждой платной публикации 15% остаётся платформе, 85% начисляется
-        владельцу сообщества. Начисление становится доступным через{" "}
-        {data.publication.holdDays} день. Минимальная заявка —{" "}
-        {data.publication.minimumPayoutStars} Stars.
-      </p>
-      <TelegramCta data={data} label="Начать регистрацию" />
+      <h2>{t("commissionAndPayouts")}</h2>
+      <p>{t("commissionAndPayoutsDesc", { hold: data.publication.holdDays, min: data.publication.minimumPayoutStars })}</p>
+      <TelegramCta data={data} label={t("startRegistration")} />
     </main>
   );
 }
@@ -715,26 +737,21 @@ function Legal({ document }: { document?: SiteData["documents"][number] }) {
 }
 
 function Support({ data }: { data: SiteData }) {
+  const { t } = useTranslation();
   return (
     <main className="public-page">
-      <small>ПОДДЕРЖКА</small>
-      <h1>Мы поможем разобраться</h1>
+      <small>{t("support").toUpperCase()}</small>
+      <h1>{t("supportTitle")}</h1>
       <div className="support-public">
         <article>
-          <h2>Владельцам сообществ</h2>
-          <p>
-            Откройте кабинет через бота и создайте обращение: там сохраняется
-            история и статус ответа.
-          </p>
-          <TelegramCta data={data} label="Открыть кабинет" />
+          <h2>{t("supportOwnerTitle")}</h2>
+          <p>{t("supportOwnerText")}</p>
+          <TelegramCta data={data} label={t("supportOwnerCta")} />
         </article>
         <article>
-          <h2>Оплата Telegram Stars</h2>
-          <p>
-            Отправьте боту команду <code>/paysupport</code>. Укажите дату, сумму
-            и название объявления. Никому не передавайте коды или пароль.
-          </p>
-          <a href={`https://t.me/${data.botUsername}`}>Написать боту →</a>
+          <h2>{t("supportStarsTitle")}</h2>
+          <p>{t("supportStarsText", { command: "/paysupport" })}</p>
+          <a href={`https://t.me/${data.botUsername}`}>{t("supportStarsLink")}</a>
         </article>
       </div>
     </main>
