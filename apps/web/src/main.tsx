@@ -8,6 +8,7 @@ import "./admin.css";
 import "./public.css";
 import "./legal.css";
 import "./enhancements.css";
+import "./dashboard.css";
 import { App } from "./App";
 type ErrorBoundaryState = { failed: boolean };
 class ErrorBoundary extends React.Component<

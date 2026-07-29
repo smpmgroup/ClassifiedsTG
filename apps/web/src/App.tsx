@@ -722,6 +722,8 @@ function PlatformWorkspace({
   platformAdminOnly?: boolean;
 }) {
   const { t } = useTranslation();
+  const [dashboardParams, setDashboardParams] = useSearchParams();
+  const [menuOpen, setMenuOpen] = useState(false);
   const [data, setData] = useState<any>();
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
@@ -777,8 +779,8 @@ function PlatformWorkspace({
     (organization: any) =>
       ["owner", "administrator"].includes(organization.role),
   );
-  const ownerTab =
-    new URLSearchParams(window.location.search).get("tab") || "overview";
+  const ownerTab = dashboardParams.get("tab") || "overview";
+  const platformTab = dashboardParams.get("tab") || "overview";
   const selectedCommunityId =
     new URLSearchParams(window.location.search).get("community") ||
     ownerCommunities[0]?.id ||
@@ -796,12 +798,23 @@ function PlatformWorkspace({
     <main
       className={`platform-workspace ${platformAdminOnly ? "service-owner-workspace" : "owner-workspace"}`}
     >
-      <nav className="dashboard-nav">
+      <header className="dashboard-nav">
         <a href="/">
           <span>AD</span>
           <b>Adnecta</b>
         </a>
-        <div>
+        <button
+          className="dashboard-menu-toggle"
+          type="button"
+          aria-expanded={menuOpen}
+          aria-label={menuOpen ? "Закрыть меню" : "Открыть меню"}
+          onClick={() => setMenuOpen((current) => !current)}
+        >
+          <span />
+          <span />
+          <span />
+        </button>
+        <div className={menuOpen ? "open" : ""}>
           {platformAdminOnly && (
             <a href="/owner">{t("communityDashboardLink")}</a>
           )}
@@ -820,7 +833,7 @@ function PlatformWorkspace({
             {t("logout")}
           </button>
         </div>
-      </nav>
+      </header>
       <header className="platform-header">
         <div>
           <small>ADNECTA PLATFORM</small>
@@ -839,50 +852,62 @@ function PlatformWorkspace({
         </div>
       </header>
       <nav
-        className="workspace-nav"
+        className={`workspace-nav workspace-tabs ${menuOpen ? "open" : ""}`}
         aria-label={
           platformAdminOnly ? "Разделы платформы" : "Разделы кабинета"
         }
       >
         {platformAdminOnly ? (
           <>
-            <a href="#platform-overview">{t("overview")}</a>
-            <a href="#platform-settings">{t("settings")}</a>
-            <a href="#platform-health">{t("system")}</a>
-            <a href="#platform-finance">{t("finance")}</a>
-            <a href="#platform-communities">{t("communities")}</a>
-            <a href="#platform-team">{t("team")}</a>
-            <a href="#platform-support">{t("support")}</a>
+            {[
+              ["overview", t("overview")],
+              ["settings", t("settings")],
+              ["system", t("system")],
+              ["finance", t("finance")],
+              ["communities", t("communities")],
+              ["team", t("team")],
+              ["support", t("support")],
+            ].map(([key, label]) => (
+              <button
+                type="button"
+                key={String(key)}
+                className={platformTab === key ? "active" : ""}
+                onClick={() => {
+                  setDashboardParams({ tab: String(key) });
+                  setMenuOpen(false);
+                }}
+              >
+                {label}
+              </button>
+            ))}
           </>
         ) : (
           <>
-            <a href="/owner?tab=overview">
-              <span>⌂</span> {t("overview")}
-            </a>
-            <a href="/owner?tab=communities">
-              <span>▦</span> {t("communities")}
-            </a>
-            <a href="/owner?tab=moderation">
-              <span>✓</span> Модерация
-            </a>
-            <a href="/owner?tab=reports">
-              <span>!</span> Жалобы
-            </a>
-            <a href="/owner?tab=users">
-              <span>♙</span> Люди
-            </a>
-            <a href="/owner?tab=categories">
-              <span>▦</span> Категории
-            </a>
-            <a href="/owner?tab=settings">
-              <span>⚙</span> Настройки
-            </a>
-            <a href="/owner?tab=finance">
-              <span>★</span> {t("starsPayouts")}
-            </a>
-            <a href="/owner?tab=support">
-              <span>?</span> {t("support")}
-            </a>
+            {[
+              ["overview", "⌂", t("overview")],
+              ["communities", "▦", t("communities")],
+              ["moderation", "✓", "Модерация"],
+              ["reports", "!", "Жалобы"],
+              ["users", "♙", "Люди"],
+              ["categories", "▦", "Категории"],
+              ["settings", "⚙", "Настройки"],
+              ["finance", "★", t("starsPayouts")],
+              ["support", "?", t("support")],
+            ].map(([key, icon, label]) => (
+              <button
+                type="button"
+                key={String(key)}
+                className={ownerTab === key ? "active" : ""}
+                onClick={() => {
+                  const next = new URLSearchParams(dashboardParams);
+                  next.set("tab", String(key));
+                  setDashboardParams(next);
+                  setMenuOpen(false);
+                }}
+              >
+                <span>{icon}</span> {label}
+              </button>
+            ))}
           </>
         )}
       </nav>
@@ -993,22 +1018,22 @@ function PlatformWorkspace({
               <span>Все функции разнесены по отдельным разделам</span>
             </header>
             <div>
-              <a href="/owner?tab=moderation">
+              <button onClick={() => setDashboardParams({ tab: "moderation" })}>
                 <b>✓ Модерация</b>
                 <span>Проверить новые объявления и принять решение</span>
-              </a>
-              <a href="/owner?tab=users">
+              </button>
+              <button onClick={() => setDashboardParams({ tab: "users" })}>
                 <b>♙ Люди и роли</b>
                 <span>Администраторы, ограничения и бесплатный доступ</span>
-              </a>
-              <a href="/owner?tab=settings">
+              </button>
+              <button onClick={() => setDashboardParams({ tab: "settings" })}>
                 <b>⚙ Настройки</b>
                 <span>Правила, безопасность, язык и параметры доски</span>
-              </a>
-              <a href="/owner?tab=finance">
+              </button>
+              <button onClick={() => setDashboardParams({ tab: "finance" })}>
                 <b>★ Stars и выплаты</b>
                 <span>Цены, комиссии, баланс и история операций</span>
-              </a>
+              </button>
             </div>
           </div>
         </section>
@@ -1180,6 +1205,7 @@ function PlatformWorkspace({
         ) && (
           <PlatformOwnerPanel
             canEdit={data.user.platformRole === "platform_owner"}
+            activeTab={platformTab}
           />
         )}
       {platformAdminOnly && data.user.platformRole === "support" && (
@@ -1194,6 +1220,17 @@ function PlatformWorkspace({
         ) && (
           <LoadError message="Этот отдельный кабинет доступен только владельцу и сотрудникам платформы." />
         )}
+      <footer className="dashboard-footer">
+        <a href="/">Adnecta</a>
+        <nav>
+          <a href="/docs">{t("instruction")}</a>
+          <a href="/support">{t("support")}</a>
+          {platformAdminOnly && (
+            <a href="/owner">{t("communityDashboardLink")}</a>
+          )}
+        </nav>
+        <small>Adnecta 2.0 · Telegram community marketplace</small>
+      </footer>
     </main>
   );
 }
@@ -1207,6 +1244,7 @@ function WebCommunityAdministration({
   communities: any[];
   selectedCommunityId: string;
 }) {
+  const [params, setParams] = useSearchParams();
   useEffect(() => {
     setAdminCommunityId(selectedCommunityId);
     return () => setAdminCommunityId("");
@@ -1235,9 +1273,9 @@ function WebCommunityAdministration({
           <select
             value={selectedCommunityId}
             onChange={(event) => {
-              const url = new URL(window.location.href);
-              url.searchParams.set("community", event.target.value);
-              window.location.assign(url.toString());
+              const next = new URLSearchParams(params);
+              next.set("community", event.target.value);
+              setParams(next);
             }}
           >
             {communities.map((community) => (
@@ -2667,7 +2705,13 @@ function PlatformStaffManagement({ canEdit }: { canEdit: boolean }) {
   );
 }
 
-function PlatformOwnerPanel({ canEdit }: { canEdit: boolean }) {
+function PlatformOwnerPanel({
+  canEdit,
+  activeTab,
+}: {
+  canEdit: boolean;
+  activeTab: string;
+}) {
   const { t, i18n } = useTranslation();
   const [overview, setOverview] = useState<any>();
   const [communities, setCommunities] = useState<any[]>([]);
@@ -2860,14 +2904,14 @@ function PlatformOwnerPanel({ canEdit }: { canEdit: boolean }) {
           ↻ {t("refresh")}
         </button>
       </div>
-      <div className="platform-console-link">
+      <div className="platform-console-link" hidden={activeTab !== "overview"}>
         <b>{t("reviewModes")}</b>
         <span>
           <a href="/platform-owner">{t("platform")}</a> ·{" "}
           <a href="/owner">{t("communityAdminDashboard")}</a>
         </span>
       </div>
-      <div className="platform-metrics">
+      <div className="platform-metrics" hidden={activeTab !== "overview"}>
         <div>
           <b>{metrics.organizations}</b>
           <span>Кабинетов клиентов</span>
@@ -2885,7 +2929,7 @@ function PlatformOwnerPanel({ canEdit }: { canEdit: boolean }) {
           <span>Валовый оборот</span>
         </div>
       </div>
-      <div className="platform-metrics">
+      <div className="platform-metrics" hidden={activeTab !== "overview"}>
         <div>
           <b>{overview.finance.communityPendingStars} ⭐</b>
           <small>
@@ -2915,7 +2959,7 @@ function PlatformOwnerPanel({ canEdit }: { canEdit: boolean }) {
           <span>Доход платформы</span>
         </div>
       </div>
-      {tonRate && (
+      {tonRate && activeTab === "overview" && (
         <p className="platform-message">
           Расчётный курс: 1 ⭐ = ${tonRate.starUsd}; TON/USD $
           {tonRate.tonUsd?.toFixed(4) || "недоступен"} · {tonRate.source} ·
@@ -2927,6 +2971,7 @@ function PlatformOwnerPanel({ canEdit }: { canEdit: boolean }) {
         <form
           className="platform-settings"
           id="platform-settings"
+          hidden={activeTab !== "settings"}
           onSubmit={save}
         >
           <label>
@@ -2988,8 +3033,10 @@ function PlatformOwnerPanel({ canEdit }: { canEdit: boolean }) {
         </form>
       )}
       {message && <p className="platform-message">{message}</p>}
-      <h3 id="platform-health">Надёжность системы</h3>
-      <div className="platform-tenants">
+      <h3 id="platform-health" hidden={activeTab !== "system"}>
+        Надёжность системы
+      </h3>
+      <div className="platform-tenants" hidden={activeTab !== "system"}>
         {reliability?.jobs.map((job: any) => (
           <div key={job.jobName}>
             <span>
@@ -3006,15 +3053,19 @@ function PlatformOwnerPanel({ canEdit }: { canEdit: boolean }) {
           <p className="muted">Планировщик запускается…</p>
         )}
       </div>
-      {reliability && (
+      {reliability && activeTab === "system" && (
         <p className="platform-message">
           Уведомления в очереди: {reliability.notifications.pending} ·
           dead-letter: {reliability.notifications.deadLetter} · открытых
           алертов: {reliability.alerts.length}
         </p>
       )}
-      <PlatformLegalManagement canEdit={canEdit} />
-      <div className="platform-stars-tools" id="platform-finance">
+      {activeTab === "system" && <PlatformLegalManagement canEdit={canEdit} />}
+      <div
+        className="platform-stars-tools"
+        id="platform-finance"
+        hidden={activeTab !== "finance"}
+      >
         <span>
           <b>Сверка Telegram Stars</b>
           <small>
@@ -3030,15 +3081,15 @@ function PlatformOwnerPanel({ canEdit }: { canEdit: boolean }) {
           Сверить
         </button>
       </div>
-      {reconciliation && (
+      {reconciliation && activeTab === "finance" && (
         <p className="platform-message">
           Баланс: {reconciliation.balance.amount} ⭐ · Операций:{" "}
           {reconciliation.remoteCount} · Не сопоставлено:{" "}
           {reconciliation.unknownIncoming}
         </p>
       )}
-      <h3>Заявки на выплату</h3>
-      <div className="platform-tenants">
+      <h3 hidden={activeTab !== "finance"}>Заявки на выплату</h3>
+      <div className="platform-tenants" hidden={activeTab !== "finance"}>
         {payouts.map((payout) => (
           <div key={payout.id}>
             <span>
@@ -3108,8 +3159,8 @@ function PlatformOwnerPanel({ canEdit }: { canEdit: boolean }) {
         ))}
         {!payouts.length && <p className="muted">Заявок пока нет.</p>}
       </div>
-      <h3>Финансовые операции</h3>
-      <div className="platform-tenants">
+      <h3 hidden={activeTab !== "finance"}>Финансовые операции</h3>
+      <div className="platform-tenants" hidden={activeTab !== "finance"}>
         {ledger.slice(0, 15).map((transaction) => (
           <div key={transaction.id}>
             <span>
@@ -3135,8 +3186,10 @@ function PlatformOwnerPanel({ canEdit }: { canEdit: boolean }) {
         ))}
         {!ledger.length && <p className="muted">Операций пока нет.</p>}
       </div>
-      <h3 id="platform-communities">Сообщества</h3>
-      <div className="platform-tenants">
+      <h3 id="platform-communities" hidden={activeTab !== "communities"}>
+        Сообщества
+      </h3>
+      <div className="platform-tenants" hidden={activeTab !== "communities"}>
         {communities.map((community) => (
           <div key={community.id}>
             <span>
@@ -3198,10 +3251,10 @@ function PlatformOwnerPanel({ canEdit }: { canEdit: boolean }) {
           </div>
         ))}
       </div>
-      <div id="platform-team">
+      <div id="platform-team" hidden={activeTab !== "team"}>
         <PlatformStaffManagement canEdit={canEdit} />
       </div>
-      <div id="platform-support">
+      <div id="platform-support" hidden={activeTab !== "support"}>
         <PlatformSupportPanel />
       </div>
     </section>
