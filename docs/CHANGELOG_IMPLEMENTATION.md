@@ -235,7 +235,7 @@
 # 2026-07-25 — Commercial Stars pricing and platform owner console
 
 - Production pricing is now consistent across the database, API, bot, landing
-  and owner UI: 100 Stars minimum publication, 750 Stars per 30 days for a
+  and owner UI: 100 Stars minimum publication, 3,000 Stars per 30 days for a
   completely free board, fixed 15% platform commission and 2,500 Stars minimum
   payout.
 - Community revenue remains pending for 21 days and the owner finance view now

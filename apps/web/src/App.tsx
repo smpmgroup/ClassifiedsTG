@@ -3079,7 +3079,7 @@ function PlatformOwnerPanel({
               disabled
               readOnly
             />
-            <small>Фиксированный тариф: 750 ⭐</small>
+            <small>Фиксированный тариф: 3 000 ⭐ / 30 дней</small>
           </label>
           <label className="check">
             <input

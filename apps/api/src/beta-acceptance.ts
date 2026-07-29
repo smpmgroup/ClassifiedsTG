@@ -103,6 +103,20 @@ async function cleanup() {
 }
 
 try {
+  const publicConfiguration = await request("/api/public/site", "");
+  expectStatus(
+    "public pricing configuration loads",
+    publicConfiguration.status,
+    200,
+  );
+  if (publicConfiguration.body.publication.freeBoardSubscriptionStars !== 3000)
+    throw new Error(
+      `free-board subscription price drifted: expected 3000, got ${publicConfiguration.body.publication.freeBoardSubscriptionStars}`,
+    );
+  checks.push(
+    "landing and dashboards receive the 3000 Stars free-board tariff",
+  );
+
   const telegramBase = BigInt(`8${String(Date.now()).slice(-12)}`);
   const [shared, moderator, seller, ownerB, platformStaff, platformOwner] =
     await Promise.all([

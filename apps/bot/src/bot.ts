@@ -1088,7 +1088,7 @@ bot.on("pre_checkout_query", async (ctx) => {
       ) &&
       ctx.preCheckoutQuery.currency === "XTR" &&
       ctx.preCheckoutQuery.total_amount ===
-        (settings?.freeBoardSubscriptionStars || 750);
+        (settings?.freeBoardSubscriptionStars || 3000);
     await ctx.answerPreCheckoutQuery(
       Boolean(valid),
       valid
