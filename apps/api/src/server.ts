@@ -1734,6 +1734,14 @@ app.get("/api/platform/me", { preHandler: platformAuth }, async (req: any) => {
         backupCodesRemaining: user.backupCodeHashes.length,
       },
     },
+    permissions: {
+      platformOwnerDashboard: user.platformRole === "platform_owner",
+      switchDashboards:
+        user.platformRole === "platform_owner" &&
+        user.organizations.some((membership) =>
+          ["owner", "administrator"].includes(membership.role),
+        ),
+    },
     organizations: user.organizations.map((membership) => ({
       ...membership.organization,
       role: membership.role,
@@ -3776,13 +3784,7 @@ app.patch(
   async (req: any) => {
     const platformRole = String(req.body?.platformRole || "");
     if (
-      ![
-        "user",
-        "support",
-        "finance",
-        "platform_admin",
-        "platform_owner",
-      ].includes(platformRole)
+      !["user", "support", "finance", "platform_admin"].includes(platformRole)
     )
       throw new DomainError("PLATFORM_ROLE_INVALID", "Неверная роль");
     const target = await prisma.user.findUnique({
@@ -3790,17 +3792,11 @@ app.patch(
     });
     if (!target)
       throw new DomainError("USER_NOT_FOUND", "Пользователь не найден", 404);
-    if (
-      target.platformRole === "platform_owner" &&
-      platformRole !== "platform_owner" &&
-      (await prisma.user.count({
-        where: { platformRole: "platform_owner", status: "active" },
-      })) <= 1
-    )
+    if (target.platformRole === "platform_owner")
       throw new DomainError(
-        "LAST_PLATFORM_OWNER",
-        "Нельзя снять роль у единственного владельца платформы",
-        409,
+        "PLATFORM_OWNER_IMMUTABLE",
+        "Роль единственного владельца платформы нельзя изменить через интерфейс",
+        403,
       );
     return prisma.$transaction(async (tx) => {
       const updated = await tx.user.update({

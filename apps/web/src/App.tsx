@@ -205,6 +205,7 @@ export function App() {
   const platformAdminMode = ["/platform-admin", "/platform-owner"].includes(
     pathName,
   );
+  const platformOwnerRoute = pathName === "/platform-owner";
   const platformMode =
     ["/dashboard", "/owner"].includes(pathName) ||
     platformAdminMode ||
@@ -380,7 +381,12 @@ export function App() {
       />
     );
   if (platformMode)
-    return <PlatformWorkspace platformAdminOnly={platformAdminMode} />;
+    return (
+      <PlatformWorkspace
+        platformAdminOnly={platformAdminMode}
+        platformOwnerRoute={platformOwnerRoute}
+      />
+    );
   return (
     <Shell key={tenantRevision}>
       <ScrollToTop />
@@ -718,8 +724,10 @@ function PlatformTwoFactorSecurity({
 
 function PlatformWorkspace({
   platformAdminOnly = false,
+  platformOwnerRoute = false,
 }: {
   platformAdminOnly?: boolean;
+  platformOwnerRoute?: boolean;
 }) {
   const { t } = useTranslation();
   const [dashboardParams, setDashboardParams] = useSearchParams();
@@ -756,6 +764,20 @@ function PlatformWorkspace({
     data.legalDocuments?.filter((document: any) => !document.accepted) || [];
   if (missingLegal.length)
     return <LegalAcceptance documents={missingLegal} onAccepted={load} />;
+  if (platformOwnerRoute && !data.permissions?.platformOwnerDashboard)
+    return (
+      <main className="platform-workspace access-denied-page">
+        <div className="logo">AD</div>
+        <h1>Доступ закрыт</h1>
+        <p>
+          Кабинет владельца платформы доступен только единственному аккаунту
+          владельца. Ваша роль не даёт права открывать этот раздел.
+        </p>
+        <a className="primary" href="/platform-admin">
+          Вернуться в служебный кабинет
+        </a>
+      </main>
+    );
   const ownerCommunities = data.organizations.flatMap(
     (organization: any) => organization.communities || [],
   );
@@ -1185,15 +1207,12 @@ function PlatformWorkspace({
             )}
           </div>
         )}
-      {!platformAdminOnly &&
-        ["platform_admin", "platform_owner"].includes(
-          data.user.platformRole,
-        ) && (
-          <a className="platform-console-link" href="/platform-owner">
-            <b>Перейти в кабинет владельца платформы</b>
-            <span>Сообщества, Stars, выплаты и аудит →</span>
-          </a>
-        )}
+      {!platformAdminOnly && data.permissions?.switchDashboards && (
+        <a className="platform-console-link" href="/platform-owner">
+          <b>Перейти в кабинет владельца платформы</b>
+          <span>Сообщества, Stars, выплаты и аудит →</span>
+        </a>
+      )}
       {platformAdminOnly &&
         ["platform_admin", "platform_owner"].includes(
           data.user.platformRole,
@@ -1220,7 +1239,7 @@ function PlatformWorkspace({
         <nav>
           <a href="/docs">{t("instruction")}</a>
           <a href="/support">{t("support")}</a>
-          {platformAdminOnly && (
+          {platformAdminOnly && data.permissions?.switchDashboards && (
             <a href="/owner">{t("communityDashboardLink")}</a>
           )}
         </nav>
@@ -2703,7 +2722,7 @@ function PlatformStaffManagement({
               </small>
             </span>
             <select
-              disabled={!canEdit}
+              disabled={!canEdit || user.platformRole === "platform_owner"}
               value={user.platformRole}
               onChange={(event) => void changeRole(user, event.target.value)}
             >
@@ -2711,7 +2730,9 @@ function PlatformStaffManagement({
               <option value="support">Поддержка</option>
               <option value="finance">Финансы</option>
               <option value="platform_admin">Админ</option>
-              <option value="platform_owner">Владелец</option>
+              {user.platformRole === "platform_owner" && (
+                <option value="platform_owner">Владелец платформы</option>
+              )}
             </select>
           </div>
         ))}
@@ -2942,7 +2963,10 @@ function PlatformOwnerPanel({
           Обновляется автоматически
         </span>
       </div>
-      <div className="platform-console-link" hidden={activeTab !== "overview"}>
+      <div
+        className="platform-console-link"
+        hidden={activeTab !== "overview" || !canEdit}
+      >
         <b>{t("reviewModes")}</b>
         <span>
           <a href="/platform-owner">{t("platform")}</a> ·{" "}

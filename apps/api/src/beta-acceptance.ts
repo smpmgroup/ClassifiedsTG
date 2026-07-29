@@ -104,37 +104,55 @@ async function cleanup() {
 
 try {
   const telegramBase = BigInt(`8${String(Date.now()).slice(-12)}`);
-  const [shared, moderator, seller, ownerB, platformStaff] = await Promise.all([
-    prisma.user.create({
-      data: { telegramUserId: telegramBase, firstName: `Beta shared ${stamp}` },
-    }),
-    prisma.user.create({
-      data: {
-        telegramUserId: telegramBase + 1n,
-        firstName: `Beta moderator ${stamp}`,
-      },
-    }),
-    prisma.user.create({
-      data: {
-        telegramUserId: telegramBase + 2n,
-        firstName: `Beta seller ${stamp}`,
-      },
-    }),
-    prisma.user.create({
-      data: {
-        telegramUserId: telegramBase + 3n,
-        firstName: `Beta owner B ${stamp}`,
-      },
-    }),
-    prisma.user.create({
-      data: {
-        telegramUserId: telegramBase + 4n,
-        firstName: `Beta platform staff ${stamp}`,
-        platformRole: "platform_admin",
-      },
-    }),
-  ]);
-  userIds.push(shared.id, moderator.id, seller.id, ownerB.id, platformStaff.id);
+  const [shared, moderator, seller, ownerB, platformStaff, platformOwner] =
+    await Promise.all([
+      prisma.user.create({
+        data: {
+          telegramUserId: telegramBase,
+          firstName: `Beta shared ${stamp}`,
+        },
+      }),
+      prisma.user.create({
+        data: {
+          telegramUserId: telegramBase + 1n,
+          firstName: `Beta moderator ${stamp}`,
+        },
+      }),
+      prisma.user.create({
+        data: {
+          telegramUserId: telegramBase + 2n,
+          firstName: `Beta seller ${stamp}`,
+        },
+      }),
+      prisma.user.create({
+        data: {
+          telegramUserId: telegramBase + 3n,
+          firstName: `Beta owner B ${stamp}`,
+        },
+      }),
+      prisma.user.create({
+        data: {
+          telegramUserId: telegramBase + 4n,
+          firstName: `Beta platform staff ${stamp}`,
+          platformRole: "platform_admin",
+        },
+      }),
+      prisma.user.create({
+        data: {
+          telegramUserId: telegramBase + 5n,
+          firstName: `Beta platform owner ${stamp}`,
+          platformRole: "platform_owner",
+        },
+      }),
+    ]);
+  userIds.push(
+    shared.id,
+    moderator.id,
+    seller.id,
+    ownerB.id,
+    platformStaff.id,
+    platformOwner.id,
+  );
   const [orgA, orgB] = await Promise.all([
     prisma.organization.create({
       data: {
@@ -152,6 +170,13 @@ try {
     }),
   ]);
   organizationIds.push(orgA.id, orgB.id);
+  await prisma.organizationMember.create({
+    data: {
+      organizationId: orgA.id,
+      userId: platformOwner.id,
+      role: "administrator",
+    },
+  });
   const [communityA, communityB] = await Promise.all([
     prisma.community.create({
       data: {
@@ -367,6 +392,13 @@ try {
     platformRole: "platform_admin",
     mfa: false,
   });
+  const platformOwnerSession = token({
+    scope: "platform",
+    userId: platformOwner.id,
+    telegramUserId: String(platformOwner.telegramUserId),
+    platformRole: "platform_owner",
+    mfa: false,
+  });
   const isolatedAccount = await request("/api/platform/me", platformA, {
     headers: { cookie: `platform_session=${platformStaffUnverified}` },
   });
@@ -382,6 +414,78 @@ try {
     throw new Error(
       "platform cookie leaked a privileged identity into the community-owner session",
     );
+  if (
+    isolatedAccount.body.permissions.platformOwnerDashboard ||
+    isolatedAccount.body.permissions.switchDashboards
+  )
+    throw new Error(
+      "ordinary community owner received platform-owner switching",
+    );
+  checks.push(
+    "ordinary community owner has no platform-owner switch permission",
+  );
+  const staffAccount = await request(
+    "/api/platform/me",
+    platformStaffUnverified,
+  );
+  expectStatus(
+    "platform staff account loads without owner privilege",
+    staffAccount.status,
+    200,
+  );
+  if (
+    staffAccount.body.permissions.platformOwnerDashboard ||
+    staffAccount.body.permissions.switchDashboards
+  )
+    throw new Error("platform staff received platform-owner switching");
+  checks.push("platform staff has no cross-dashboard switch permission");
+  const uniqueOwnerAccount = await request(
+    "/api/platform/me",
+    platformOwnerSession,
+  );
+  expectStatus(
+    "unique platform owner account loads",
+    uniqueOwnerAccount.status,
+    200,
+  );
+  if (
+    !uniqueOwnerAccount.body.permissions.platformOwnerDashboard ||
+    !uniqueOwnerAccount.body.permissions.switchDashboards
+  )
+    throw new Error(
+      "platform owner with community access lost dashboard switching",
+    );
+  checks.push(
+    "only platform owner with community access can switch dashboards",
+  );
+  expectStatus(
+    "second platform owner cannot be assigned",
+    (
+      await request(
+        `/api/platform/admin/users/${seller.id}/role`,
+        platformOwnerSession,
+        {
+          method: "PATCH",
+          body: JSON.stringify({ platformRole: "platform_owner" }),
+        },
+      )
+    ).status,
+    400,
+  );
+  expectStatus(
+    "unique platform owner role cannot be changed in UI",
+    (
+      await request(
+        `/api/platform/admin/users/${platformOwner.id}/role`,
+        platformOwnerSession,
+        {
+          method: "PATCH",
+          body: JSON.stringify({ platformRole: "platform_admin" }),
+        },
+      )
+    ).status,
+    403,
+  );
 
   const paidMode = await request(
     `/api/platform/communities/${communityA.id}/monetization`,
