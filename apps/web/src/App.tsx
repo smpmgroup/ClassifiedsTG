@@ -815,11 +815,6 @@ function PlatformWorkspace({
           <span />
         </button>
         <div className={menuOpen ? "open" : ""}>
-          {platformAdminOnly && (
-            <a href="/owner">{t("communityDashboardLink")}</a>
-          )}
-          <a href="/docs">{t("instruction")}</a>
-          <a href="/support">{t("support")}</a>
           <LanguageSelect compact />
           <button
             onClick={() => {
@@ -2611,11 +2606,18 @@ function PlatformFinancePanel() {
   );
 }
 
-function PlatformStaffManagement({ canEdit }: { canEdit: boolean }) {
+function PlatformStaffManagement({
+  canEdit,
+  botUsername,
+}: {
+  canEdit: boolean;
+  botUsername: string;
+}) {
   const [users, setUsers] = useState<any[]>([]);
   const [audit, setAudit] = useState<any[]>([]);
   const [search, setSearch] = useState("");
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const load = async (query = "") => {
     const [userItems, auditItems] = await Promise.all([
       request(
@@ -2652,6 +2654,27 @@ function PlatformStaffManagement({ canEdit }: { canEdit: boolean }) {
   return (
     <>
       <h3>Сотрудники платформы</h3>
+      <section className="staff-invite">
+        <div>
+          <b>Добавить нового сотрудника</b>
+          <p>
+            Отправьте человеку ссылку. После того как он откроет бота и
+            подтвердит Telegram-аккаунт, найдите его ниже по @username или ID и
+            назначьте роль.
+          </p>
+        </div>
+        <button
+          type="button"
+          disabled={!canEdit}
+          onClick={async () => {
+            const inviteUrl = `https://t.me/${botUsername}?start=platform`;
+            await navigator.clipboard.writeText(inviteUrl);
+            setNotice("✓ Ссылка приглашения скопирована");
+          }}
+        >
+          Скопировать приглашение
+        </button>
+      </section>
       <form className="staff-search" onSubmit={find}>
         <input
           value={search}
@@ -2661,6 +2684,13 @@ function PlatformStaffManagement({ canEdit }: { canEdit: boolean }) {
         <button>Найти</button>
       </form>
       {error && <LoadError message={error} />}
+      {notice && <p className="platform-message">{notice}</p>}
+      {!users.length && search && !error && (
+        <p className="muted">
+          Пользователь пока не найден. Он должен сначала открыть ссылку
+          приглашения и нажать «Запустить» в боте.
+        </p>
+      )}
       <div className="staff-list">
         {users.map((user) => (
           <div key={user.id}>
@@ -2759,6 +2789,16 @@ function PlatformOwnerPanel({
   };
   useEffect(() => {
     void load().catch((e) => setMessage(e.message));
+    const refresh = () => {
+      if (document.visibilityState === "visible")
+        void load().catch((e) => setMessage(e.message));
+    };
+    const timer = window.setInterval(refresh, 60_000);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", refresh);
+    };
   }, []);
   const save = async (event: any) => {
     event.preventDefault();
@@ -2897,12 +2937,10 @@ function PlatformOwnerPanel({
             </small>
           )}
         </div>
-        <button
-          disabled={busy}
-          onClick={() => void load().catch((e) => setMessage(e.message))}
-        >
-          ↻ {t("refresh")}
-        </button>
+        <span className="auto-refresh-status">
+          <i />
+          Обновляется автоматически
+        </span>
       </div>
       <div className="platform-console-link" hidden={activeTab !== "overview"}>
         <b>{t("reviewModes")}</b>
@@ -3217,6 +3255,19 @@ function PlatformOwnerPanel({
                 >
                   Пользователь ↗
                 </a>
+                {community.inviteUrl && (
+                  <>
+                    {" "}
+                    ·{" "}
+                    <a
+                      href={community.inviteUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Открыть Telegram-сообщество ↗
+                    </a>
+                  </>
+                )}
               </small>
             </span>
             {community.deletionScheduledFor &&
@@ -3252,7 +3303,10 @@ function PlatformOwnerPanel({
         ))}
       </div>
       <div id="platform-team" hidden={activeTab !== "team"}>
-        <PlatformStaffManagement canEdit={canEdit} />
+        <PlatformStaffManagement
+          canEdit={canEdit}
+          botUsername={overview.botUsername}
+        />
       </div>
       <div id="platform-support" hidden={activeTab !== "support"}>
         <PlatformSupportPanel />

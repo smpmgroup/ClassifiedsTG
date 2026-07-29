@@ -576,9 +576,26 @@ bot.start(async (ctx) => {
   if (ctx.startPayload === "platform") {
     if (ctx.chat.type !== "private")
       return ctx.reply("Откройте личный чат с ботом, чтобы войти в кабинет.");
+    await prisma.user.upsert({
+      where: { telegramUserId: BigInt(ctx.from.id) },
+      update: {
+        username: ctx.from.username,
+        firstName: ctx.from.first_name,
+        lastName: ctx.from.last_name,
+        languageCode: ctx.from.language_code,
+        botStartedAt: new Date(),
+      },
+      create: {
+        telegramUserId: BigInt(ctx.from.id),
+        username: ctx.from.username,
+        firstName: ctx.from.first_name,
+        lastName: ctx.from.last_name,
+        languageCode: ctx.from.language_code,
+        botStartedAt: new Date(),
+      },
+    });
     return ctx.reply(
-      "Откройте кабинет администратора, чтобы подключить Telegram-сообщество.",
-      platformBoard(ctx.from.language_code),
+      "✅ Аккаунт зарегистрирован в Adnecta. Сообщите владельцу платформы ваш @username или Telegram ID — теперь он сможет назначить вам роль.",
     );
   }
   const user = await prisma.user.findUnique({

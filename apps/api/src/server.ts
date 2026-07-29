@@ -1082,6 +1082,11 @@ const platformSessionPayload = (
   platformRole: user.platformRole,
   mfa,
 });
+const setPlatformSessionCookie = (reply: any, accessToken: string) =>
+  reply.header(
+    "Set-Cookie",
+    `platform_session=${encodeURIComponent(accessToken)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${config.ACCESS_TOKEN_TTL_SECONDS}`,
+  );
 
 app.post(
   "/api/auth/platform/web/start",
@@ -1131,7 +1136,12 @@ app.post(
       .digest("hex");
     const cacheKey = `web-login-result:${tokenHash}`;
     const cached = await redis.get(cacheKey);
-    if (cached) return JSON.parse(cached);
+    if (cached) {
+      const result = JSON.parse(cached);
+      if (result.accessToken)
+        setPlatformSessionCookie(reply, result.accessToken);
+      return result;
+    }
     const intent = await prisma.webLoginIntent.findUnique({
       where: { tokenHash },
     });
@@ -1180,6 +1190,7 @@ app.post(
       }),
       expiresIn: config.ACCESS_TOKEN_TTL_SECONDS,
     };
+    setPlatformSessionCookie(reply, String(result.accessToken));
     await Promise.all([
       redis.set(cacheKey, JSON.stringify(result), "EX", 90),
       prisma.auditEvent.create({
@@ -1219,8 +1230,17 @@ app.get(
       user.platformRole !== "platform_owner"
     )
       return reply.redirect("/platform-login?error=denied");
-    if (intent.status !== "claimed")
+    if (intent.status !== "claimed") {
+      const cached = await redis.get(`web-login-result:${tokenHash}`);
+      if (cached) {
+        const result = JSON.parse(cached);
+        if (result.accessToken) {
+          setPlatformSessionCookie(reply, result.accessToken);
+          return reply.redirect("/platform-owner");
+        }
+      }
       return reply.redirect("/platform-login?error=used");
+    }
     const consumed = await prisma.webLoginIntent.updateMany({
       where: {
         id: intent.id,
@@ -1237,10 +1257,7 @@ app.get(
         expiresIn: config.ACCESS_TOKEN_TTL_SECONDS,
       },
     );
-    reply.header(
-      "Set-Cookie",
-      `platform_session=${encodeURIComponent(accessToken)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${config.ACCESS_TOKEN_TTL_SECONDS}`,
-    );
+    setPlatformSessionCookie(reply, accessToken);
     await prisma.auditEvent.create({
       data: {
         actorId: user.id,

@@ -63,6 +63,7 @@
   margin: 0 0 28px;
   padding: 8px;
   overflow-x: auto;
+  flex-wrap: wrap;
   border: 1px solid #dce7e1;
   border-radius: 16px;
   background: #fff;
@@ -133,6 +134,53 @@
 
 .dashboard-footer small {
   color: #7a8a81;
+}
+
+.staff-invite {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 14px;
+  padding: 20px;
+  border: 1px solid #cfe2d7;
+  border-radius: 16px;
+  background: #edf8f2;
+}
+
+.staff-invite p {
+  max-width: 720px;
+  margin: 6px 0 0;
+  color: #5e7066;
+  line-height: 1.5;
+}
+
+.staff-invite button {
+  min-width: max-content;
+  padding: 11px 15px;
+  border: 0;
+  border-radius: 11px;
+  background: #168752;
+  color: #fff;
+  font: inherit;
+  font-weight: 800;
+}
+
+.auto-refresh-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #607269;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.auto-refresh-status i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #20a363;
+  box-shadow: 0 0 0 4px #dff4e9;
 }
 
 .owner-control-center button {
@@ -216,6 +264,7 @@
     max-height: 65vh;
     padding: 10px;
     flex-direction: column;
+    flex-wrap: nowrap;
     overflow-y: auto;
   }
 
@@ -238,5 +287,14 @@
   .dashboard-footer nav {
     justify-content: flex-start;
     flex-wrap: wrap;
+  }
+
+  .staff-invite {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .staff-invite button {
+    min-width: 0;
   }
 }
