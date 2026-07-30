@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { LanguageSelect } from "./LanguageSelect";
 import logoSrc from "./assets/logo.png";
+import mascotSrc from "./assets/mascot-nobg.png";
 import {
   completePlatformTwoFactor,
   pollPlatformWebLogin,
@@ -221,28 +222,26 @@ function HeroSection() {
   return (
     <section className="public-hero">
       <div className="hero-inner lp-container">
-        <div className="hero-text">
-          <p className="hero-epigraph">{t("heroEpigraph")}</p>
-          <h1 className="hero-title">{t("heroTitle")}</h1>
-          <p className="hero-lead">{t("heroLead")}</p>
-          <div className="hero-actions">
-            <a
-              className="public-primary"
-              href="/login"
-              onClick={() => void track("hero_cta_click")}
-            >
-              {t("connectCommunity")}
-            </a>
-            <a href="#how" className="hero-link">{t("viewProcess")}</a>
-          </div>
-          <div className="hero-chips">
-            <span>{t("heroBenefit1")}</span>
-            <span>{t("heroBenefit2")}</span>
-            <span>{t("heroBenefit3")}</span>
-          </div>
-        </div>
         <div className="hero-mascot" aria-hidden="true">
-          <img src={logoSrc} alt="" />
+          <img src={mascotSrc} alt="" />
+        </div>
+        <p className="hero-epigraph">{t("heroEpigraph")}</p>
+        <h1 className="hero-title">{t("heroTitle")}</h1>
+        <p className="hero-lead">{t("heroLead")}</p>
+        <div className="hero-actions">
+          <a
+            className="public-primary"
+            href="/login"
+            onClick={() => void track("hero_cta_click")}
+          >
+            {t("connectCommunity")}
+          </a>
+          <a href="#how" className="hero-link">{t("viewProcess")}</a>
+        </div>
+        <div className="hero-chips">
+          <span>{t("heroBenefit1")}</span>
+          <span>{t("heroBenefit2")}</span>
+          <span>{t("heroBenefit3")}</span>
         </div>
       </div>
     </section>
