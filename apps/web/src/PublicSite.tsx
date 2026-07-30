@@ -164,33 +164,35 @@ function Header() {
 function Footer() {
   const { t } = useTranslation();
   return (
-    <footer className="public-footer">
-      <div className="footer-brand">
-        <a className="public-brand" href="/" aria-label="Adnecta">
-          <span aria-hidden="true">AD</span>
-          <b>Adnecta</b>
-        </a>
-        <p>{t("footerSlogan")}</p>
-      </div>
-      <nav aria-label="Footer navigation">
-        <a href="/#pricing">{t("pricingNav")}</a>
-        <a href="/#how">{t("howItWorks")}</a>
-        <a href="/support">{t("support")}</a>
-        <a href="/terms">{t("terms")}</a>
-        <a href="/privacy">{t("privacy")}</a>
-        <a href="/prohibited">{t("prohibited")}</a>
-      </nav>
-      <small>
-        {t("footerBeta")}{" "}
-        <a
-          className="service-owner-entry"
-          href="/platform-login"
-          aria-label={t("platformOwnerDashboard")}
-        >
-          ·
-        </a>
-      </small>
-    </footer>
+    <div className="public-footer-wrap">
+      <footer className="public-footer lp-container">
+        <div className="footer-brand">
+          <a className="public-brand" href="/" aria-label="Adnecta">
+            <img src={logoSrc} alt="Adnecta" className="brand-logo" />
+            <b>Adnecta</b>
+          </a>
+          <p>{t("footerSlogan")}</p>
+        </div>
+        <nav aria-label="Footer navigation">
+          <a href="/#pricing">{t("pricingNav")}</a>
+          <a href="/#how">{t("howItWorks")}</a>
+          <a href="/support">{t("support")}</a>
+          <a href="/terms">{t("terms")}</a>
+          <a href="/privacy">{t("privacy")}</a>
+          <a href="/prohibited">{t("prohibited")}</a>
+        </nav>
+        <small>
+          {t("footerBeta")}{" "}
+          <a
+            className="service-owner-entry"
+            href="/platform-login"
+            aria-label={t("platformOwnerDashboard")}
+          >
+            ·
+          </a>
+        </small>
+      </footer>
+    </div>
   );
 }
 
@@ -218,27 +220,29 @@ function HeroSection() {
   const { t } = useTranslation();
   return (
     <section className="public-hero">
-      <div className="hero-inner">
-        <div className="beta-pill">{t("landingBadge")}</div>
-        <h1>{t("heroTitle")}</h1>
-        <p>{t("heroLead")}</p>
-        <div className="hero-actions">
-          <a
-            className="public-primary public-primary-inv"
-            href="/login"
-            onClick={() => void track("hero_cta_click")}
-          >
-            {t("connectCommunity")}
-          </a>
-          <a href="#how" className="hero-secondary">
-            {t("viewProcess")}
-          </a>
+      <div className="hero-inner lp-container">
+        <div className="hero-text">
+          <p className="hero-epigraph">{t("heroEpigraph")}</p>
+          <h1 className="hero-title">{t("heroTitle")}</h1>
+          <p className="hero-lead">{t("heroLead")}</p>
+          <div className="hero-actions">
+            <a
+              className="public-primary"
+              href="/login"
+              onClick={() => void track("hero_cta_click")}
+            >
+              {t("connectCommunity")}
+            </a>
+            <a href="#how" className="hero-link">{t("viewProcess")}</a>
+          </div>
+          <div className="hero-chips">
+            <span>{t("heroBenefit1")}</span>
+            <span>{t("heroBenefit2")}</span>
+            <span>{t("heroBenefit3")}</span>
+          </div>
         </div>
-        <div className="hero-benefits">
-          <span>✓ {t("heroBenefit1")}</span>
-          <span>✓ {t("heroBenefit2")}</span>
-          <span>✓ {t("heroBenefit3")}</span>
-          <span>✓ {t("heroBenefit4")}</span>
+        <div className="hero-mascot" aria-hidden="true">
+          <img src={logoSrc} alt="" />
         </div>
       </div>
     </section>
@@ -323,22 +327,22 @@ function DemoSection() {
   );
 }
 
-function BenefitsSection() {
+function FeaturesSection() {
   const { t } = useTranslation();
-  const benefits = [
-    { icon: "📋", title: t("benefit1Title"), text: t("benefit1Text") },
-    { icon: "⚙️", title: t("benefit2Title"), text: t("benefit2Text") },
-    { icon: "💰", title: t("benefit3Title"), text: t("benefit3Text") },
+  const cards = [
+    { icon: "⚡", title: t("benefit1Title"), text: t("benefit1Text") },
+    { icon: "🎛️", title: t("benefit2Title"), text: t("benefit2Text") },
+    { icon: "⭐", title: t("benefit3Title"), text: t("benefit3Text") },
   ];
   return (
-    <section className="public-benefits" id="features">
+    <section className="public-features" id="features">
       <div className="lp-container">
-        <div className="section-label">{t("benefitsBadge")}</div>
-        <h2>{t("benefitsTitle")}</h2>
-        <div className="benefits-grid">
-          {benefits.map(({ icon, title, text }) => (
-            <article key={title}>
-              <div className="benefit-icon" aria-hidden="true">{icon}</div>
+        <p className="section-tag">{t("benefitsBadge")}</p>
+        <h2 className="section-h2">{t("benefitsTitle")}</h2>
+        <div className="features-grid">
+          {cards.map(({ icon, title, text }) => (
+            <article className="feature-card" key={title}>
+              <span className="feature-icon" aria-hidden="true">{icon}</span>
               <h3>{title}</h3>
               <p>{text}</p>
             </article>
@@ -359,12 +363,12 @@ function HowSection() {
   return (
     <section className="public-how" id="how">
       <div className="lp-container">
-        <div className="section-label">{t("howBadge")}</div>
-        <h2>{t("howItWorksTitle")}</h2>
+        <p className="section-tag">{t("howBadge")}</p>
+        <h2 className="section-h2 section-h2-inv">{t("howItWorksTitle")}</h2>
         <div className="how-steps">
           {steps.map(({ num, title, text }) => (
-            <article key={num}>
-              <span className="step-num" aria-hidden="true">{num}</span>
+            <article className="how-step" key={num}>
+              <div className="how-step-num" aria-hidden="true">{num}</div>
               <h3>{title}</h3>
               <p>{text}</p>
             </article>
@@ -430,14 +434,14 @@ function AdminControlSection() {
 
 function PricingSection({ data }: { data: SiteData }) {
   const { t } = useTranslation();
-  const { minimumStars, defaultCommissionPercent, holdDays, freeBoardSubscriptionStars, minimumPayoutStars } = data.publication;
+  const { minimumStars, defaultCommissionPercent, freeBoardSubscriptionStars } = data.publication;
   const communityShare = 100 - defaultCommissionPercent;
 
   return (
     <section className="public-pricing-inline" id="pricing">
       <div className="lp-container">
-        <div className="section-label">{t("pricingBadge")}</div>
-        <h2>{t("pricingTitle")}</h2>
+        <p className="section-tag">{t("pricingBadge")}</p>
+        <h2 className="section-h2">{t("pricingTitle")}</h2>
         <p className="pricing-lead">{t("pricingLead")}</p>
         <div className="pricing-models">
           <article>
@@ -460,16 +464,13 @@ function PricingSection({ data }: { data: SiteData }) {
               {freeBoardSubscriptionStars}&nbsp;⭐
               <i>&nbsp;{t("pricingIntervalNote")}</i>
             </strong>
-            <p>{t("model2Desc")}</p>
+            <p className="pricing-commission">{t("model2Desc")}</p>
             <ul>
               <li>✓ {t("model2Feature1")}</li>
               <li>✓ {t("model2Feature2")}</li>
               <li>✓ {t("model2Feature3")}</li>
             </ul>
           </article>
-        </div>
-        <div className="pricing-note-inline">
-          <p>{t("pricingPaymentsDesc", { hold: holdDays, min: minimumPayoutStars })}</p>
         </div>
       </div>
     </section>
@@ -637,25 +638,22 @@ function TrustSection() {
 
 function FaqSection({ data }: { data: SiteData }) {
   const { t } = useTranslation();
-  const { defaultCommissionPercent, holdDays, minimumPayoutStars } = data.publication;
+  const { defaultCommissionPercent } = data.publication;
   const share = 100 - defaultCommissionPercent;
 
   const faqs = [
     { q: t("faqMembersRegister"), a: t("faqMembersRegisterAnswer") },
-    { q: t("ownBotQuestion"), a: t("ownBotAnswer") },
-    { q: t("faqWhereView"), a: t("faqWhereViewAnswer") },
     { q: t("freeQuestion"), a: t("freeAnswer") },
     { q: t("moderationQuestion"), a: t("moderationAnswer") },
     { q: t("faqBotPermissions"), a: t("faqBotPermissionsAnswer") },
-    { q: t("faqPayouts"), a: t("faqPayoutsAnswer", { share, hold: holdDays, min: minimumPayoutStars }) },
-    { q: t("disableQuestion"), a: t("disableAnswer") },
+    { q: t("faqPayouts"), a: t("faqPayoutsAnswer", { share, hold: data.publication.holdDays, min: data.publication.minimumPayoutStars }) },
   ];
 
   return (
     <section className="public-faq" id="faq">
-      <div className="lp-container faq-inner">
-        <div className="section-label">{t("faq")}</div>
-        <h2>{t("faqTitle")}</h2>
+      <div className="faq-inner lp-container">
+        <p className="section-tag">{t("faq")}</p>
+        <h2 className="section-h2">{t("faqTitle")}</h2>
         {faqs.map(({ q, a }, i) => (
           <details key={i}>
             <summary>{q}</summary>
@@ -671,7 +669,7 @@ function FinalCtaSection() {
   const { t } = useTranslation();
   return (
     <section className="public-final">
-      <div className="lp-container final-inner">
+      <div className="final-inner lp-container">
         <h2>{t("launchCommunity")}</h2>
         <p>{t("launchLead")}</p>
         <TelegramCta label={t("createAdminDashboard")} inverted />
@@ -692,16 +690,10 @@ function Landing({ data }: { data: SiteData }) {
   return (
     <>
       <HeroSection />
-      <ProblemSection />
-      <DemoSection />
-      <BenefitsSection />
+      <FeaturesSection />
       <HowSection />
-      <RolesSection />
-      <AdminControlSection />
       <PricingSection data={data} />
       <CalculatorSection data={data} />
-      <ScenariosSection />
-      <TrustSection />
       <FaqSection data={data} />
       <FinalCtaSection />
     </>

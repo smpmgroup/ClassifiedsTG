@@ -286,6 +286,7 @@ const en = {
   featuresNav: "Features",
   faqNav: "Questions",
 
+  heroEpigraph: "«Where people gather, a market is born.»",
   heroTitle: "A classifieds board for your Telegram group",
   heroLead: "Adnecta adds an embedded marketplace to any community in minutes — no external sites, no extra apps. Members post ads inside Telegram, you manage and earn.",
   heroBenefit1: "Setup in about 2 minutes",
@@ -926,6 +927,7 @@ const publicRu: Partial<typeof en> = {
   featuresNav: "Возможности",
   faqNav: "Вопросы",
 
+  heroEpigraph: "«Там, где собираются люди — рождается рынок.»",
   heroTitle: "Доска объявлений для вашей Telegram-группы",
   heroLead: "Adnecta добавляет встроенный маркетплейс в любое сообщество — за 2 минуты, без внешних сайтов. Участники публикуют объявления прямо в Telegram, вы управляете и зарабатываете.",
   heroBenefit1: "Запуск примерно за 2 минуты",
