@@ -286,8 +286,8 @@ const en = {
   featuresNav: "Features",
   faqNav: "Questions",
 
-  heroTitle: "Turn your Telegram group into a structured classifieds board",
-  heroLead: "Members post and find ads right inside Telegram. You manage categories and moderation, set publishing rules and can earn together with your community.",
+  heroTitle: "A classifieds board for your Telegram group",
+  heroLead: "Adnecta adds an embedded marketplace to any community in minutes — no external sites, no extra apps. Members post ads inside Telegram, you manage and earn.",
   heroBenefit1: "Setup in about 2 minutes",
   heroBenefit2: "No separate bot needed",
   heroBenefit3: "No registration for members",
@@ -926,8 +926,8 @@ const publicRu: Partial<typeof en> = {
   featuresNav: "Возможности",
   faqNav: "Вопросы",
 
-  heroTitle: "Превратите Telegram-группу в удобную доску объявлений",
-  heroLead: "Участники размещают и находят объявления прямо внутри Telegram. Вы управляете категориями и модерацией, устанавливаете правила публикации и можете зарабатывать вместе со своим сообществом.",
+  heroTitle: "Доска объявлений для вашей Telegram-группы",
+  heroLead: "Adnecta добавляет встроенный маркетплейс в любое сообщество — за 2 минуты, без внешних сайтов. Участники публикуют объявления прямо в Telegram, вы управляете и зарабатываете.",
   heroBenefit1: "Запуск примерно за 2 минуты",
   heroBenefit2: "Не нужен собственный бот",
   heroBenefit3: "Без регистрации для участников",
