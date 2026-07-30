@@ -76,9 +76,20 @@
 }
 
 .public-header nav {
+  /* reset style.css global nav { position: fixed; bottom: 0 } */
+  position: static;
+  bottom: auto;
+  left: auto;
+  transform: none;
+  width: auto;
+  height: auto;
+  padding-bottom: 0;
+  background: none;
+  /* grid placement and layout */
   grid-area: nav;
   display: flex;
   justify-content: center;
+  align-items: center;
   gap: 2px;
 }
 
@@ -208,22 +219,23 @@
 /* ── HERO ────────────────────────────────────────────────── */
 .public-hero {
   background: #fff;
-  padding: clamp(48px, 7vw, 96px) 0 clamp(56px, 7vw, 100px);
-  text-align: center;
+  padding: clamp(56px, 7vw, 100px) 0;
 }
 
 .hero-inner {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 1fr 440px;
+  gap: clamp(40px, 5vw, 72px);
   align-items: center;
 }
 
-.hero-mascot {
-  margin-bottom: 28px;
-}
+.hero-text { max-width: none; }
+
+.hero-mascot { flex-shrink: 0; }
 
 .hero-mascot img {
-  width: clamp(260px, 28vw, 420px);
+  width: 100%;
+  max-width: 440px;
   height: auto;
   display: block;
 }
@@ -235,7 +247,6 @@
   margin: 0 0 28px;
   display: flex;
   align-items: center;
-  justify-content: center;
   gap: 12px;
 }
 
@@ -249,13 +260,12 @@
 }
 
 .hero-title {
-  font-size: clamp(40px, 5.5vw, 72px);
+  font-size: clamp(36px, 4.5vw, 62px);
   font-weight: 800;
   line-height: 1.06;
   letter-spacing: -.045em;
   color: var(--ink);
   margin: 0 0 20px;
-  max-width: 760px;
 }
 
 .hero-lead {
@@ -263,7 +273,7 @@
   color: var(--ink-mid);
   line-height: 1.65;
   margin: 0 0 40px;
-  max-width: 520px;
+  max-width: 480px;
 }
 
 .hero-actions {
@@ -271,8 +281,7 @@
   gap: 12px;
   align-items: center;
   flex-wrap: wrap;
-  justify-content: center;
-  margin-bottom: 32px;
+  margin-bottom: 28px;
 }
 
 .hero-link {
@@ -289,7 +298,6 @@
 .hero-chips {
   display: flex;
   flex-wrap: wrap;
-  justify-content: center;
   gap: 6px 20px;
   font-size: 13px;
   color: var(--ink-mid);
@@ -829,8 +837,17 @@
 
   .menu-open .header-right .public-login { display: inline-flex; }
 
-  /* HERO — already centered on all sizes, just smaller mascot on mobile */
-  .hero-mascot img { width: min(220px, 60vw); }
+  /* HERO mobile — stack vertically, mascot on top */
+  .hero-inner {
+    grid-template-columns: 1fr;
+    text-align: center;
+  }
+  .hero-mascot { order: -1; }
+  .hero-mascot img { width: min(260px, 70vw); margin-inline: auto; }
+  .hero-lead { max-width: none; }
+  .hero-epigraph { justify-content: center; }
+  .hero-actions { justify-content: center; }
+  .hero-chips { justify-content: center; }
 
   /* SECTIONS mobile */
   .features-grid { grid-template-columns: 1fr; gap: 12px; }
