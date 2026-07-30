@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import logoSrc from "./assets/logo.png";
 import {
   NavLink,
   Route,
@@ -767,7 +768,7 @@ function PlatformWorkspace({
   if (platformOwnerRoute && !data.permissions?.platformOwnerDashboard)
     return (
       <main className="platform-workspace access-denied-page">
-        <div className="logo">AD</div>
+        <img src={logoSrc} alt="Adnecta" className="logo" />
         <h1>Доступ закрыт</h1>
         <p>
           Кабинет владельца платформы доступен только единственному аккаунту
@@ -3479,7 +3480,7 @@ function Shell({ children }: { children: any }) {
 function Message({ text, actions }: { text: string; actions?: any }) {
   return (
     <main className="message">
-      <div className="logo">AD</div>
+      <img src={logoSrc} alt="Adnecta" className="logo" />
       <h2>{text}</h2>
       <div className="actions">{actions}</div>
     </main>

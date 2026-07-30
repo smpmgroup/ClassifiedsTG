@@ -84,16 +84,11 @@
   letter-spacing: -.02em;
   flex-shrink: 0;
 }
-.public-brand span {
-  width: 32px;
-  height: 32px;
-  border-radius: 9px;
-  display: grid;
-  place-items: center;
-  background: var(--green);
-  color: #fff;
-  font-size: 12px;
-  font-weight: 900;
+.brand-logo {
+  width: 36px;
+  height: 36px;
+  object-fit: contain;
+  flex-shrink: 0;
 }
 .public-header nav {
   display: flex;

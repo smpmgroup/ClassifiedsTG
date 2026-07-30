@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { LanguageSelect } from "./LanguageSelect";
+import logoSrc from "./assets/logo.png";
 import {
   completePlatformTwoFactor,
   pollPlatformWebLogin,
@@ -118,7 +119,7 @@ function Header() {
   return (
     <header className={`public-header${menuOpen ? " menu-open" : ""}`}>
       <a className="public-brand" href="/" aria-label="Adnecta">
-        <span aria-hidden="true">AD</span>
+        <img src={logoSrc} alt="Adnecta" className="brand-logo" />
         <b>Adnecta</b>
       </a>
 
