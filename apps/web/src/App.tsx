@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { APP_VERSION } from "./version";
 import logoSrc from "./assets/logo.png";
 import {
@@ -738,6 +738,7 @@ function PlatformWorkspace({
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
   const [adminCounts, setAdminCounts] = useState({ pending: 0, reports: 0 });
+  const tabsRef = useRef<HTMLElement>(null);
   const load = () =>
     request("/platform/me")
       .then(setData)
@@ -757,6 +758,16 @@ function PlatformWorkspace({
       .then((c) => setAdminCounts({ pending: c.pending || 0, reports: c.reports || 0 }))
       .catch(() => {});
   }, [selectedCommunityId, platformAdminOnly]);
+
+  const currentTab = dashboardParams.get("tab") || "overview";
+  useEffect(() => {
+    if (!tabsRef.current) return;
+    const active = tabsRef.current.querySelector<HTMLElement>("button.active");
+    if (!active) return;
+    const nav = tabsRef.current;
+    const targetLeft = active.offsetLeft - nav.clientWidth / 2 + active.offsetWidth / 2;
+    nav.scrollTo({ left: Math.max(0, targetLeft), behavior: "smooth" });
+  }, [currentTab]);
   const connect = async (organizationId?: string) => {
     const busyKey = organizationId || "new-community";
     setBusy(busyKey);
@@ -881,6 +892,7 @@ function PlatformWorkspace({
         </div>
       </header>
       <nav
+        ref={tabsRef}
         className={`workspace-nav workspace-tabs ${menuOpen ? "open" : ""}`}
         aria-label={
           platformAdminOnly ? "Разделы платформы" : "Разделы кабинета"
