@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
+import { APP_VERSION } from "./version";
 import logoSrc from "./assets/logo.png";
 import {
   NavLink,
@@ -736,6 +737,7 @@ function PlatformWorkspace({
   const [data, setData] = useState<any>();
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
+  const [adminCounts, setAdminCounts] = useState({ pending: 0, reports: 0 });
   const load = () =>
     request("/platform/me")
       .then(setData)
@@ -808,7 +810,14 @@ function PlatformWorkspace({
     new URLSearchParams(window.location.search).get("community") ||
     ownerCommunities[0]?.id ||
     "";
+  useEffect(() => {
+    if (!selectedCommunityId || platformAdminOnly) return;
+    request("/admin/counts")
+      .then((c) => setAdminCounts({ pending: c.pending || 0, reports: c.reports || 0 }))
+      .catch(() => {});
+  }, [selectedCommunityId, platformAdminOnly]);
   const administrationTabs = new Set([
+    "board",
     "moderation",
     "reports",
     "users",
@@ -902,30 +911,38 @@ function PlatformWorkspace({
         ) : (
           <>
             {[
-              ["overview", "⌂", t("overview")],
-              ["communities", "▦", t("communities")],
-              ["moderation", "✓", "Модерация"],
-              ["reports", "!", "Жалобы"],
-              ["users", "♙", "Люди"],
-              ["categories", "▦", "Категории"],
-              ["settings", "⚙", "Настройки"],
-              ["finance", "★", t("starsPayouts")],
-              ["support", "?", t("support")],
-            ].map(([key, icon, label]) => (
-              <button
-                type="button"
-                key={String(key)}
-                className={ownerTab === key ? "active" : ""}
-                onClick={() => {
-                  const next = new URLSearchParams(dashboardParams);
-                  next.set("tab", String(key));
-                  setDashboardParams(next);
-                  setMenuOpen(false);
-                }}
-              >
-                <span>{icon}</span> {label}
-              </button>
-            ))}
+              ["overview", "⌂", t("overview"), ""],
+              ["communities", "▦", t("communities"), ""],
+              ["board", "☰", "Доска", ""],
+              ["moderation", "✓", "Модерация", "pending"],
+              ["reports", "!", "Жалобы", "reports"],
+              ["users", "♙", "Люди", ""],
+              ["categories", "▦", "Категории", ""],
+              ["risk", "🛡", "Риски", ""],
+              ["settings", "⚙", "Настройки", ""],
+              ["audit", "📋", "Журнал", ""],
+              ["finance", "★", t("starsPayouts"), ""],
+              ["support", "?", t("support"), ""],
+            ].map(([key, icon, label, countKey]) => {
+              const count = countKey === "pending" ? adminCounts.pending : countKey === "reports" ? adminCounts.reports : 0;
+              return (
+                <button
+                  type="button"
+                  key={String(key)}
+                  className={ownerTab === key ? "active" : ""}
+                  onClick={() => {
+                    const next = new URLSearchParams(dashboardParams);
+                    next.set("tab", String(key));
+                    next.delete("authorId");
+                    setDashboardParams(next);
+                    setMenuOpen(false);
+                  }}
+                >
+                  <span>{icon}</span> {label}
+                  {count > 0 && <span className="tab-badge">{count}</span>}
+                </button>
+              );
+            })}
           </>
         )}
       </nav>
@@ -1244,7 +1261,7 @@ function PlatformWorkspace({
             <a href="/owner">{t("communityDashboardLink")}</a>
           )}
         </nav>
-        <small>Adnecta 2.0 · Telegram community marketplace</small>
+        <small>Adnecta v{APP_VERSION} · Telegram community marketplace</small>
       </footer>
     </main>
   );
@@ -1272,35 +1289,77 @@ function WebCommunityAdministration({
         </div>
       </section>
     );
+  const selected = communities.find((c) => c.id === selectedCommunityId);
+  const isActive =
+    selected?.tenantStatus === "active" && selected?.botIsAdministrator;
   return (
     <section className="web-community-admin admin-page">
       <header className="admin-header web-admin-header">
         <div>
           <small>АДМИНИСТРИРОВАНИЕ СООБЩЕСТВА</small>
-          <h2>
-            {communities.find(
-              (community) => community.id === selectedCommunityId,
-            )?.name || "Сообщество"}
-          </h2>
-        </div>
-        <label>
-          <span>Сообщество</span>
-          <select
-            value={selectedCommunityId}
-            onChange={(event) => {
-              const next = new URLSearchParams(params);
-              next.set("community", event.target.value);
-              setParams(next);
-            }}
+          <h2>{selected?.name || "Сообщество"}</h2>
+          <span
+            className={`admin-status-badge ${isActive ? "status-active" : "status-inactive"}`}
           >
-            {communities.map((community) => (
-              <option value={community.id} key={community.id}>
-                {community.name}
-              </option>
-            ))}
-          </select>
-        </label>
+            {isActive ? "Работает" : "Требует внимания"}
+          </span>
+          {selected && (
+            <div className="admin-community-stats">
+              <div className="stat-item">
+                <b>{selected._count?.members || 0}</b>
+                <span>Участников</span>
+              </div>
+              <div className="stat-item">
+                <b>{selected._count?.listings || 0}</b>
+                <span>Объявлений</span>
+              </div>
+              {selected.setup && (
+                <div className="stat-item">
+                  <b>
+                    {
+                      [
+                        selected.setup.connected,
+                        selected.setup.administrator,
+                        selected.setup.permissions,
+                        selected.setup.rules,
+                      ].filter(Boolean).length
+                    }
+                    /4
+                  </b>
+                  <span>Настроено</span>
+                </div>
+              )}
+              {communities.length > 1 && (
+                <div className="stat-item">
+                  <b>{communities.length}</b>
+                  <span>Групп всего</span>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+        {communities.length > 1 && (
+          <label>
+            <span>Группа</span>
+            <select
+              value={selectedCommunityId}
+              onChange={(event) => {
+                const next = new URLSearchParams(params);
+                next.set("community", event.target.value);
+                setParams(next);
+              }}
+            >
+              {communities.map((community) => (
+                <option value={community.id} key={community.id}>
+                  {community.name}
+                  {community.tenantStatus !== "active" ? " ⚠" : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
       </header>
+      {view === "board" && <AdminBoard />}
       {view === "moderation" && <AdminModeration />}
       {view === "reports" && <AdminReports />}
       {view === "users" && <AdminUsers />}
@@ -4720,95 +4779,134 @@ function AdminRisk() {
   const [items, setItems] = useState<any[]>([]);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
-  const load = () => request("/admin/abuse").then(setItems);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const load = () => { setError(""); return request("/admin/abuse").then(setItems); };
   useEffect(() => {
     void load().catch((e) => setError(e.message));
-  }, []);
+  }, [refreshKey]);
   const resolve = async (id: string, resolution: string) => {
     setBusy(id);
     setError("");
     try {
       await request(`/admin/abuse/${id}/resolve`, "POST", { resolution });
-      await load();
+      setItems((prev) => prev.filter((i) => i.id !== id));
     } catch (e: any) {
       setError(e.message);
     } finally {
       setBusy("");
     }
   };
-  const labels: Record<string, string> = {
+  const reasonLabels: Record<string, string> = {
     prohibited_content: "Запрещённый контент",
     probable_duplicate: "Вероятный дубликат",
     similar_listing: "Похожее объявление",
     new_account: "Новый аккаунт",
     many_external_links: "Много ссылок",
     low_information: "Мало полезной информации",
-    invoice_velocity: "Слишком много счетов",
+    invoice_velocity: "Много счетов за день",
     risky_listing: "Риск объявления",
+  };
+  const severityConfig: Record<string, { label: string; cls: string }> = {
+    critical: { label: "Критический", cls: "sev-critical" },
+    high: { label: "Высокий", cls: "sev-high" },
+    medium: { label: "Средний", cls: "sev-medium" },
+    low: { label: "Низкий", cls: "sev-low" },
   };
   return (
     <div className="admin-view">
-      <h2>Риск-контроль</h2>
-      <p className="hint">
-        Автоматические сигналы не банят пользователя: администратор видит
-        причины и принимает решение.
-      </p>
-      {error && <LoadError message={error} />}{" "}
+      <div className="admin-view-header">
+        <div>
+          <h2>Риск-контроль</h2>
+          <p className="hint">Автоматические сигналы — подсказки, а не блокировки. Вы принимаете решение.</p>
+        </div>
+        <button className="admin-refresh-btn" onClick={() => setRefreshKey((k) => k + 1)}>↻ Обновить</button>
+      </div>
+      {error && <LoadError message={error} />}
       {!items.length && !error && (
-        <div className="admin-empty">Открытых риск-событий нет</div>
+        <div className="admin-empty">Открытых риск-событий нет ✓</div>
       )}
-      {items.map((item) => (
-        <article className="risk-card" key={item.id}>
-          <header>
-            <span>
-              <b>
-                {item.type === "payment_risk"
-                  ? "Проверка оплаты"
-                  : "Проверка объявления"}
-              </b>
-              <small>
-                {item.user?.firstName || "Пользователь"} · риск {item.score}/100
-              </small>
-            </span>
-            <strong>{item.severity}</strong>
-          </header>
-          {item.listing && (
-            <div>
-              <b>{item.listing.title}</b>
-              <p>{item.listing.description}</p>
-            </div>
-          )}
-          <ul>
-            {item.reasons.map((reason: string) => (
-              <li key={reason}>{labels[reason] || reason}</li>
-            ))}
-          </ul>
-          <footer>
-            <button
-              disabled={busy === item.id}
-              onClick={() => void resolve(item.id, "false_positive")}
-            >
-              Ложное срабатывание
-            </button>
-            {item.payment && (
-              <button
-                className="primary"
-                disabled={busy === item.id}
-                onClick={() => void resolve(item.id, "approved")}
-              >
-                Разрешить оплату
-              </button>
+      {items.map((item) => {
+        const sev = severityConfig[item.severity] || { label: item.severity, cls: "sev-low" };
+        const thumbUrl = item.listing?.images?.[0]?.url;
+        return (
+          <article className="risk-card" key={item.id}>
+            <header>
+              <div className="risk-card-title">
+                {thumbUrl && (
+                  <div
+                    className="risk-thumb"
+                    style={{ backgroundImage: `url(${thumbUrl})` }}
+                  />
+                )}
+                <div>
+                  <b>
+                    {item.type === "payment_risk"
+                      ? "💳 Проверка оплаты"
+                      : "📋 Проверка объявления"}
+                  </b>
+                  <small>
+                    {item.user?.firstName || "Пользователь"}
+                    {item.user?.username ? ` @${item.user.username}` : ""}
+                    {" · "}риск {item.score}/100
+                    {" · "}
+                    {new Date(item.createdAt).toLocaleString("ru", {
+                      day: "numeric",
+                      month: "short",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </small>
+                </div>
+              </div>
+              <span className={`risk-severity-badge ${sev.cls}`}>{sev.label}</span>
+            </header>
+            {item.listing && (
+              <div className="risk-listing-preview">
+                <b>{item.listing.title}</b>
+                {item.listing.description && (
+                  <p>{item.listing.description.slice(0, 200)}{item.listing.description.length > 200 ? "…" : ""}</p>
+                )}
+              </div>
             )}
-            <button
-              className="danger-soft"
-              disabled={busy === item.id}
-              onClick={() => void resolve(item.id, "blocked")}
-            >
-              Подтвердить риск
-            </button>
-          </footer>
-        </article>
-      ))}
+            {item.payment && (
+              <div className="risk-payment-info">
+                💰 Оплата {item.payment.amountStars} Stars · риск {item.payment.riskScore}/100
+              </div>
+            )}
+            <div className="risk-reasons">
+              {(item.reasons || []).map((reason: string) => (
+                <span key={reason} className="risk-reason-chip">
+                  {reasonLabels[reason] || reason}
+                </span>
+              ))}
+            </div>
+            <footer>
+              <button
+                disabled={busy === item.id}
+                onClick={() => void resolve(item.id, "false_positive")}
+              >
+                Ложное срабатывание
+              </button>
+              {item.payment && (
+                <button
+                  className="primary"
+                  disabled={busy === item.id}
+                  onClick={() => void resolve(item.id, "approved")}
+                >
+                  Разрешить оплату
+                </button>
+              )}
+              <button
+                className="danger-soft"
+                disabled={busy === item.id}
+                onClick={() => void resolve(item.id, "blocked")}
+              >
+                {busy === item.id ? "Обработка…" : "Подтвердить риск"}
+              </button>
+            </footer>
+          </article>
+        );
+      })}
     </div>
   );
 }
@@ -4870,68 +4968,165 @@ function AdminModeration() {
   const [queue, setQueue] = useState<any[]>([]);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
+  const [comments, setComments] = useState<Record<string, string>>({});
+  const [refreshKey, setRefreshKey] = useState(0);
   useEffect(() => {
+    setError("");
     request("/admin/moderation")
       .then(setQueue)
       .catch((e) => setError(e.message));
-  }, []);
+  }, [refreshKey]);
   const action = async (id: string, status: string) => {
+    const comment = comments[id]?.trim();
+    if (["rejected", "changes_requested"].includes(status) && !comment) {
+      setComments((prev) => ({ ...prev, [id]: prev[id] ?? "" }));
+      const field = document.getElementById(`mod-comment-${id}`);
+      field?.focus();
+      return;
+    }
     setBusy(id);
     setError("");
     try {
       await request(`/admin/listings/${id}/transition`, "POST", {
         status,
-        reason: status === "published" ? undefined : "Решение модератора",
+        reason: status === "published" ? undefined : comment || "Решение модератора",
       });
       setQueue((current) => current.filter((item) => item.id !== id));
+      setComments((prev) => { const next = { ...prev }; delete next[id]; return next; });
     } catch (e: any) {
       setError(e.message);
     } finally {
       setBusy("");
     }
   };
+  const riskLevel = (score: number) =>
+    score >= 70 ? "high" : score >= 40 ? "medium" : "low";
+  const riskLabels: Record<string, string> = {
+    prohibited_content: "Запрещённый контент",
+    probable_duplicate: "Дубликат",
+    similar_listing: "Похожее",
+    new_account: "Новый аккаунт",
+    many_external_links: "Много ссылок",
+    low_information: "Мало информации",
+    invoice_velocity: "Много счетов",
+    risky_listing: "Риск",
+  };
   return (
     <div className="admin-view">
-      <h2>Очередь модерации</h2>
+      <div className="admin-view-header">
+        <div>
+          <h2>Очередь модерации</h2>
+          <p className="hint">
+            {queue.length > 0
+              ? `${queue.length} объявлени${queue.length === 1 ? "е" : queue.length < 5 ? "я" : "й"} ожидают проверки`
+              : "Все объявления проверены"}
+          </p>
+        </div>
+        <button className="admin-refresh-btn" onClick={() => setRefreshKey((k) => k + 1)}>↻ Обновить</button>
+      </div>
       {error && <LoadError message={error} />}
       {!queue.length && !error && (
         <div className="admin-empty">На проверке нет объявлений</div>
       )}
-      {queue.map((x) => (
-        <article className="moderate" key={x.id}>
-          <h3>{x.title}</h3>
-          <small>
-            {x.category?.icon} {x.category?.name} · {x.author?.firstName}
-          </small>
-          {x.riskScore > 0 && (
-            <div className="moderation-risk">
-              🛡 Риск {x.riskScore}/100 · {(x.riskReasons || []).join(", ")}
+      {queue.map((x) => {
+        const thumbUrl = x.images?.[0]?.url || "";
+        const showComment = comments[x.id] !== undefined;
+        return (
+          <article className="moderate-card" key={x.id}>
+            <div className="card-header">
+              <div
+                className="card-thumb"
+                style={thumbUrl ? { backgroundImage: `url(${thumbUrl})` } : {}}
+              >
+                {!thumbUrl && (x.category?.icon || "📦")}
+              </div>
+              <div className="card-meta">
+                <h3>{x.title}</h3>
+                <div className="meta-row">
+                  <small>
+                    {x.category?.icon} {x.category?.name}
+                  </small>
+                  <small>·</small>
+                  <small>{x.author?.firstName || "Пользователь"}</small>
+                  {x.price && (
+                    <>
+                      <small>·</small>
+                      <span className="price">
+                        {x.price} {x.currency}
+                      </span>
+                    </>
+                  )}
+                  {x.locationText && (
+                    <>
+                      <small>·</small>
+                      <small>📍 {x.locationText}</small>
+                    </>
+                  )}
+                </div>
+                {x.riskScore > 0 && (
+                  <div className="meta-row">
+                    <span className={`risk-badge ${riskLevel(x.riskScore)}`}>
+                      🛡 Риск {x.riskScore}/100
+                    </span>
+                    {(x.riskReasons || []).slice(0, 3).map((r: string) => (
+                      <span key={r} className={`risk-badge ${riskLevel(x.riskScore)}`}>
+                        {riskLabels[r] || r}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
-          )}
-          <p>{x.description}</p>
-          <div>
-            <button
-              disabled={busy === x.id}
-              onClick={() => action(x.id, "changes_requested")}
-            >
-              Доработать
-            </button>
-            <button
-              disabled={busy === x.id}
-              onClick={() => action(x.id, "rejected")}
-            >
-              Отклонить
-            </button>
-            <button
-              disabled={busy === x.id}
-              className="primary"
-              onClick={() => action(x.id, "published")}
-            >
-              {busy === x.id ? "Обработка…" : "Одобрить"}
-            </button>
-          </div>
-        </article>
-      ))}
+            {x.description && (
+              <p className="card-description">{x.description}</p>
+            )}
+            {showComment && (
+              <div className="moderate-comment-wrap">
+                <span>Комментарий для автора (обязателен при отклонении)</span>
+                <textarea
+                  id={`mod-comment-${x.id}`}
+                  rows={2}
+                  placeholder="Укажите причину или что нужно исправить…"
+                  value={comments[x.id] || ""}
+                  onChange={(e) =>
+                    setComments((prev) => ({ ...prev, [x.id]: e.target.value }))
+                  }
+                />
+              </div>
+            )}
+            <div className="moderate-actions">
+              <button
+                disabled={busy === x.id}
+                onClick={() => {
+                  if (!showComment)
+                    setComments((prev) => ({ ...prev, [x.id]: prev[x.id] ?? "" }));
+                  else action(x.id, "changes_requested");
+                }}
+              >
+                {showComment ? "✎ Отправить на доработку" : "✎ Доработать"}
+              </button>
+              <button
+                className="danger"
+                disabled={busy === x.id}
+                onClick={() => {
+                  if (!showComment)
+                    setComments((prev) => ({ ...prev, [x.id]: prev[x.id] ?? "" }));
+                  else action(x.id, "rejected");
+                }}
+              >
+                {showComment ? "✗ Подтвердить отклонение" : "✗ Отклонить"}
+              </button>
+              <button
+                className="primary"
+                disabled={busy === x.id}
+                onClick={() => void action(x.id, "published")}
+              >
+                {busy === x.id ? "Обработка…" : "✓ Одобрить"}
+              </button>
+            </div>
+          </article>
+        );
+      })}
     </div>
   );
 }
@@ -4939,10 +5134,11 @@ function AdminReports() {
   const [items, setItems] = useState<any[]>([]);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
-  const load = () => request("/admin/reports").then(setItems);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const load = () => { setError(""); return request("/admin/reports").then(setItems); };
   useEffect(() => {
     void load().catch((e) => setError(e.message));
-  }, []);
+  }, [refreshKey]);
   const resolve = async (item: any, status: "resolved" | "dismissed") => {
     setBusy(item.id);
     setError("");
@@ -4961,25 +5157,57 @@ function AdminReports() {
       setBusy("");
     }
   };
+  const reasonLabels: Record<string, string> = {
+    spam: "Спам",
+    prohibited: "Запрещённый товар",
+    misleading: "Вводит в заблуждение",
+    duplicate: "Дубликат",
+    offensive: "Оскорбление",
+    fraud: "Мошенничество",
+    other: "Другое",
+  };
   return (
     <div className="admin-view">
-      <h2>Жалобы пользователей</h2>
-      <p className="hint">
-        Все обращения относятся только к выбранному сообществу. Решение
-        записывается в журнал действий.
-      </p>
+      <div className="admin-view-header">
+        <div>
+          <h2>Жалобы</h2>
+          <p className="hint">
+            {items.length > 0
+              ? `${items.length} открытых жалоб · решение записывается в журнал`
+              : "Открытых жалоб нет"}
+          </p>
+        </div>
+        <button className="admin-refresh-btn" onClick={() => setRefreshKey((k) => k + 1)}>↻ Обновить</button>
+      </div>
       {error && <LoadError message={error} />}
       {!items.length && !error && (
-        <div className="admin-empty">Открытых жалоб нет</div>
+        <div className="admin-empty">Жалоб нет</div>
       )}
       {items.map((item) => (
-        <article className="moderate" key={item.id}>
-          <h3>{item.listing?.title || "Объявление удалено"}</h3>
-          <small>
-            {item.reporter?.firstName || "Пользователь"} · {item.reason}
-          </small>
-          {item.comment && <p>{item.comment}</p>}
-          <div>
+        <article className="report-card" key={item.id}>
+          <div className="report-header">
+            <div className="report-subject">
+              <h3>{item.listing?.title || "Объявление удалено"}</h3>
+              <div className="meta">
+                <small>от {item.reporter?.firstName || "Пользователь"}</small>
+                {item.reason && (
+                  <span className="report-reason-badge">
+                    {reasonLabels[item.reason] || item.reason}
+                  </span>
+                )}
+                <small>
+                  {new Date(item.createdAt).toLocaleDateString("ru", {
+                    day: "numeric",
+                    month: "short",
+                  })}
+                </small>
+              </div>
+            </div>
+          </div>
+          {item.comment && (
+            <div className="report-comment">{item.comment}</div>
+          )}
+          <div className="report-actions">
             <button
               disabled={busy === item.id}
               onClick={() => void resolve(item, "dismissed")}
@@ -4991,7 +5219,7 @@ function AdminReports() {
               disabled={busy === item.id}
               onClick={() => void resolve(item, "resolved")}
             >
-              Рассмотрено
+              {busy === item.id ? "Обработка…" : "Рассмотрено"}
             </button>
           </div>
         </article>
@@ -5003,24 +5231,19 @@ function AdminCategories() {
   const [items, setItems] = useState<any[]>([]);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
-  const load = () => request("/admin/categories").then(setItems);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const load = () => { setError(""); return request("/admin/categories").then(setItems); };
   useEffect(() => {
     void load().catch((e) => setError(e.message));
-  }, []);
+  }, [refreshKey]);
   const update = async (item: any, patch: Record<string, unknown>) => {
     setBusy(item.id);
     setError("");
     try {
-      const saved = await request(
-        `/admin/categories/${item.id}`,
-        "PATCH",
-        patch,
-      );
+      const saved = await request(`/admin/categories/${item.id}`, "PATCH", patch);
       setItems((current) =>
         current
-          .map((category) =>
-            category.id === item.id ? { ...category, ...saved } : category,
-          )
+          .map((c) => (c.id === item.id ? { ...c, ...saved } : c))
           .sort((a, b) => Number(a.sortOrder) - Number(b.sortOrder)),
       );
     } catch (e: any) {
@@ -5029,39 +5252,49 @@ function AdminCategories() {
       setBusy("");
     }
   };
+  const activeCount = items.filter((i) => i.isActive).length;
   return (
     <div className="admin-view">
-      <h2>Категории и поля объявлений</h2>
-      <p className="hint">
-        Отключайте ненужные разделы и меняйте порядок. Таксономия полей
-        сохраняется отдельно для каждой категории.
-      </p>
+      <div className="admin-view-header">
+        <div>
+          <h2>Категории</h2>
+          <p className="hint">
+            {activeCount} из {items.length} категорий показывается пользователям.
+          </p>
+        </div>
+        <button className="admin-refresh-btn" onClick={() => setRefreshKey((k) => k + 1)}>↻ Обновить</button>
+      </div>
       {error && <LoadError message={error} />}
       <div className="category-admin-list">
         {items.map((item, index) => (
-          <article key={item.id}>
-            <span>{item.icon || "▦"}</span>
-            <div>
+          <div
+            className={`category-admin-card ${item.isActive ? "" : "inactive"}`}
+            key={item.id}
+          >
+            <div className="category-icon-cell">{item.icon || "▦"}</div>
+            <div className="category-body">
               <b>{item.name}</b>
               <small>
-                {Array.isArray(item.fieldSchema) ? item.fieldSchema.length : 0}{" "}
-                дополнительных полей
+                {Array.isArray(item.fieldSchema) && item.fieldSchema.length > 0
+                  ? `${item.fieldSchema.length} дополнительных поля`
+                  : "Без доп. полей"}
+                {item._count?.listings !== undefined
+                  ? ` · ${item._count.listings} объявлений`
+                  : ""}
               </small>
             </div>
-            <label className="check">
+            <label className="category-toggle">
               <input
                 type="checkbox"
                 checked={item.isActive}
                 disabled={busy === item.id}
-                onChange={(event) =>
-                  void update(item, { isActive: event.target.checked })
-                }
+                onChange={(e) => void update(item, { isActive: e.target.checked })}
               />
-              Показывать
+              {item.isActive ? "Видна" : "Скрыта"}
             </label>
             <div className="category-order">
               <button
-                aria-label="Поднять категорию"
+                aria-label="Поднять"
                 disabled={index === 0 || Boolean(busy)}
                 onClick={() =>
                   void update(item, {
@@ -5072,177 +5305,276 @@ function AdminCategories() {
                 ↑
               </button>
               <button
-                aria-label="Опустить категорию"
+                aria-label="Опустить"
                 disabled={index === items.length - 1 || Boolean(busy)}
                 onClick={() =>
-                  void update(item, {
-                    sortOrder: Number(item.sortOrder) + 10,
-                  })
+                  void update(item, { sortOrder: Number(item.sortOrder) + 10 })
                 }
               >
                 ↓
               </button>
             </div>
-          </article>
+          </div>
         ))}
       </div>
     </div>
   );
 }
 function AdminUsers() {
+  const [, setParams] = useSearchParams();
   const [users, setUsers] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
   const [search, setSearch] = useState("");
+  const [offset, setOffset] = useState(0);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState("");
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [banTarget, setBanTarget] = useState<{ id: string; status: string } | null>(null);
+  const [banReason, setBanReason] = useState("");
+  const LIMIT = 50;
   useEffect(() => {
+    setOffset(0);
     const timer = window.setTimeout(() => {
-      request(`/admin/users?search=${encodeURIComponent(search)}&limit=50`)
+      setSaved("");
+      setError("");
+      request(`/admin/users?search=${encodeURIComponent(search)}&limit=${LIMIT}&offset=0`)
         .then((result) => {
           setUsers(result.items);
           setTotal(result.total);
         })
         .catch((e) => setError(e.message));
-    }, 250);
+    }, 280);
     return () => window.clearTimeout(timer);
-  }, [search]);
-  const filtered = users;
+  }, [search, refreshKey]);
+  const loadMore = async () => {
+    setLoadingMore(true);
+    try {
+      const next = offset + LIMIT;
+      const result = await request(`/admin/users?search=${encodeURIComponent(search)}&limit=${LIMIT}&offset=${next}`);
+      setUsers((prev) => [...prev, ...(result.items || [])]);
+      setOffset(next);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
   const changeRole = async (member: any, role: string) => {
     setSaved("");
     setError("");
     try {
       await request(`/admin/users/${member.userId}`, "PATCH", { role });
       setUsers((current) =>
-        current.map((item) =>
-          item.id === member.id ? { ...item, role } : item,
-        ),
+        current.map((item) => (item.id === member.id ? { ...item, role } : item)),
       );
       setSaved(`Роль ${member.user.firstName} сохранена`);
     } catch (e: any) {
       setError(e.message);
     }
   };
-  const changeAccess = async (member: any, status: string) => {
-    const reason =
-      status === "active"
-        ? ""
-        : window.prompt("Причина ограничения:") || "Решение администратора";
+  const changeAccess = async (member: any, status: string, reason?: string) => {
+    setSaved("");
+    setError("");
+    const effectiveReason = reason || (status === "active" ? "" : "Решение администратора");
     try {
-      await request(`/admin/users/${member.userId}`, "PATCH", {
-        status,
-        reason,
-      });
+      await request(`/admin/users/${member.userId}`, "PATCH", { status, reason: effectiveReason });
       setUsers((current) =>
         current.map((item) =>
           item.id === member.id
-            ? { ...item, enforcementStatus: status, enforcementReason: reason }
+            ? { ...item, enforcementStatus: status, enforcementReason: effectiveReason }
             : item,
         ),
       );
-      setSaved(
-        `Доступ ${member.user.firstName} обновлён только для этого сообщества`,
-      );
+      setSaved(`Доступ ${member.user.firstName} обновлён`);
+      setBanTarget(null);
+      setBanReason("");
     } catch (e: any) {
       setError(e.message);
     }
   };
   const changeFreeAccess = async (member: any, enabled: boolean) => {
+    setSaved("");
+    setError("");
     try {
       await request(`/admin/users/${member.userId}`, "PATCH", {
         freePublicationOverride: enabled,
       });
       setUsers((current) =>
         current.map((item) =>
-          item.id === member.id
-            ? { ...item, freePublicationOverride: enabled }
-            : item,
+          item.id === member.id ? { ...item, freePublicationOverride: enabled } : item,
         ),
       );
       setSaved(
         enabled
-          ? `${member.user.firstName} добавлен в бесплатный список`
-          : `${member.user.firstName} удалён из бесплатного списка`,
+          ? `${member.user.firstName} — бесплатные публикации включены`
+          : `${member.user.firstName} — бесплатные публикации отключены`,
       );
     } catch (e: any) {
       setError(e.message);
     }
   };
+  const enforcementStatus = (member: any) =>
+    member.enforcementStatus || "active";
+  const avatarClass = (member: any) => {
+    const s = enforcementStatus(member);
+    if (s === "banned") return "admin-user-avatar banned";
+    if (s === "restricted") return "admin-user-avatar restricted";
+    return "admin-user-avatar";
+  };
+  const roleLabels: Record<string, string> = {
+    member: "Участник",
+    moderator: "Модератор",
+    admin: "Администратор",
+    owner: "Владелец",
+  };
   return (
     <div className="admin-view">
-      <h2>Пользователи и роли</h2>
-      <p className="hint">
-        Здесь показаны участники, которые хотя бы раз открывали доску.
-      </p>
-      <input
-        className="admin-search"
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        placeholder="Поиск по имени, @username или ID"
-      />
+      <div className="admin-view-header">
+        <div>
+          <h2>Пользователи и роли</h2>
+          <p className="hint">Участники, открывавшие доску. Изменения — только для этого сообщества.</p>
+        </div>
+        <button className="admin-refresh-btn" onClick={() => setRefreshKey((k) => k + 1)}>↻ Обновить</button>
+      </div>
+      <div className="admin-search-bar">
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Имя, @username или Telegram ID"
+          autoComplete="off"
+        />
+      </div>
       {error && <LoadError message={error} />}
       {saved && <div className="save-success">{saved}</div>}
       <div className="admin-user-list">
-        {filtered.map((member) => (
-          <div className="admin-user compact" key={member.id}>
-            <div className="admin-user-avatar">
-              {member.user.firstName?.[0] || "?"}
+        {users.map((member) => (
+          <div key={member.id}>
+            <div className="admin-user-card">
+              <div className={avatarClass(member)}>
+                {member.user.firstName?.[0]?.toUpperCase() || "?"}
+              </div>
+              <div className="admin-user-info">
+                <b>
+                  {member.user.firstName}{" "}
+                  {member.user.lastName || ""}
+                </b>
+                <span className="user-handle">
+                  {member.user.username ? `@${member.user.username} · ` : ""}
+                  ID {member.user.telegramUserId}
+                </span>
+                <span
+                  className={`user-bot-status ${member.user.botStartedAt ? "connected" : "disconnected"}`}
+                >
+                  {member.user.botStartedAt ? "✓ Бот подключён" : "Бот не запущен"}
+                </span>
+                {member.user._count?.listings > 0 && (
+                  <span className="user-listings-count">
+                    {member.user._count.listings} объявлений
+                  </span>
+                )}
+                {member.enforcementReason && enforcementStatus(member) !== "active" && (
+                  <span className="user-ban-reason">
+                    ⚠ {member.enforcementReason}
+                  </span>
+                )}
+                {member.user._count?.listings > 0 && (
+                  <button
+                    className="user-view-listings-btn"
+                    onClick={() => setParams((prev) => {
+                      const next = new URLSearchParams(prev);
+                      next.set("tab", "board");
+                      next.set("authorId", member.userId);
+                      return next;
+                    })}
+                  >
+                    ☰ {member.user._count.listings} объявлений
+                  </button>
+                )}
+              </div>
+              <div className="admin-user-controls">
+                <select
+                  aria-label={`Роль ${member.user.firstName}`}
+                  value={member.role}
+                  onChange={(event) => void changeRole(member, event.target.value)}
+                  title={`Роль: ${roleLabels[member.role] || member.role}`}
+                >
+                  <option value="member">Участник</option>
+                  <option value="moderator">Модератор</option>
+                  <option value="admin">Администратор</option>
+                  <option value="owner">Владелец</option>
+                </select>
+                <select
+                  aria-label={`Доступ ${member.user.firstName}`}
+                  value={enforcementStatus(member)}
+                  onChange={(event) => {
+                    const next = event.target.value;
+                    if (next === "active") {
+                      void changeAccess(member, "active");
+                    } else {
+                      setBanTarget({ id: member.id, status: next });
+                      setBanReason("");
+                    }
+                  }}
+                >
+                  <option value="active">Доступ открыт</option>
+                  <option value="restricted">Ограничен</option>
+                  <option value="banned">Заблокирован</option>
+                </select>
+                <label className="free-access-toggle">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(member.freePublicationOverride)}
+                    onChange={(event) =>
+                      void changeFreeAccess(member, event.target.checked)
+                    }
+                  />
+                  Бесплатно
+                </label>
+              </div>
             </div>
-            <div className="admin-user-info">
-              <b>{member.user.firstName}</b>
-              <small>
-                @{member.user.username || "без username"} ·{" "}
-                {member.user.telegramUserId}
-              </small>
-              <small
-                className={
-                  member.user.botStartedAt
-                    ? "bot-connected"
-                    : "bot-disconnected"
-                }
-              >
-                {member.user.botStartedAt
-                  ? "✓ Бот подключён"
-                  : "Бот не подключён"}
-              </small>
-            </div>
-            <select
-              aria-label={`Роль ${member.user.firstName}`}
-              value={member.role}
-              onChange={(event) => void changeRole(member, event.target.value)}
-            >
-              <option value="member">Участник</option>
-              <option value="moderator">Модератор</option>
-              <option value="admin">Админ</option>
-              <option value="owner">Владелец</option>
-            </select>
-            <select
-              aria-label={`Доступ ${member.user.firstName}`}
-              value={member.enforcementStatus || "active"}
-              onChange={(event) =>
-                void changeAccess(member, event.target.value)
-              }
-            >
-              <option value="active">Доступ разрешён</option>
-              <option value="restricted">Ограничить</option>
-              <option value="banned">Заблокировать в доске</option>
-            </select>
-            <label className="check">
-              <input
-                type="checkbox"
-                checked={Boolean(member.freePublicationOverride)}
-                onChange={(event) =>
-                  void changeFreeAccess(member, event.target.checked)
-                }
-              />
-              Бесплатные публикации вручную
-            </label>
+            {banTarget !== null && banTarget.id === member.id && (
+              <div className="ban-reason-form">
+                <textarea
+                  placeholder="Причина ограничения (для журнала)…"
+                  rows={2}
+                  value={banReason}
+                  onChange={(e) => setBanReason(e.target.value)}
+                  autoFocus
+                />
+                <div className="ban-reason-actions">
+                  <button
+                    className="board-act-btn reject"
+                    onClick={() => void changeAccess(member, banTarget!.status, banReason || "Решение администратора")}
+                  >
+                    {banTarget!.status === "banned" ? "Заблокировать" : "Ограничить"}
+                  </button>
+                  <button
+                    className="board-act-btn archive"
+                    onClick={() => { setBanTarget(null); setBanReason(""); }}
+                  >
+                    Отмена
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         ))}
       </div>
-      <small>
-        Найдено: {total}
-        {total > users.length ? ` · показаны первые ${users.length}` : ""}
-      </small>
+      {total > 0 && (
+        <p className="admin-users-count">
+          Показано {users.length} из {total}
+        </p>
+      )}
+      {users.length < total && (
+        <button
+          className="admin-load-more"
+          disabled={loadingMore}
+          onClick={() => void loadMore()}
+        >
+          {loadingMore ? "Загрузка…" : `Загрузить ещё (${total - users.length})`}
+        </button>
+      )}
     </div>
   );
 }
@@ -5251,11 +5583,15 @@ function AdminSettings() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [refreshKey, setRefreshKey] = useState(0);
   useEffect(() => {
+    setError("");
     request("/admin/settings")
       .then(setSettings)
       .catch((e) => setError(e.message));
-  }, []);
+  }, [refreshKey]);
+  const set = (patch: Record<string, any>) =>
+    setSettings((prev: any) => ({ ...prev, ...patch }));
   const save = async () => {
     setSaving(true);
     setMessage("");
@@ -5263,7 +5599,16 @@ function AdminSettings() {
     try {
       const result = await request("/admin/settings", "PATCH", {
         description: settings.description,
+        inviteUrl: settings.inviteUrl,
+        defaultCurrency: settings.defaultCurrency,
         rules: settings.rules,
+        moderationEnabled: settings.moderationEnabled,
+        autoPublishEnabled: settings.autoPublishEnabled,
+        remoderatePublishedEdits: settings.remoderatePublishedEdits,
+        listingLifetimeDays: settings.listingLifetimeDays,
+        maxActiveListingsPerUser: settings.maxActiveListingsPerUser,
+        maxImagesPerListing: settings.maxImagesPerListing,
+        autoHideReportThreshold: settings.autoHideReportThreshold,
         abuseProtectionMode: settings.abuseProtectionMode,
         minQualifiedMessageChars: settings.minQualifiedMessageChars,
         maxLinksPerQualifiedMessage: settings.maxLinksPerQualifiedMessage,
@@ -5275,7 +5620,7 @@ function AdminSettings() {
         prohibitedWords: settings.prohibitedWords,
       });
       setSettings(result);
-      setMessage("Настройки сохранены");
+      setMessage("✓ Настройки сохранены");
       window.Telegram?.WebApp.HapticFeedback?.notificationOccurred("success");
     } catch (e: any) {
       setError(e.message);
@@ -5283,168 +5628,873 @@ function AdminSettings() {
       setSaving(false);
     }
   };
+  if (!settings && !error)
+    return (
+      <div className="admin-view">
+        <h2>Настройки доски</h2>
+        <div className="skeleton hero" />
+      </div>
+    );
   return (
     <div className="admin-view">
-      <h2>Правила и безопасность</h2>
-      <p className="hint">
-        Здесь администратор управляет правилами и защитой. Цена, комиссия,
-        активность и подписка находятся в кабинете владельца.
-      </p>
+      <div className="admin-view-header">
+        <div>
+          <h2>Настройки доски</h2>
+          <p className="hint">Цена публикации и монетизация — в разделе «Финансы».</p>
+        </div>
+        <button className="admin-refresh-btn" onClick={() => setRefreshKey((k) => k + 1)}>↻ Обновить</button>
+      </div>
       {error && <LoadError message={error} />}
       {message && <div className="save-success">{message}</div>}
-      {settings ? (
-        <div className="admin-settings">
-          <label>
-            <span>Описание доски</span>
-            <textarea
-              rows={4}
-              maxLength={500}
-              value={settings.description || ""}
-              placeholder="Для кого эта доска и какие объявления здесь размещают"
-              onChange={(event) =>
-                setSettings({ ...settings, description: event.target.value })
-              }
-            />
-            <small>Показывается на главной и завершает настройку бренда.</small>
-          </label>
-          <fieldset className="abuse-settings">
-            <legend>Защита от злоупотреблений</legend>
-            <label>
-              <span>Режим</span>
-              <select
-                value={settings.abuseProtectionMode}
-                onChange={(e) =>
-                  setSettings({
-                    ...settings,
-                    abuseProtectionMode: e.target.value,
-                  })
-                }
-              >
-                <option value="enforce">Защищать</option>
-                <option value="observe">Только наблюдать</option>
-                <option value="off">Выключено</option>
-              </select>
-            </label>
-            {[
-              [
-                "minQualifiedMessageChars",
-                "Минимум символов в полезном сообщении",
-                1,
-                500,
-              ],
-              [
-                "maxLinksPerQualifiedMessage",
-                "Максимум ссылок в сообщении",
-                0,
-                10,
-              ],
-              [
-                "maxListingsPerDay",
-                "Объявлений пользователя за 24 часа",
-                1,
-                100,
-              ],
-              ["duplicateWindowDays", "Окно поиска дубликатов, дней", 1, 365],
-              [
-                "duplicateSimilarityPercent",
-                "Сходство для дубликата, %",
-                50,
-                100,
-              ],
-              [
-                "riskyListingThreshold",
-                "Порог ручной проверки, баллов",
-                1,
-                100,
-              ],
-              ["maxPaidInvoicesPerDay", "Платёжных счетов за 24 часа", 1, 100],
-            ].map(([key, label, min, max]) => (
-              <label key={String(key)}>
-                <span>{label}</span>
+      {settings && (
+        <>
+          {/* ── Описание и брендинг ── */}
+          <div className="settings-section">
+            <div className="settings-section-header">
+              <span className="settings-icon">🏷</span>
+              <h3>Описание доски</h3>
+            </div>
+            <div className="settings-field">
+              <label>Описание</label>
+              <textarea
+                rows={3}
+                maxLength={500}
+                value={settings.description || ""}
+                placeholder="Для кого эта доска и какие объявления здесь размещают"
+                onChange={(e) => set({ description: e.target.value })}
+              />
+              <small>Показывается на главной странице для всех пользователей.</small>
+            </div>
+            <div className="settings-grid">
+              <div className="settings-field">
+                <label>Ссылка-приглашение в группу</label>
                 <input
-                  type="number"
-                  min={Number(min)}
-                  max={Number(max)}
-                  value={settings[String(key)]}
-                  onChange={(e) =>
-                    setSettings({
-                      ...settings,
-                      [String(key)]: Number(e.target.value),
-                    })
-                  }
+                  type="url"
+                  value={settings.inviteUrl || ""}
+                  placeholder="https://t.me/joinchat/…"
+                  onChange={(e) => set({ inviteUrl: e.target.value })}
+                />
+                <small>Показывается новым пользователям на странице входа.</small>
+              </div>
+              <div className="settings-field">
+                <label>Валюта по умолчанию</label>
+                <select
+                  value={settings.defaultCurrency || "USD"}
+                  onChange={(e) => set({ defaultCurrency: e.target.value })}
+                >
+                  {["USD", "EUR", "RUB", "GBP", "TRY", "UAH", "KZT", "AED", "GEL", "THB"].map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+                <small>Используется в объявлениях без явно указанной валюты.</small>
+              </div>
+            </div>
+          </div>
+
+          {/* ── Объявления и публикация ── */}
+          <div className="settings-section">
+            <div className="settings-section-header">
+              <span className="settings-icon">📋</span>
+              <h3>Объявления и публикация</h3>
+            </div>
+            <div className="settings-toggles">
+              <label className="settings-toggle-row">
+                <span>
+                  <b>Модерация включена</b>
+                  <small>Новые объявления попадают в очередь проверки</small>
+                </span>
+                <input
+                  type="checkbox"
+                  checked={Boolean(settings.moderationEnabled)}
+                  onChange={(e) => set({ moderationEnabled: e.target.checked })}
                 />
               </label>
-            ))}
-            <label>
-              <span>Запрещённые слова и фразы, по одной в строке</span>
+              <label className="settings-toggle-row">
+                <span>
+                  <b>Автопубликация</b>
+                  <small>Если модерация выключена, объявления публикуются сразу</small>
+                </span>
+                <input
+                  type="checkbox"
+                  checked={Boolean(settings.autoPublishEnabled)}
+                  onChange={(e) => set({ autoPublishEnabled: e.target.checked })}
+                />
+              </label>
+              <label className="settings-toggle-row">
+                <span>
+                  <b>Повторная проверка при редактировании</b>
+                  <small>Уже опубликованное объявление при изменении снова идёт на модерацию</small>
+                </span>
+                <input
+                  type="checkbox"
+                  checked={Boolean(settings.remoderatePublishedEdits)}
+                  onChange={(e) => set({ remoderatePublishedEdits: e.target.checked })}
+                />
+              </label>
+            </div>
+            <div className="settings-grid">
+              {([
+                ["listingLifetimeDays", "Срок жизни объявления, дней", 1, 365],
+                ["maxActiveListingsPerUser", "Макс. активных объявлений/пользователь", 1, 500],
+                ["maxImagesPerListing", "Макс. фото в объявлении", 1, 20],
+                ["autoHideReportThreshold", "Авто-скрытие при жалобах, шт.", 1, 50],
+              ] as [string, string, number, number][]).map(([key, label, min, max]) => (
+                <div className="settings-field" key={key}>
+                  <label>{label}</label>
+                  <input
+                    type="number"
+                    min={min}
+                    max={max}
+                    value={settings[key] ?? ""}
+                    onChange={(e) => set({ [key]: Number(e.target.value) })}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* ── Правила ── */}
+          <div className="settings-section">
+            <div className="settings-section-header">
+              <span className="settings-icon">📖</span>
+              <h3>Правила сообщества</h3>
+            </div>
+            <div className="settings-field">
+              <label>Текст правил</label>
+              <textarea
+                rows={10}
+                maxLength={10000}
+                value={settings.rules || ""}
+                placeholder="Опишите, что разрешено и запрещено размещать, как общаться с продавцами и т.д."
+                onChange={(e) => set({ rules: e.target.value })}
+              />
+              <small>
+                Отображается в профиле каждого участника в разделе «Правила».
+              </small>
+            </div>
+          </div>
+
+          {/* ── Защита ── */}
+          <div className="settings-section">
+            <div className="settings-section-header">
+              <span className="settings-icon">🛡</span>
+              <h3>Защита от злоупотреблений</h3>
+            </div>
+            <div className="settings-field">
+              <label>Режим защиты</label>
+              <select
+                value={settings.abuseProtectionMode}
+                onChange={(e) => set({ abuseProtectionMode: e.target.value })}
+              >
+                <option value="enforce">Активная защита — блокировать нарушения</option>
+                <option value="observe">Наблюдение — только собирать сигналы</option>
+                <option value="off">Выключено</option>
+              </select>
+              <small>
+                «Наблюдение» подходит для первых дней работы доски — сигналы
+                видны в разделе «Риски», но автоматических блокировок нет.
+              </small>
+            </div>
+            <div className="settings-grid">
+              {([
+                ["minQualifiedMessageChars", "Мин. символов в сообщении", 1, 500],
+                ["maxLinksPerQualifiedMessage", "Макс. ссылок в сообщении", 0, 10],
+                ["maxListingsPerDay", "Объявлений на пользователя/день", 1, 100],
+                ["duplicateWindowDays", "Окно поиска дубликатов, дней", 1, 365],
+                ["duplicateSimilarityPercent", "Порог дубликата, %", 50, 100],
+                ["riskyListingThreshold", "Порог ручной проверки, баллов", 1, 100],
+                ["maxPaidInvoicesPerDay", "Платёжных счетов в сутки", 1, 100],
+              ] as [string, string, number, number][]).map(([key, label, min, max]) => (
+                <div className="settings-field" key={key}>
+                  <label>{label}</label>
+                  <input
+                    type="number"
+                    min={min}
+                    max={max}
+                    value={settings[key] ?? ""}
+                    onChange={(e) => set({ [key]: Number(e.target.value) })}
+                  />
+                </div>
+              ))}
+            </div>
+            <div className="settings-field">
+              <label>Запрещённые слова и фразы</label>
               <textarea
                 rows={5}
+                placeholder="Одно слово или фраза на строку…"
                 value={(settings.prohibitedWords || []).join("\n")}
                 onChange={(e) =>
-                  setSettings({
-                    ...settings,
+                  set({
                     prohibitedWords: e.target.value
                       .split("\n")
-                      .map((value) => value.trim())
+                      .map((v: string) => v.trim())
                       .filter(Boolean)
                       .slice(0, 200),
                   })
                 }
               />
-            </label>
-          </fieldset>
-          <label className="rules-editor">
-            <span>Правила сообщества</span>
-            <textarea
-              rows={12}
-              maxLength={10000}
-              value={settings.rules || ""}
-              onChange={(event) =>
-                setSettings({ ...settings, rules: event.target.value })
-              }
-            />
-            <small>
-              Этот текст сразу отображается в разделе «Правила» у всех
-              пользователей.
-            </small>
-          </label>
+              <small>
+                Максимум 200 записей. Объявления с этими словами попадают в
+                ручную проверку.
+              </small>
+            </div>
+          </div>
+
           <button
             type="button"
             disabled={saving}
-            className="primary save-settings"
+            className="settings-save-btn"
             onClick={() => void save()}
           >
             {saving ? "Сохранение…" : "Сохранить настройки"}
           </button>
-        </div>
-      ) : (
-        !error && <div className="skeleton hero" />
+        </>
       )}
     </div>
   );
 }
 function AdminAudit() {
   const [items, setItems] = useState<any[]>([]);
+  const [filter, setFilter] = useState("all");
   const [error, setError] = useState("");
+  const [refreshKey, setRefreshKey] = useState(0);
   useEffect(() => {
+    setError("");
     request("/admin/audit-log")
       .then(setItems)
       .catch((e) => setError(e.message));
-  }, []);
+  }, [refreshKey]);
+  const actionIcon = (action: string) => {
+    if (action.includes("published") || action.includes("approved")) return { icon: "✓", cls: "publish" };
+    if (action.includes("rejected") || action.includes("banned") || action.includes("blocked")) return { icon: "✗", cls: "reject" };
+    if (action.includes("user") || action.includes("role")) return { icon: "♙", cls: "user" };
+    if (action.includes("settings") || action.includes("categories") || action.includes("rules")) return { icon: "⚙", cls: "settings" };
+    return { icon: "·", cls: "other" };
+  };
+  const actionLabel: Record<string, string> = {
+    listing_published: "Объявление одобрено",
+    listing_rejected: "Объявление отклонено",
+    listing_changes_requested: "Отправлено на доработку",
+    listing_archived: "Объявление архивировано",
+    user_banned: "Пользователь заблокирован",
+    user_role_updated: "Роль изменена",
+    settings_updated: "Настройки обновлены",
+    category_updated: "Категория обновлена",
+    report_resolved: "Жалоба рассмотрена",
+    report_dismissed: "Жалоба отклонена",
+    abuse_resolved: "Риск-событие закрыто",
+  };
+  const filterGroups = [
+    { key: "all", label: "Все" },
+    { key: "listing", label: "Объявления" },
+    { key: "user", label: "Пользователи" },
+    { key: "report", label: "Жалобы" },
+    { key: "settings", label: "Настройки" },
+  ];
+  const filtered =
+    filter === "all"
+      ? items
+      : items.filter((item) =>
+          item.action?.startsWith(filter) ||
+          (filter === "listing" && item.action?.includes("listing")) ||
+          (filter === "user" && (item.action?.includes("user") || item.action?.includes("role"))) ||
+          (filter === "report" && (item.action?.includes("report") || item.action?.includes("abuse"))) ||
+          (filter === "settings" && (item.action?.includes("settings") || item.action?.includes("categor"))),
+        );
   return (
     <div className="admin-view">
-      <h2>Журнал действий</h2>
-      {error && <LoadError message={error} />}
-      {items.map((item) => (
-        <div className="audit-row" key={item.id}>
-          <b>{item.action}</b>
-          <small>
-            {item.moderator?.firstName || "Система"} ·{" "}
-            {new Date(item.createdAt).toLocaleString("ru")}
-          </small>
-          {item.reason && <span>{item.reason}</span>}
+      <div className="admin-view-header">
+        <div>
+          <h2>Журнал действий</h2>
+          <p className="hint">Все действия администраторов и модераторов · последние 200 записей.</p>
         </div>
-      ))}
+        <button className="admin-refresh-btn" onClick={() => setRefreshKey((k) => k + 1)}>↻ Обновить</button>
+      </div>
+      {error && <LoadError message={error} />}
+      <div className="audit-filters">
+        {filterGroups.map((g) => (
+          <button
+            key={g.key}
+            className={filter === g.key ? "active" : ""}
+            onClick={() => setFilter(g.key)}
+          >
+            {g.label}
+          </button>
+        ))}
+      </div>
+      {!filtered.length && !error && (
+        <div className="admin-empty">Действий пока нет</div>
+      )}
+      <div className="audit-feed">
+        {filtered.map((item) => {
+          const { icon, cls } = actionIcon(item.action || "");
+          return (
+            <div className="audit-row" key={item.id}>
+              <div className={`audit-row-icon ${cls}`}>{icon}</div>
+              <div className="audit-row-body">
+                <b>{actionLabel[item.action] || item.action?.replaceAll("_", " ") || "Действие"}</b>
+                <div className="audit-meta">
+                  <small>
+                    {item.moderator?.firstName || "Система"}
+                  </small>
+                  <small>·</small>
+                  <small>
+                    {new Date(item.createdAt).toLocaleString("ru", {
+                      day: "numeric",
+                      month: "short",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </small>
+                  {item.targetUser && (
+                    <>
+                      <small>·</small>
+                      <small>{item.targetUser.firstName}</small>
+                    </>
+                  )}
+                </div>
+                {item.reason && (
+                  <span className="audit-reason">«{item.reason}»</span>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+const BOARD_STATUS_LABELS: Record<string, string> = {
+  all: "Все",
+  pending: "На модерации",
+  published: "Опубликованы",
+  rejected: "Отклонены",
+  changes_requested: "На доработке",
+  archived: "Архив",
+  sold: "Проданы",
+};
+
+const BOARD_SORT_OPTIONS = [
+  { value: "newest", label: "Сначала новые" },
+  { value: "oldest", label: "Сначала старые" },
+  { value: "price_asc", label: "Цена ↑" },
+  { value: "price_desc", label: "Цена ↓" },
+];
+
+function AdminBoard() {
+  const [urlParams, setUrlParams] = useSearchParams();
+  const [viewMode, setViewMode] = useState<"grid" | "list">("list");
+  const [items, setItems] = useState<any[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [status, setStatus] = useState("all");
+  const [sort, setSort] = useState("newest");
+  const [search, setSearch] = useState("");
+  const [searchInput, setSearchInput] = useState("");
+  const [categories, setCategories] = useState<any[]>([]);
+  const [categoryId, setCategoryId] = useState("");
+  const [offset, setOffset] = useState(0);
+  const [busy, setBusy] = useState("");
+  const [detail, setDetail] = useState<any | null>(null);
+  const [commentTarget, setCommentTarget] = useState<{ id: string; action: "rejected" | "changes_requested" } | null>(null);
+  const [actionComment, setActionComment] = useState("");
+  const [authorId, setAuthorId] = useState(() => urlParams.get("authorId") || "");
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [toast, setToast] = useState<{ msg: string; type: "ok" | "err" } | null>(null);
+  const LIMIT = 30;
+
+  const showToast = (msg: string, type: "ok" | "err" = "ok") => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  useEffect(() => {
+    request("/admin/categories")
+      .then((r) => setCategories(Array.isArray(r) ? r : r.items ?? []))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    const fromUrl = urlParams.get("authorId") || "";
+    setAuthorId(fromUrl);
+    if (fromUrl) setOffset(0);
+  }, [urlParams]);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    const params = new URLSearchParams({
+      limit: String(LIMIT),
+      offset: String(offset),
+      sort,
+      ...(status !== "all" ? { status } : {}),
+      ...(categoryId ? { categoryId } : {}),
+      ...(authorId ? { authorId } : {}),
+      ...(search ? { search } : {}),
+    });
+    request(`/admin/listings?${params}`)
+      .then((r) => { setItems(r.items ?? []); setTotal(r.total ?? 0); })
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
+  }, [offset, sort, status, categoryId, authorId, search, refreshKey]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  useEffect(() => {
+    const t = setTimeout(() => setSearch(searchInput), 300);
+    return () => clearTimeout(t);
+  }, [searchInput]);
+
+  useEffect(() => { setOffset(0); }, [status, sort, categoryId, authorId, search]);
+
+  const actionLabels: Record<string, string> = {
+    published: "одобрено",
+    rejected: "отклонено",
+    changes_requested: "отправлено на доработку",
+    archived: "архивировано",
+  };
+
+  const act = async (id: string, action: string, reason?: string) => {
+    setBusy(id);
+    try {
+      await request(`/admin/listings/${id}/transition`, "POST", { status: action, reason });
+      setDetail((prev: any) => prev?.id === id ? null : prev);
+      showToast(`Объявление ${actionLabels[action] ?? action}`);
+      void load();
+    } catch (e: any) {
+      showToast(e.message || "Ошибка", "err");
+    } finally {
+      setBusy("");
+      setCommentTarget(null);
+      setActionComment("");
+    }
+  };
+
+  const openCommentForm = (id: string, action: "rejected" | "changes_requested") => {
+    setCommentTarget(commentTarget?.id === id && commentTarget.action === action ? null : { id, action });
+    setActionComment("");
+  };
+
+  const statusColor: Record<string, string> = {
+    published: "#168752",
+    pending: "#d97706",
+    rejected: "#dc2626",
+    changes_requested: "#7c3aed",
+    archived: "#64748b",
+    sold: "#0ea5e9",
+  };
+
+  const formatDate = (d: string) =>
+    new Date(d).toLocaleString("ru", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+
+  const totalPages = Math.ceil(total / LIMIT);
+  const currentPage = Math.floor(offset / LIMIT) + 1;
+
+  return (
+    <div className="admin-view admin-board">
+      {toast && (
+        <div className={`admin-toast${toast.type === "err" ? " err" : ""}`}>{toast.msg}</div>
+      )}
+      <div className="board-toolbar">
+        <div className="board-search-wrap">
+          <input
+            className="board-search"
+            placeholder="Поиск по заголовку или описанию…"
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+          />
+        </div>
+        <select
+          className="board-select"
+          value={categoryId}
+          onChange={(e) => setCategoryId(e.target.value)}
+        >
+          <option value="">Все категории</option>
+          {categories.map((c: any) => (
+            <option key={c.id} value={c.id}>{c.icon} {c.name}</option>
+          ))}
+        </select>
+        <select
+          className="board-select"
+          value={sort}
+          onChange={(e) => setSort(e.target.value)}
+        >
+          {BOARD_SORT_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
+        <div className="board-view-toggle">
+          <button
+            className={viewMode === "list" ? "active" : ""}
+            onClick={() => setViewMode("list")}
+            title="Список"
+          >☰</button>
+          <button
+            className={viewMode === "grid" ? "active" : ""}
+            onClick={() => setViewMode("grid")}
+            title="Сетка"
+          >▦</button>
+        </div>
+        <button className="admin-refresh-btn" onClick={() => setRefreshKey((k) => k + 1)} title="Обновить">↻</button>
+      </div>
+      {authorId && (
+        <div className="board-author-filter-chip">
+          Объявления автора
+          <button onClick={() => {
+            setAuthorId("");
+            setUrlParams((prev) => {
+              const next = new URLSearchParams(prev);
+              next.delete("authorId");
+              return next;
+            });
+          }}>✕ Снять фильтр</button>
+        </div>
+      )}
+
+      <div className="board-status-chips">
+        {Object.entries(BOARD_STATUS_LABELS).map(([key, label]) => (
+          <button
+            key={key}
+            className={`board-chip${status === key ? " active" : ""}`}
+            onClick={() => setStatus(key)}
+          >
+            {label}
+            {status === key && total > 0 && <span className="chip-count">{total}</span>}
+          </button>
+        ))}
+      </div>
+
+      {error && <LoadError message={error} />}
+
+      {loading ? (
+        <div className="admin-empty">Загрузка…</div>
+      ) : items.length === 0 ? (
+        <div className="admin-empty">Объявлений не найдено</div>
+      ) : viewMode === "list" ? (
+        <div className="board-list-wrap">
+          <table className="board-table">
+            <thead>
+              <tr>
+                <th>Объявление</th>
+                <th>Автор</th>
+                <th>Категория</th>
+                <th>Цена</th>
+                <th>Статус</th>
+                <th>Дата</th>
+                <th>Жалобы</th>
+                <th>Действия</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((item) => (
+                <Fragment key={item.id}>
+                  <tr
+                    className={`board-row${busy === item.id ? " busy" : ""}`}
+                    onClick={() => setDetail(detail?.id === item.id ? null : item)}
+                  >
+                    <td className="board-cell-title">
+                      {item.images?.[0]?.url && (
+                        <img
+                          src={item.images[0].url}
+                          alt=""
+                          className="board-thumb"
+                        />
+                      )}
+                      <span>{item.title}</span>
+                    </td>
+                    <td>
+                      <span className="board-author">
+                        {item.author?.firstName || "—"}
+                        {item.author?.username && (
+                          <small>@{item.author.username}</small>
+                        )}
+                      </span>
+                    </td>
+                    <td>{item.category?.icon} {item.category?.name || "—"}</td>
+                    <td>{item.price != null ? `${item.price} ${item.currency || ""}`.trim() : "—"}</td>
+                    <td>
+                      <span
+                        className="board-status-badge"
+                        style={{ background: statusColor[item.status] + "22", color: statusColor[item.status] }}
+                      >
+                        {BOARD_STATUS_LABELS[item.status] ?? item.status}
+                      </span>
+                    </td>
+                    <td className="board-date">{formatDate(item.createdAt)}</td>
+                    <td>{item._count?.reports > 0 ? <span className="board-report-count">{item._count.reports}</span> : "—"}</td>
+                    <td
+                      className="board-actions-cell"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {item.status !== "published" && item.status !== "archived" && (
+                        <button
+                          className="board-act-btn approve"
+                          disabled={!!busy}
+                          title="Одобрить"
+                          onClick={() => void act(item.id, "published")}
+                        >✓</button>
+                      )}
+                      {!["changes_requested", "rejected", "archived"].includes(item.status) && (
+                        <button
+                          className={`board-act-btn revise${commentTarget !== null && commentTarget.id === item.id && commentTarget.action === "changes_requested" ? " active" : ""}`}
+                          disabled={!!busy}
+                          title="На доработку"
+                          onClick={() => openCommentForm(item.id, "changes_requested")}
+                        >✎</button>
+                      )}
+                      {!["rejected", "archived"].includes(item.status) && (
+                        <button
+                          className={`board-act-btn reject${commentTarget !== null && commentTarget.id === item.id && commentTarget.action === "rejected" ? " active" : ""}`}
+                          disabled={!!busy}
+                          title="Отклонить"
+                          onClick={() => openCommentForm(item.id, "rejected")}
+                        >✗</button>
+                      )}
+                      {item.status !== "archived" && (
+                        <button
+                          className="board-act-btn archive"
+                          disabled={!!busy}
+                          title="Архивировать"
+                          onClick={() => void act(item.id, "archived")}
+                        >⊡</button>
+                      )}
+                    </td>
+                  </tr>
+                  {commentTarget !== null && commentTarget.id === item.id && (
+                    <tr className="board-reject-row">
+                      <td colSpan={8}>
+                        <div className="board-reject-form">
+                          <span className="board-reject-label">
+                            {commentTarget.action === "rejected" ? "Причина отклонения" : "Что нужно исправить"}
+                            {" "}(обязательно)
+                          </span>
+                          <textarea
+                            placeholder={commentTarget.action === "rejected"
+                              ? "Опишите, почему объявление не принято…"
+                              : "Укажите, что нужно исправить или добавить…"}
+                            value={actionComment}
+                            onChange={(e) => setActionComment(e.target.value)}
+                            rows={2}
+                            autoFocus
+                          />
+                          <button
+                            className={`board-act-btn ${commentTarget.action === "rejected" ? "reject" : "revise"}`}
+                            disabled={!actionComment.trim() || !!busy}
+                            onClick={() => void act(item.id, commentTarget!.action, actionComment)}
+                          >
+                            {commentTarget.action === "rejected" ? "Отклонить" : "На доработку"}
+                          </button>
+                          <button
+                            className="board-act-btn archive"
+                            onClick={() => { setCommentTarget(null); setActionComment(""); }}
+                          >Отмена</button>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  {detail?.id === item.id && (
+                    <tr className="board-detail-row">
+                      <td colSpan={8}>
+                        <AdminBoardDetail item={detail} onClose={() => setDetail(null)} />
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="board-grid">
+          {items.map((item) => (
+            <div
+              key={item.id}
+              className={`board-grid-card${busy === item.id ? " busy" : ""}`}
+              onClick={() => setDetail(detail?.id === item.id ? null : item)}
+            >
+              <div
+                className="board-grid-thumb"
+                style={item.images?.[0]?.url ? { backgroundImage: `url(${item.images[0].url})` } : {}}
+              />
+              <div className="board-grid-body">
+                <span
+                  className="board-status-badge"
+                  style={{ background: statusColor[item.status] + "22", color: statusColor[item.status] }}
+                >
+                  {BOARD_STATUS_LABELS[item.status] ?? item.status}
+                </span>
+                <p className="board-grid-title">{item.title}</p>
+                <div className="board-grid-meta">
+                  <span>{item.author?.firstName || "—"}</span>
+                  <span>{formatDate(item.createdAt)}</span>
+                  {item.price != null && <span>{item.price} {item.currency || ""}</span>}
+                </div>
+                <div
+                  className="board-grid-actions"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {item.status !== "published" && item.status !== "archived" && (
+                    <button
+                      className="board-act-btn approve"
+                      disabled={!!busy}
+                      onClick={() => void act(item.id, "published")}
+                    >✓ Одобрить</button>
+                  )}
+                  {!["changes_requested", "rejected", "archived"].includes(item.status) && (
+                    <button
+                      className="board-act-btn revise"
+                      disabled={!!busy}
+                      onClick={() => openCommentForm(item.id, "changes_requested")}
+                    >✎ Доработать</button>
+                  )}
+                  {!["rejected", "archived"].includes(item.status) && (
+                    <button
+                      className="board-act-btn reject"
+                      disabled={!!busy}
+                      onClick={() => openCommentForm(item.id, "rejected")}
+                    >✗ Отклонить</button>
+                  )}
+                  {item.status !== "archived" && (
+                    <button
+                      className="board-act-btn archive"
+                      disabled={!!busy}
+                      onClick={() => void act(item.id, "archived")}
+                    >⊡</button>
+                  )}
+                </div>
+                {commentTarget !== null && commentTarget.id === item.id && (
+                  <div
+                    className="board-grid-comment-form"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <textarea
+                      placeholder={commentTarget.action === "rejected"
+                        ? "Причина отклонения…"
+                        : "Что нужно исправить…"}
+                      value={actionComment}
+                      onChange={(e) => setActionComment(e.target.value)}
+                      rows={2}
+                      autoFocus
+                    />
+                    <div className="board-grid-comment-actions">
+                      <button
+                        className={`board-act-btn ${commentTarget.action === "rejected" ? "reject" : "revise"}`}
+                        disabled={!actionComment.trim() || !!busy}
+                        onClick={() => void act(item.id, commentTarget!.action, actionComment)}
+                      >
+                        {commentTarget.action === "rejected" ? "Отклонить" : "На доработку"}
+                      </button>
+                      <button
+                        className="board-act-btn archive"
+                        onClick={() => { setCommentTarget(null); setActionComment(""); }}
+                      >Отмена</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+              {detail?.id === item.id && (
+                <div
+                  className="board-grid-detail"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <AdminBoardDetail item={detail} onClose={() => setDetail(null)} />
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {totalPages > 1 && (
+        <div className="board-pagination">
+          <button disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - LIMIT))}>← Назад</button>
+          <span>{currentPage} / {totalPages}</span>
+          <button disabled={currentPage >= totalPages} onClick={() => setOffset(offset + LIMIT)}>Вперёд →</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AdminBoardDetail({ item, onClose }: { item: any; onClose: () => void }) {
+  const statusColor: Record<string, string> = {
+    published: "#168752", pending: "#d97706", rejected: "#dc2626",
+    changes_requested: "#7c3aed", archived: "#64748b", sold: "#0ea5e9",
+  };
+  return (
+    <div className="board-detail">
+      <button className="board-detail-close" onClick={onClose}>✕</button>
+      <div className="board-detail-inner">
+        {item.images?.length > 0 && (
+          <div className="board-detail-gallery">
+            {item.images.map((img: any, i: number) => (
+              <img key={i} src={img.url} alt="" />
+            ))}
+          </div>
+        )}
+        <div className="board-detail-info">
+          <div className="board-detail-row">
+            <span
+              className="board-status-badge"
+              style={{ background: statusColor[item.status] + "22", color: statusColor[item.status] }}
+            >
+              {BOARD_STATUS_LABELS[item.status] ?? item.status}
+            </span>
+            {item.category && (
+              <span className="board-detail-cat">{item.category.icon} {item.category.name}</span>
+            )}
+          </div>
+          <h3 className="board-detail-title">{item.title}</h3>
+          {item.price != null && (
+            <p className="board-detail-price">{item.price} {item.currency || ""}</p>
+          )}
+          {item.locationText && (
+            <p className="board-detail-location">📍 {item.locationText}</p>
+          )}
+          {item.description && (
+            <p className="board-detail-desc">{item.description}</p>
+          )}
+          {item.moderationComment && (
+            <div className="board-detail-modcomment">
+              <b>Комментарий модератора</b>
+              <p>«{item.moderationComment}»</p>
+            </div>
+          )}
+          <div className="board-detail-meta">
+            <div>
+              <b>Автор</b>
+              <span>{item.author?.firstName || "—"}{item.author?.username ? ` (@${item.author.username})` : ""}</span>
+            </div>
+            <div>
+              <b>Telegram ID</b>
+              <span>{item.author?.telegramUserId || "—"}</span>
+            </div>
+            <div>
+              <b>Создано</b>
+              <span>{new Date(item.createdAt).toLocaleString("ru")}</span>
+            </div>
+            {item.updatedAt && item.updatedAt !== item.createdAt && (
+              <div>
+                <b>Обновлено</b>
+                <span>{new Date(item.updatedAt).toLocaleString("ru")}</span>
+              </div>
+            )}
+            {item.expiresAt && (
+              <div>
+                <b>Истекает</b>
+                <span>{new Date(item.expiresAt).toLocaleString("ru")}</span>
+              </div>
+            )}
+            {item._count?.reports > 0 && (
+              <div>
+                <b>Жалобы</b>
+                <span style={{ color: "#dc2626", fontWeight: 700 }}>{item._count.reports}</span>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

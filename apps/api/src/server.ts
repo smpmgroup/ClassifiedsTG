@@ -5696,6 +5696,18 @@ app.get(
   },
 );
 app.get(
+  "/api/admin/counts",
+  { preHandler: requireRole(privilegedRoles) },
+  async (req: any) => {
+    const c = req.identity.communityId;
+    const [pending, reports] = await Promise.all([
+      prisma.listing.count({ where: { communityId: c, status: "pending" } }),
+      prisma.report.count({ where: { communityId: c, status: "open" } }),
+    ]);
+    return { pending, reports };
+  },
+);
+app.get(
   "/api/admin/moderation",
   { preHandler: requireRole(privilegedRoles) },
   async (req: any) =>
@@ -5707,6 +5719,61 @@ app.get(
       include: { images: true, category: true, author: true, reports: true },
       orderBy: { createdAt: "asc" },
     }),
+);
+app.get(
+  "/api/admin/listings",
+  { preHandler: requireRole(privilegedRoles) },
+  async (req: any) => {
+    const status = req.query?.status && req.query.status !== "all"
+      ? String(req.query.status)
+      : undefined;
+    const categoryId = req.query?.categoryId
+      ? String(req.query.categoryId)
+      : undefined;
+    const search = String(req.query?.search || "").trim();
+    const sort = String(req.query?.sort || "newest");
+    const limit = Math.min(Number(req.query?.limit) || 50, 100);
+    const offset = Number(req.query?.offset) || 0;
+    const orderBy: any =
+      sort === "oldest"
+        ? { createdAt: "asc" }
+        : sort === "price_asc"
+          ? [{ price: "asc" }, { createdAt: "desc" }]
+          : sort === "price_desc"
+            ? [{ price: "desc" }, { createdAt: "desc" }]
+            : { createdAt: "desc" };
+    const authorId = req.query?.authorId ? String(req.query.authorId) : undefined;
+    const where: any = {
+      communityId: req.identity.communityId,
+      ...(status ? { status } : {}),
+      ...(categoryId ? { categoryId } : {}),
+      ...(authorId ? { authorId } : {}),
+      ...(search
+        ? {
+            OR: [
+              { title: { contains: search, mode: "insensitive" } },
+              { description: { contains: search, mode: "insensitive" } },
+            ],
+          }
+        : {}),
+    };
+    const [items, total] = await prisma.$transaction([
+      prisma.listing.findMany({
+        where,
+        include: {
+          images: true,
+          category: true,
+          author: { select: { id: true, firstName: true, username: true, telegramUserId: true } },
+          _count: { select: { reports: true } },
+        },
+        orderBy,
+        take: limit,
+        skip: offset,
+      }),
+      prisma.listing.count({ where }),
+    ]);
+    return { items, total };
+  },
 );
 app.post(
   "/api/admin/listings/:id/transition",
@@ -5928,6 +5995,8 @@ app.get(
   { preHandler: requireRole(privilegedRoles) },
   async (req: any) => {
     const search = String(req.query?.search || "").trim();
+    const cleanSearch = search.replace(/^@/, "");
+    const numericId = /^\d+$/.test(cleanSearch) ? BigInt(cleanSearch) : null;
     const where: any = {
       communityId: req.identity.communityId,
       ...(search
@@ -5935,12 +6004,8 @@ app.get(
             user: {
               OR: [
                 { firstName: { contains: search, mode: "insensitive" } },
-                {
-                  username: {
-                    contains: search.replace(/^@/, ""),
-                    mode: "insensitive",
-                  },
-                },
+                { username: { contains: cleanSearch, mode: "insensitive" } },
+                ...(numericId !== null ? [{ telegramUserId: numericId }] : []),
               ],
             },
           }
@@ -6060,6 +6125,7 @@ app.get(
   async (req: any) =>
     prisma.category.findMany({
       where: { communityId: req.identity.communityId },
+      include: { _count: { select: { listings: true } } },
       orderBy: { sortOrder: "asc" },
     }),
 );
@@ -6262,9 +6328,12 @@ app.get(
   async (req: any) =>
     prisma.moderationAction.findMany({
       where: { communityId: req.identity.communityId },
-      include: { moderator: { select: { firstName: true, username: true } } },
+      include: {
+        moderator: { select: { firstName: true, username: true } },
+        targetUser: { select: { firstName: true, username: true } },
+      },
       orderBy: { createdAt: "desc" },
-      take: 100,
+      take: 200,
     }),
 );
 

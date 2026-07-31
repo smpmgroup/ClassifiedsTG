@@ -59,15 +59,23 @@
   display: flex;
   flex-direction: row;
   justify-content: flex-start;
-  gap: 7px;
+  align-items: center;
+  gap: 4px;
   margin: 0 0 28px;
-  padding: 8px;
+  padding: 6px;
   overflow-x: auto;
-  flex-wrap: wrap;
+  overflow-y: visible;
+  flex-wrap: nowrap;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
   border: 1px solid #dce7e1;
   border-radius: 16px;
   background: #fff;
   box-shadow: 0 8px 28px rgba(25, 61, 43, 0.06);
+}
+
+.platform-workspace .workspace-tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .platform-workspace .workspace-tabs button {

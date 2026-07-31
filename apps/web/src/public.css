@@ -38,6 +38,18 @@
 }
 
 /* ── HEADER ─────────────────────────────────────────────── */
+.public-site nav {
+  /* reset style.css global: nav { position: fixed; bottom: 0; height: 76px } */
+  position: static !important;
+  bottom: auto !important;
+  left: auto !important;
+  transform: none !important;
+  width: auto !important;
+  height: auto !important;
+  padding-bottom: 0 !important;
+  background: none !important;
+}
+
 .public-header {
   position: sticky;
   top: 0;
@@ -46,7 +58,7 @@
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border-bottom: 1px solid var(--border);
-  display: grid;
+  display: grid !important; /* override style.css header { display: flex } */
   grid-template-columns: auto 1fr auto;
   grid-template-areas: "brand nav right";
   align-items: center;
@@ -224,8 +236,8 @@
 
 .hero-inner {
   display: grid;
-  grid-template-columns: 1fr 440px;
-  gap: clamp(40px, 5vw, 72px);
+  grid-template-columns: 1fr 360px;
+  gap: clamp(32px, 4vw, 56px);
   align-items: center;
 }
 
@@ -260,7 +272,7 @@
 }
 
 .hero-title {
-  font-size: clamp(36px, 4.5vw, 62px);
+  font-size: clamp(34px, 4vw, 54px);
   font-weight: 800;
   line-height: 1.06;
   letter-spacing: -.045em;
@@ -767,6 +779,13 @@
   color: rgba(255,255,255,.1);
   text-decoration: none;
 }
+
+.footer-email {
+  color: rgba(255,255,255,.35);
+  text-decoration: none;
+  transition: color .15s;
+}
+.footer-email:hover { color: rgba(255,255,255,.7); }
 
 /* ── MISC LANDING PAGES ──────────────────────────────────── */
 .public-page {

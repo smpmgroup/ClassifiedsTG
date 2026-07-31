@@ -119,9 +119,9 @@ function Header() {
 
   return (
     <header className={`public-header${menuOpen ? " menu-open" : ""}`}>
-      <a className="public-brand" href="/" aria-label="Adnecta">
-        <img src={logoSrc} alt="Adnecta" className="brand-logo" />
-        <b>Adnecta</b>
+      <a className="public-brand" href="/" aria-label="ADNECTA">
+        <img src={logoSrc} alt="ADNECTA" className="brand-logo" />
+        <b>ADNECTA</b>
       </a>
 
       <nav aria-label="Main navigation">
@@ -168,9 +168,9 @@ function Footer() {
     <div className="public-footer-wrap">
       <footer className="public-footer lp-container">
         <div className="footer-brand">
-          <a className="public-brand" href="/" aria-label="Adnecta">
-            <img src={logoSrc} alt="Adnecta" className="brand-logo" />
-            <b>Adnecta</b>
+          <a className="public-brand" href="/" aria-label="ADNECTA">
+            <img src={mascotSrc} alt="ADNECTA" className="brand-logo" />
+            <b>ADNECTA</b>
           </a>
           <p>{t("footerSlogan")}</p>
         </div>
@@ -191,6 +191,10 @@ function Footer() {
           >
             ·
           </a>
+          <br />
+          <a href="mailto:info@adnecta.com" className="footer-email">info@adnecta.com</a>
+          <br />
+          ALL RIGHTS RESERVED. SMPM GROUP S.L. | B-16834756 | CARRER DE UNIO 8, 43001 TARRAGONA, ESPAÑA
         </small>
       </footer>
     </div>
