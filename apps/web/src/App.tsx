@@ -745,6 +745,18 @@ function PlatformWorkspace({
   useEffect(() => {
     void load();
   }, []);
+  // selectedCommunityId и adminCounts effect — ДО ранних return, чтобы не нарушать порядок хуков
+  const selectedCommunityId = data
+    ? (new URLSearchParams(window.location.search).get("community") ||
+       (data.organizations?.flatMap((o: any) => o.communities || []) as any[])[0]?.id ||
+       "")
+    : "";
+  useEffect(() => {
+    if (!selectedCommunityId || platformAdminOnly) return;
+    request("/admin/counts")
+      .then((c) => setAdminCounts({ pending: c.pending || 0, reports: c.reports || 0 }))
+      .catch(() => {});
+  }, [selectedCommunityId, platformAdminOnly]);
   const connect = async (organizationId?: string) => {
     const busyKey = organizationId || "new-community";
     setBusy(busyKey);
@@ -806,16 +818,6 @@ function PlatformWorkspace({
   );
   const ownerTab = dashboardParams.get("tab") || "overview";
   const platformTab = dashboardParams.get("tab") || "overview";
-  const selectedCommunityId =
-    new URLSearchParams(window.location.search).get("community") ||
-    ownerCommunities[0]?.id ||
-    "";
-  useEffect(() => {
-    if (!selectedCommunityId || platformAdminOnly) return;
-    request("/admin/counts")
-      .then((c) => setAdminCounts({ pending: c.pending || 0, reports: c.reports || 0 }))
-      .catch(() => {});
-  }, [selectedCommunityId, platformAdminOnly]);
   const administrationTabs = new Set([
     "board",
     "moderation",
