@@ -761,13 +761,19 @@ function PlatformWorkspace({
 
   const currentTab = dashboardParams.get("tab") || "overview";
   useEffect(() => {
-    if (!tabsRef.current) return;
-    const active = tabsRef.current.querySelector<HTMLElement>("button.active");
-    if (!active) return;
-    const nav = tabsRef.current;
-    const targetLeft = active.offsetLeft - nav.clientWidth / 2 + active.offsetWidth / 2;
-    nav.scrollTo({ left: Math.max(0, targetLeft), behavior: "smooth" });
-  }, [currentTab]);
+    // runs both on tab change AND when data loads (nav becomes available)
+    const scroll = () => {
+      if (!tabsRef.current) return;
+      const active = tabsRef.current.querySelector<HTMLElement>("button.active");
+      if (!active) return;
+      const nav = tabsRef.current;
+      const targetLeft = active.offsetLeft - nav.clientWidth / 2 + active.offsetWidth / 2;
+      nav.scrollTo({ left: Math.max(0, targetLeft), behavior: "smooth" });
+    };
+    // defer one frame so DOM is painted before we measure offsetLeft
+    const raf = requestAnimationFrame(scroll);
+    return () => cancelAnimationFrame(raf);
+  }, [currentTab, data]);
   const connect = async (organizationId?: string) => {
     const busyKey = organizationId || "new-community";
     setBusy(busyKey);

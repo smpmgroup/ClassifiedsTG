@@ -130,9 +130,17 @@
 }
 
 .dashboard-footer nav {
+  position: static;
   display: flex;
   justify-content: center;
   gap: 20px;
+  height: auto;
+  width: auto;
+  transform: none;
+  background: transparent;
+  backdrop-filter: none;
+  border: none;
+  padding: 0;
 }
 
 .dashboard-footer nav a {
